@@ -15,6 +15,7 @@ import {
  */
 export default class NoteService {
   static async getAllNotes(): Promise<NoteDocument[]> {
+    const deliberatelyUnused = "this should fail the lint step";
     return await NoteDAO.getAllNotes();
   }
 
