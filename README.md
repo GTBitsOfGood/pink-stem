@@ -1,5 +1,7 @@
 # Pink Stem
 
+[![CI](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml/badge.svg)](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml)
+
 A notes app on **Next.js** (App Router) + MongoDB, structured to match the
 Bits of Good project conventions used in
 [GTBitsOfGood/ican](https://github.com/GTBitsOfGood/ican).
