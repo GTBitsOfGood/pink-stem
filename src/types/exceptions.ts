@@ -1,6 +1,10 @@
-import { HTTPError } from "@/http/fetchHTTPClient";
-
-export { HTTPError };
+/**
+ * The error taxonomy for the whole app.
+ *
+ * Services throw these; `@/utils/errorHandler` is the single place that maps
+ * them to HTTP status codes. Adding a failure mode means adding a class here
+ * and one case there.
+ */
 
 export class NotFoundError extends Error {
   constructor(message = "Resource not found") {
@@ -44,31 +48,17 @@ export class MethodNotAllowedError extends Error {
   }
 }
 
-export const getStatusCode = (error: Error | unknown): number => {
-  if (error instanceof HTTPError) {
-    return error.status;
-  }
+/** Raised by the frontend HTTP client when a response comes back non-2xx. */
+export class HTTPError extends Error {
+  public readonly status: number;
 
-  if (error instanceof Error) {
-    switch (error.constructor.name) {
-      case "NotFoundError":
-        return 404;
-      case "InvalidArgumentsError":
-        return 400;
-      case "UnauthorizedError":
-        return 401;
-      case "ConflictError":
-        return 409;
-      case "ValidationError":
-        return 422;
-      case "IllegalOperationError":
-        return 403;
-      case "MethodNotAllowedError":
-        return 405;
-      default:
-        return 500;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HTTPError";
+    this.status = status;
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, HTTPError);
     }
   }
-
-  return 500;
-};
+}

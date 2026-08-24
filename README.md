@@ -10,6 +10,7 @@ Bits of Good project conventions used in
 - Next.js (App Router)
 - MongoDB / Mongoose
 - TailwindCSS
+- React Query
 - Zod
 
 ## Onboarding
@@ -90,6 +91,7 @@ src/
     layout.tsx
     page.tsx
   components/
+    QueryProvider.tsx
     hooks/useNotes.ts
     notes/
     ui/

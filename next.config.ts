@@ -1,12 +1,11 @@
-import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Pins the workspace root so Turbopack ignores unrelated lockfiles in parent
-  // directories.
+  // Pins the workspace root so Turbopack ignores unrelated lockfiles that may
+  // exist in parent directories on a developer's machine.
   turbopack: {
-    root: path.join(__dirname),
+    root: __dirname,
   },
 };
 

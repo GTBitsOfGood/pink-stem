@@ -3,14 +3,14 @@ import { cacheControlMiddleware } from "@/middleware/cache-control";
 import { withErrorHandler } from "@/utils/withErrorHandler";
 import { NextRequest, NextResponse } from "next/server";
 
-export const GET = withErrorHandler<Record<string, never>>(
-  async (req: NextRequest) => {
-    const notes = await NoteService.getAllNotes();
+export const GET = withErrorHandler<Record<string, never>>(async () => {
+  const notes = await NoteService.getAllNotes();
 
-    const headers = cacheControlMiddleware(req);
-    return NextResponse.json(notes, { status: 200, headers });
-  }
-);
+  return NextResponse.json(notes, {
+    status: 200,
+    headers: cacheControlMiddleware(),
+  });
+});
 
 export const POST = withErrorHandler<Record<string, never>>(
   async (req: NextRequest) => {

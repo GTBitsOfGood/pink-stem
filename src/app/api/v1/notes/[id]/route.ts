@@ -4,11 +4,13 @@ import { withErrorHandler } from "@/utils/withErrorHandler";
 import { NextRequest, NextResponse } from "next/server";
 
 export const GET = withErrorHandler<{ id: string }>(
-  async (req: NextRequest, { params }: { params: { id: string } }) => {
+  async (_req: NextRequest, { params }: { params: { id: string } }) => {
     const note = await NoteService.getNote(params.id);
 
-    const headers = cacheControlMiddleware(req);
-    return NextResponse.json(note, { status: 200, headers });
+    return NextResponse.json(note, {
+      status: 200,
+      headers: cacheControlMiddleware(),
+    });
   }
 );
 

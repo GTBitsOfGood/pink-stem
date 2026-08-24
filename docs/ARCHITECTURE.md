@@ -49,7 +49,14 @@ catalog. Services reference `ERRORS.NOTE.NOT_FOUND`, never a string literal.
 
 **The frontend never calls `fetch`.** It calls a method on an HTTP client in
 `src/http/`, which wraps `fetchHTTPClient` — the one place that knows the base
-URL, sets headers, and converts non-2xx responses into `HTTPError`.
+URL, sets headers, and converts non-2xx responses into `HTTPError`. Components
+reach those clients through a hook in `src/components/hooks/`, which wraps them
+in React Query so no screen fetches from `useEffect`.
+
+**Response headers are built, never cloned from the request.** See
+`src/middleware/cache-control.ts`. Copying `req.headers` onto a response
+reflects `Cookie` and `Authorization` back to the client, where an intermediary
+cache or access log can capture them.
 
 ## Adding a new resource
 

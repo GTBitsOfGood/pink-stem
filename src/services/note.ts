@@ -1,6 +1,6 @@
 import NoteDAO from "@/db/actions/note";
 import { NoteDocument } from "@/db/models/note";
-import { NotFoundError } from "@/types/exceptions";
+import { InvalidArgumentsError, NotFoundError } from "@/types/exceptions";
 import ERRORS from "@/utils/errorMessages";
 import {
   validateNoteBody,
@@ -57,10 +57,13 @@ export default class NoteService {
       updates.body = body;
     }
 
-    // Confirms the note exists before attempting the write, so a missing note
-    // is a 404 rather than a silent no-op.
-    await NoteService.getNote(noteId);
+    // A PATCH that names no known field is a caller mistake, not a no-op write.
+    if (Object.keys(updates).length === 0) {
+      throw new InvalidArgumentsError(ERRORS.NOTE.INVALID_ARGUMENTS.UPDATE);
+    }
 
+    // findByIdAndUpdate returns null when the id matches nothing, so this is
+    // both the write and the existence check.
     const note = await NoteDAO.updateNoteById(noteId, updates);
     if (!note) {
       throw new NotFoundError(ERRORS.NOTE.NOT_FOUND);
@@ -71,7 +74,10 @@ export default class NoteService {
 
   static async deleteNote(noteId: string): Promise<void> {
     validateNoteId(noteId);
-    await NoteService.getNote(noteId);
-    await NoteDAO.deleteNoteById(noteId);
+
+    const deleted = await NoteDAO.deleteNoteById(noteId);
+    if (!deleted) {
+      throw new NotFoundError(ERRORS.NOTE.NOT_FOUND);
+    }
   }
 }

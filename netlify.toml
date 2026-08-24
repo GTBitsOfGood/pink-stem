@@ -9,13 +9,7 @@
   command = "npm run dev"
   targetPort = 3000
 
-# Deploy previews are generated for every branch and every pull request.
-# `main` publishes the staging site; `production` publishes the production site.
-[context.production]
-  command = "npm run build"
-
-[context.branch-deploy]
-  command = "npm run build"
-
-[context.deploy-preview]
-  command = "npm run build"
+# Branch deploys and deploy previews are enabled in the Netlify UI; see
+# docs/ENVIRONMENTS.md. They inherit the [build] command above, so no
+# per-context overrides are needed. Add a [context.*] block here only when a
+# context genuinely needs to build differently.

@@ -50,10 +50,13 @@ export default class NoteDAO {
     }
   }
 
-  static async deleteNoteById(noteId: string): Promise<void> {
+  /** Returns the deleted document, or null when no note had that id. */
+  static async deleteNoteById(
+    noteId: string
+  ): Promise<HydratedDocument<NoteDocument> | null> {
     await dbConnect();
     try {
-      await NoteModel.findByIdAndDelete(new Types.ObjectId(noteId));
+      return await NoteModel.findByIdAndDelete(new Types.ObjectId(noteId));
     } catch (error) {
       console.log(error);
       throw new Error(ERRORS.NOTE.FAILURE.DELETE);
