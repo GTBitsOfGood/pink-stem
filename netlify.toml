@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[dev]
+  command = "npm run dev"
+  targetPort = 3000
+
+# Deploy previews are generated for every branch and every pull request.
+# `main` publishes the staging site; `production` publishes the production site.
+[context.production]
+  command = "npm run build"
+
+[context.branch-deploy]
+  command = "npm run build"
+
+[context.deploy-preview]
+  command = "npm run build"

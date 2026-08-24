@@ -1,37 +1,127 @@
 # Pink Stem
 
-Simple MERN-style app built on **Next.js** (App Router) — MongoDB + Mongoose + React + Node, with Next API routes replacing a standalone Express server.
+A notes app on **Next.js** (App Router) + MongoDB, structured to match the
+Bits of Good project conventions used in
+[GTBitsOfGood/ican](https://github.com/GTBitsOfGood/ican).
 
-## Stack
-- **M**ongoDB via Mongoose (`src/lib/mongodb.ts`, `src/models/Note.ts`)
-- **E**xpress-equivalent: Next.js Route Handlers (`src/app/api/notes/*`)
-- **R**eact (Next App Router)
-- **N**ode.js runtime
+## Tech Stack
 
-## Setup
-```bash
+- TypeScript
+- Next.js (App Router)
+- MongoDB / Mongoose
+- TailwindCSS
+- Zod
+
+## Onboarding
+
+### MongoDB
+
+Install [MongoDB Community Server](https://www.mongodb.com/docs/manual/administration/install-community/)
+to host a local instance, or use the bundled Docker setup. [MongoDB Compass](https://www.mongodb.com/try/download/compass#compass)
+is helpful for inspecting the database.
+
+### Dependencies
+
+Node version is pinned in `.nvmrc`. With [nvm](https://github.com/nvm-sh/nvm):
+
+```sh
+nvm use
 npm install
+```
+
+### Environment
+
+```sh
 cp .env.local.example .env.local   # then edit MONGODB_URI
+```
+
+### Development
+
+Run both at the same time:
+
+```sh
 npm run dev
+```
+
+```sh
+docker compose up
 ```
 
 Open http://localhost:3000
 
+### Code Formatting
+
+Install and enable [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+in VSCode. A pre-commit hook formats and lints staged files automatically.
+
+## Scripts
+
+| Command                | Does                        |
+| ---------------------- | --------------------------- |
+| `npm run dev`          | Start the dev server        |
+| `npm run build`        | Production build            |
+| `npm run lint`         | ESLint                      |
+| `npm run typecheck`    | `tsc --noEmit`              |
+| `npm run format`       | Prettier write              |
+| `npm run format:check` | Prettier check (runs in CI) |
+
 ## API
-- `GET    /api/notes` — list
-- `POST   /api/notes` — create `{ title, body }`
-- `GET    /api/notes/:id` — read
-- `PUT    /api/notes/:id` — update
-- `DELETE /api/notes/:id` — delete
+
+Base path is `/api/v1`.
+
+| Method   | Endpoint     | Does                       |
+| -------- | ------------ | -------------------------- |
+| `GET`    | `/notes`     | List notes, newest first   |
+| `POST`   | `/notes`     | Create `{ title, body }`   |
+| `GET`    | `/notes/:id` | Read one                   |
+| `PATCH`  | `/notes/:id` | Update `{ title?, body? }` |
+| `DELETE` | `/notes/:id` | Delete, returns 204        |
 
 ## Structure
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layering and the
+checklist for adding a new resource.
+
 ```
 src/
   app/
-    api/notes/route.ts
-    api/notes/[id]/route.ts
+    api/v1/notes/route.ts
+    api/v1/notes/[id]/route.ts
     layout.tsx
     page.tsx
-  lib/mongodb.ts
-  models/Note.ts
+  components/
+    hooks/useNotes.ts
+    notes/
+    ui/
+  constants/
+  db/
+    actions/note.ts
+    models/note.ts
+    dbConnect.ts
+  http/
+    fetchHTTPClient.ts
+    noteHTTPClient.ts
+  lib/
+  middleware/
+  services/note.ts
+  styles/globals.css
+  types/
+    exceptions.ts
+    models.ts
+    note.ts
+  utils/
+    errorHandler.ts
+    errorMessages.ts
+    note.ts
+    validation.ts
+    withErrorHandler.ts
 ```
+
+## Environments
+
+Branches, deploy previews, and branch protection are documented in
+[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+
+- `production` → production site
+- `main` → staging site (default branch, base for feature PRs)
+- every branch and PR → Netlify deploy preview
