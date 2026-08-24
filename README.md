@@ -1,4 +1,4 @@
-# Pink Stem
+# Pink STEM
 
 [![CI](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml/badge.svg)](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml)
 
