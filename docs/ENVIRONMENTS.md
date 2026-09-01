@@ -35,8 +35,9 @@ Continuous deployment**:
 3. Under **Deploy previews**, enable _Any pull request against your production
    branch or branch deploy branches_.
 
-Set `MONGODB_URI` per context under **Environment variables**, scoping the
-staging value to `main`/branch deploys and the production value to
+The app needs no environment variables yet. When we add a database, set its
+connection string per context under **Environment variables**, scoping the
+staging value to `main` and branch deploys and the production value to
 `production`.
 
 ## Branch protection

@@ -10,9 +10,26 @@ src/app/page.tsx                UI. No fetch calls, no business rules.
       └─ src/http/*HTTPClient   Typed API client. The only place fetch is called.
           └─ src/app/api/v1/**  Route handler. Thin: parse, delegate, respond.
               └─ src/services/  Business logic + validation. Throws typed errors.
-                  └─ src/db/actions/  DAO. Mongoose queries only.
-                      └─ src/db/models/  Schema + document types.
+                  └─ src/lib/noteStore.ts   Persistence. In memory for now.
 ```
+
+## Persistence is a placeholder
+
+There is no database yet. `src/lib/noteStore.ts` holds notes in a `Map` cached
+on `global`, and its contents are lost on every server restart. That is fine for
+now, and deliberate: we have not chosen a database, and nothing above the store
+should have to change when we do.
+
+Two rules keep that true:
+
+- **Store methods are async even though nothing awaits.** A real data access
+  layer will be, and services already treat every call as a promise.
+- **Only the service layer imports the store.** Route handlers, hooks and
+  components have never heard of it.
+
+When we pick a database, the swap is: add `src/db/models/` and
+`src/db/actions/`, point `NoteService` at the new DAO, delete the store. The
+method signatures are the same, so nothing else in the tree moves.
 
 ## Directory map
 
@@ -22,10 +39,8 @@ src/app/page.tsx                UI. No fetch calls, no business rules.
 | `src/components/`       | React components, grouped by feature; `ui/` for primitives    |
 | `src/components/hooks/` | Feature hooks that own client state                           |
 | `src/constants/`        | Shared literal values                                         |
-| `src/db/actions/`       | DAO classes with static methods                               |
-| `src/db/models/`        | Mongoose schemas and document interfaces                      |
 | `src/http/`             | Typed frontend API clients                                    |
-| `src/lib/`              | Static config, shared helpers, seed data                      |
+| `src/lib/`              | Static config, shared helpers, the in-memory store            |
 | `src/middleware/`       | Request/response header helpers                               |
 | `src/services/`         | Business logic classes with static methods                    |
 | `src/styles/`           | Global CSS and font configuration                             |
@@ -35,7 +50,7 @@ src/app/page.tsx                UI. No fetch calls, no business rules.
 ## Rules that keep the layering honest
 
 **Route handlers stay thin.** They read the request, call one service method,
-and shape the response. They never touch Mongoose and never build error
+and shape the response. They never touch the store and never build error
 responses. `withErrorHandler` resolves Next.js' async `params` and routes every
 thrown error through `handleError`.
 
@@ -60,12 +75,13 @@ cache or access log can capture them.
 
 ## Adding a new resource
 
-1. `src/db/models/<resource>.ts` — schema, `Resource`, `ResourceDocument`
-2. `src/db/actions/<resource>.ts` — `ResourceDAO` with static methods
-3. `src/utils/errorMessages.ts` — add a `RESOURCE` block
-4. `src/utils/<resource>.ts` — argument guards that throw typed exceptions
-5. `src/services/<resource>.ts` — `ResourceService` with static methods
-6. `src/app/api/v1/<resource>/route.ts` — handlers wrapped in `withErrorHandler`
-7. `src/types/<resource>.ts` — client-facing type
-8. `src/http/<resource>HTTPClient.ts` — typed client methods
-9. `src/components/<resource>/` — UI, plus a hook in `src/components/hooks/`
+1. `src/lib/<resource>Store.ts` — in-memory store with async static methods
+2. `src/utils/errorMessages.ts` — add a `RESOURCE` block
+3. `src/utils/<resource>.ts` — argument guards that throw typed exceptions
+4. `src/services/<resource>.ts` — `ResourceService` with static methods
+5. `src/app/api/v1/<resource>/route.ts` — handlers wrapped in `withErrorHandler`
+6. `src/types/<resource>.ts` — client-facing type
+7. `src/http/<resource>HTTPClient.ts` — typed client methods
+8. `src/components/<resource>/` — UI, plus a hook in `src/components/hooks/`
+
+Step 1 becomes two steps once we have a database: a model and a DAO.

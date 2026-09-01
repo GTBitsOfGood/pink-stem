@@ -2,8 +2,8 @@ import { InvalidArgumentsError } from "@/types/exceptions";
 import ERRORS from "@/utils/errorMessages";
 import {
   noteBodySchema,
+  noteIdIsValid,
   noteTitleSchema,
-  objectIdIsValid,
 } from "@/utils/validation";
 
 /**
@@ -11,7 +11,7 @@ import {
  * that `handleError` maps to the correct HTTP status.
  */
 export function validateNoteId(noteId: string): void {
-  if (!noteId || !objectIdIsValid(noteId)) {
+  if (!noteId || !noteIdIsValid(noteId)) {
     throw new InvalidArgumentsError(ERRORS.NOTE.INVALID_ARGUMENTS.ID);
   }
 }

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml/badge.svg)](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml)
 
-A notes app on **Next.js** (App Router) + MongoDB, structured to match the
+A notes app on **Next.js** (App Router), structured to match the
 Bits of Good project conventions used in
 [GTBitsOfGood/ican](https://github.com/GTBitsOfGood/ican).
 
@@ -10,18 +10,19 @@ Bits of Good project conventions used in
 
 - TypeScript
 - Next.js (App Router)
-- MongoDB / Mongoose
 - TailwindCSS
 - React Query
 - Zod
 
 ## Onboarding
 
-### MongoDB
+### Data
 
-Install [MongoDB Community Server](https://www.mongodb.com/docs/manual/administration/install-community/)
-to host a local instance, or use the bundled Docker setup. [MongoDB Compass](https://www.mongodb.com/try/download/compass#compass)
-is helpful for inspecting the database.
+There is no database yet. Notes live in an in-memory store
+(`src/lib/noteStore.ts`) and are cleared whenever the dev server restarts.
+Nothing to install, and no connection string to configure. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where a real database will slot
+in.
 
 ### Dependencies
 
@@ -32,22 +33,10 @@ nvm use
 npm install
 ```
 
-### Environment
-
-```sh
-cp .env.local.example .env.local   # then edit MONGODB_URI
-```
-
 ### Development
-
-Run both at the same time:
 
 ```sh
 npm run dev
-```
-
-```sh
-docker compose up
 ```
 
 Open http://localhost:3000
@@ -98,14 +87,12 @@ src/
     notes/
     ui/
   constants/
-  db/
-    actions/note.ts
-    models/note.ts
-    dbConnect.ts
   http/
     fetchHTTPClient.ts
     noteHTTPClient.ts
   lib/
+    noteStore.ts
+    utils.ts
   middleware/
   services/note.ts
   styles/globals.css

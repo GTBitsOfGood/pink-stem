@@ -1,5 +1,4 @@
-import NoteDAO from "@/db/actions/note";
-import { NoteDocument } from "@/db/models/note";
+import NoteStore, { StoredNote } from "@/lib/noteStore";
 import { InvalidArgumentsError, NotFoundError } from "@/types/exceptions";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -10,29 +9,26 @@ import {
 
 /**
  * Business logic for notes. Validates its own arguments, enforces existence
- * rules, and delegates all persistence to `NoteDAO`. Route handlers call into
+ * rules, and delegates all persistence to `NoteStore`. Route handlers call into
  * here and do nothing else.
  */
 export default class NoteService {
-  static async getAllNotes(): Promise<NoteDocument[]> {
-    return await NoteDAO.getAllNotes();
+  static async getAllNotes(): Promise<StoredNote[]> {
+    return await NoteStore.getAllNotes();
   }
 
-  static async createNote(
-    title: unknown,
-    body: unknown
-  ): Promise<NoteDocument> {
+  static async createNote(title: unknown, body: unknown): Promise<StoredNote> {
     validateNoteTitle(title);
     const noteBody = body ?? "";
     validateNoteBody(noteBody);
 
-    return await NoteDAO.createNote(title.trim(), noteBody);
+    return await NoteStore.createNote(title.trim(), noteBody);
   }
 
-  static async getNote(noteId: string): Promise<NoteDocument> {
+  static async getNote(noteId: string): Promise<StoredNote> {
     validateNoteId(noteId);
 
-    const note = await NoteDAO.getNoteById(noteId);
+    const note = await NoteStore.getNoteById(noteId);
     if (!note) {
       throw new NotFoundError(ERRORS.NOTE.NOT_FOUND);
     }
@@ -44,7 +40,7 @@ export default class NoteService {
     noteId: string,
     title: unknown,
     body: unknown
-  ): Promise<NoteDocument> {
+  ): Promise<StoredNote> {
     validateNoteId(noteId);
 
     const updates: { title?: string; body?: string } = {};
@@ -62,9 +58,9 @@ export default class NoteService {
       throw new InvalidArgumentsError(ERRORS.NOTE.INVALID_ARGUMENTS.UPDATE);
     }
 
-    // findByIdAndUpdate returns null when the id matches nothing, so this is
-    // both the write and the existence check.
-    const note = await NoteDAO.updateNoteById(noteId, updates);
+    // updateNoteById returns null when the id matches nothing, so this is both
+    // the write and the existence check.
+    const note = await NoteStore.updateNoteById(noteId, updates);
     if (!note) {
       throw new NotFoundError(ERRORS.NOTE.NOT_FOUND);
     }
@@ -75,7 +71,7 @@ export default class NoteService {
   static async deleteNote(noteId: string): Promise<void> {
     validateNoteId(noteId);
 
-    const deleted = await NoteDAO.deleteNoteById(noteId);
+    const deleted = await NoteStore.deleteNoteById(noteId);
     if (!deleted) {
       throw new NotFoundError(ERRORS.NOTE.NOT_FOUND);
     }
