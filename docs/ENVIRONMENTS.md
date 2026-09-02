@@ -35,10 +35,11 @@ Continuous deployment**:
 3. Under **Deploy previews**, enable _Any pull request against your production
    branch or branch deploy branches_.
 
-The app needs no environment variables yet. When we add a database, set its
-connection string per context under **Environment variables**, scoping the
-staging value to `main` and branch deploys and the production value to
-`production`.
+The app needs no environment variables yet. When Mongo is wired up, set
+`MONGODB_URI` per context under **Environment variables**, scoping the staging
+value to `main` and branch deploys and the production value to `production`.
+Point each context at its own database so a staging deploy can never write to
+production data.
 
 ## Branch protection
 

@@ -1,7 +1,7 @@
 # Sprint 1
 
-Two weeks, 5 devs, 5 tickets. This file is the shared context. The ticket bodies
-themselves live on GitHub.
+Two weeks, 6 devs, 5 tickets. Gamification is a pair, everyone else is solo.
+This file is the shared context. The ticket bodies themselves live on GitHub.
 
 ## Sprint context
 
@@ -23,12 +23,11 @@ this semester, and it is the one every spike should be grounded in. Design for
 Aviation first and keep an eye on whether the approach would generalize later.
 Don't design for fifty hypothetical courses we haven't seen.
 
-**There is no database yet.** The repo currently keeps notes in an in-memory
-store (`src/lib/noteStore.ts`) that resets on every server restart. Picking a
-database is a decision we make once these spikes come back, since both the auth
-ticket and the Aviation content model ticket have a say in it. Until then,
-propose data models as TypeScript interfaces rather than as schemas for a
-particular database.
+**The database is MongoDB, but it is not wired up yet.** The repo currently
+keeps notes in an in-memory store (`src/lib/noteStore.ts`) that resets on every
+server restart, and connecting it for real is a sprint 2 ticket. Design against
+Mongo: propose Mongoose schemas and their document interfaces, and where a
+decision depends on the database, assume Mongo rather than hedging.
 
 None of the tickets assume either answer. Each dev has one covering the full two
 weeks: get the dev environment working, then run one timeboxed
@@ -46,19 +45,19 @@ of questions, that is a finding in itself. Write down where you got to and stop.
 approval, and the spike doc committed under `docs/spikes/`.
 
 The same environment setup block appears in all five tickets. That is
-intentional. Splitting it into one shared ticket would leave four people waiting
+intentional. Splitting it into one shared ticket would leave five people waiting
 on one person's PR, and each dev needs to confirm their own machine works.
 
 ---
 
 ## Lane assignments
 
-| Ticket                | Dev   | Spike output                      |
-| --------------------- | ----- | --------------------------------- |
-| Auth and access       | Dev 1 | `docs/spikes/auth.md`             |
-| Data and integrations | Dev 2 | `docs/spikes/google-classroom.md` |
-| Aviation curriculum   | Dev 3 | `docs/spikes/content-model.md`    |
-| Gamification          | Dev 4 | `docs/spikes/gamification.md`     |
-| Partner integrations  | Dev 5 | `docs/spikes/integrations.md`     |
+| Ticket                | Dev             | Spike output                      |
+| --------------------- | --------------- | --------------------------------- |
+| Auth and access       | Dev 1           | `docs/spikes/auth.md`             |
+| Data and integrations | Dev 2           | `docs/spikes/google-classroom.md` |
+| Aviation curriculum   | Dev 3           | `docs/spikes/content-model.md`    |
+| Gamification          | Dev 4 and Dev 6 | `docs/spikes/gamification.md`     |
+| Partner integrations  | Dev 5           | `docs/spikes/integrations.md`     |
 
 ---

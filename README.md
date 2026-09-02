@@ -10,6 +10,7 @@ Bits of Good project conventions used in
 
 - TypeScript
 - Next.js (App Router)
+- MongoDB with Mongoose (chosen, not wired up yet)
 - TailwindCSS
 - React Query
 - Zod
@@ -18,11 +19,11 @@ Bits of Good project conventions used in
 
 ### Data
 
-There is no database yet. Notes live in an in-memory store
-(`src/lib/noteStore.ts`) and are cleared whenever the dev server restarts.
-Nothing to install, and no connection string to configure. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where a real database will slot
-in.
+The database is MongoDB, accessed through Mongoose, but it is not wired up yet.
+Notes live in an in-memory store (`src/lib/noteStore.ts`) and are cleared
+whenever the dev server restarts. Nothing to install, and no connection string
+to configure. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where it
+slots in.
 
 ### Dependencies
 

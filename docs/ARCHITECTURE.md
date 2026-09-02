@@ -10,15 +10,15 @@ src/app/page.tsx                UI. No fetch calls, no business rules.
       └─ src/http/*HTTPClient   Typed API client. The only place fetch is called.
           └─ src/app/api/v1/**  Route handler. Thin: parse, delegate, respond.
               └─ src/services/  Business logic + validation. Throws typed errors.
-                  └─ src/lib/noteStore.ts   Persistence. In memory for now.
+                  └─ src/lib/noteStore.ts   Persistence. In memory until Mongo lands.
 ```
 
 ## Persistence is a placeholder
 
-There is no database yet. `src/lib/noteStore.ts` holds notes in a `Map` cached
-on `global`, and its contents are lost on every server restart. That is fine for
-now, and deliberate: we have not chosen a database, and nothing above the store
-should have to change when we do.
+The database is MongoDB, accessed through Mongoose. It is not wired up yet.
+`src/lib/noteStore.ts` holds notes in a `Map` cached on `global`, and its
+contents are lost on every server restart. That is fine for now, and deliberate:
+nothing above the store should have to change when the real thing lands.
 
 Two rules keep that true:
 
@@ -27,9 +27,11 @@ Two rules keep that true:
 - **Only the service layer imports the store.** Route handlers, hooks and
   components have never heard of it.
 
-When we pick a database, the swap is: add `src/db/models/` and
-`src/db/actions/`, point `NoteService` at the new DAO, delete the store. The
-method signatures are the same, so nothing else in the tree moves.
+The swap is: add `src/db/dbConnect.ts`, `src/db/models/` and `src/db/actions/`,
+point `NoteService` at the new DAO, delete the store. The method signatures are
+the same, so nothing else in the tree moves. Commit `6633d94` removed a working
+version of exactly that layer, so `git show 6633d94` is the reference for
+putting it back.
 
 ## Directory map
 
@@ -84,4 +86,5 @@ cache or access log can capture them.
 7. `src/http/<resource>HTTPClient.ts` — typed client methods
 8. `src/components/<resource>/` — UI, plus a hook in `src/components/hooks/`
 
-Step 1 becomes two steps once we have a database: a model and a DAO.
+Step 1 becomes two once Mongo lands: a Mongoose schema in `src/db/models/` and
+a DAO in `src/db/actions/`.
