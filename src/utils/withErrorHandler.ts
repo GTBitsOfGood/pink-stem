@@ -7,23 +7,20 @@ type RouteHandler<T = unknown> = (
 ) => Promise<NextResponse>;
 
 /**
- * Higher-order function that wraps API route handlers.
+ * Wraps public API route handlers.
  *
  * It resolves Next.js' async `params` once, and funnels every thrown error
  * through `handleError` so handlers stay thin and never build error responses
- * by hand. Projects that need authentication layer a `withAuth` on top of this
- * same shape.
+ * by hand. Routes that need a signed-in user use `withAuth`, which layers
+ * session handling on this same shape.
  */
-export function withErrorHandler<T = unknown>(
+export function withErrorHandler<T = Record<string, never>>(
   handler: RouteHandler<T>
 ): (
   req: NextRequest,
   context: { params: Promise<T> }
 ) => Promise<NextResponse> {
-  return async (
-    req: NextRequest,
-    context: { params: Promise<T> }
-  ): Promise<NextResponse> => {
+  return async (req, context) => {
     try {
       const resolvedParams = await context.params;
       return await handler(req, { params: resolvedParams });

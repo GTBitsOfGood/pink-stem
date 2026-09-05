@@ -12,3 +12,4 @@ dist
 *.tsbuildinfo
 .netlify
 next-env.d.ts
+.gstack

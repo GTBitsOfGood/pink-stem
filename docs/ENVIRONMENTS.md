@@ -35,11 +35,31 @@ Continuous deployment**:
 3. Under **Deploy previews**, enable _Any pull request against your production
    branch or branch deploy branches_.
 
-The app needs no environment variables yet. When Mongo is wired up, set
-`MONGODB_URI` per context under **Environment variables**, scoping the staging
-value to `main` and branch deploys and the production value to `production`.
-Point each context at its own database so a staging deploy can never write to
-production data.
+## Environment variables
+
+Set these under **Environment variables**, scoping staging values to `main`
+and branch deploys and production values to `production`. Point each context
+at its own database so a staging deploy can never write to production data.
+
+| Variable                         | Required | Purpose                                                        |
+| -------------------------------- | -------- | -------------------------------------------------------------- |
+| `MONGODB_URI`                    | Yes      | Connection string; one database per context                    |
+| `JWT_SECRET`                     | Yes      | Signs session cookies; rotate to sign everyone out             |
+| `APP_URL`                        | Yes      | Absolute base for links in emails, PDFs, and calendar files    |
+| `CRON_SECRET`                    | Yes      | Shared secret for `POST /api/v1/jobs/run`                      |
+| `RESEND_API_KEY`                 | Prod     | Sends email through Resend; unset, emails go to the server log |
+| `EMAIL_FROM`                     | Prod     | Sender shown on every email                                    |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`   | No       | Enables the Google sign-in button                              |
+| `SEED_ADMIN_EMAIL` / `_PASSWORD` | Seed     | First admin created by `npm run seed`                          |
+
+Leave `RESEND_API_KEY` unset on deploy previews so test sign-ups never email
+real people.
+
+## Scheduled jobs
+
+`netlify/functions/scheduled-jobs.mts` runs hourly and calls
+`POST /api/v1/jobs/run` with `CRON_SECRET`. Netlify sets `URL` automatically;
+`APP_URL` is used as a fallback.
 
 ## Branch protection
 
@@ -60,5 +80,6 @@ Apply to **both** `main` and `production` under
 ## CI
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and
-`production`. It checks formatting, lints, typechecks, and builds. The same
-checks run locally on commit through the husky + lint-staged pre-commit hook.
+`production`. It checks formatting, lints, typechecks, and builds. The build
+needs no environment variables. The same checks run locally on commit through
+the husky + lint-staged pre-commit hook.

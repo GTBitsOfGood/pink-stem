@@ -7,3 +7,7 @@ import { twMerge } from "tailwind-merge";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+/** Escapes a user-typed string for use inside a RegExp. */
+export const escapeRegex = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
