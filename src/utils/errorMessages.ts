@@ -17,7 +17,6 @@ const ERRORS = Object.freeze({
     TOKEN_INVALID: "This link is invalid or has already been used.",
     SESSION_REQUIRED: "Sign in to continue.",
     FORBIDDEN: "You do not have permission to do that.",
-    ALREADY_VERIFIED: "This email address is already verified.",
   },
   USER: {
     NOT_FOUND: "That account does not exist.",

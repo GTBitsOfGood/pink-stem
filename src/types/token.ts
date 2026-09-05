@@ -2,7 +2,6 @@ import type { Types } from "mongoose";
 import type { Role } from "@/types/user";
 
 export const TOKEN_PURPOSES = [
-  "verify_email",
   "reset_password",
   "organizer_invite",
   "guardian_consent",

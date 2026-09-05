@@ -61,7 +61,6 @@ export interface User {
   bio?: string;
   waiverVersionAccepted?: number;
   waiverAcceptedAt?: Date;
-  emailVerifiedAt?: Date | null;
   notificationPreferences: NotificationPreferences;
   /** Bumped to invalidate every existing session for this user. */
   sessionVersion: number;

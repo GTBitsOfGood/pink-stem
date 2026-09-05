@@ -132,7 +132,6 @@ export default function PeoplePage() {
                       {p.flaggedForReviewAt ? (
                         <Badge tone="warning">Review</Badge>
                       ) : null}
-                      {!p.emailVerifiedAt ? <Badge>Unverified</Badge> : null}
                     </div>
                   </td>
                   <td className={td}>{ROLE_LABELS[p.role]}</td>

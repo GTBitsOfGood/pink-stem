@@ -38,14 +38,6 @@ export default class AuthHTTPClient {
     return fetchHTTPClient("/auth/logout", "POST");
   }
 
-  static verifyEmail(token: string): Promise<void> {
-    return fetchHTTPClient("/auth/verify-email", "POST", { token });
-  }
-
-  static resendVerification(): Promise<void> {
-    return fetchHTTPClient("/auth/verify-email", "PUT");
-  }
-
   static forgotPassword(email: string): Promise<void> {
     return fetchHTTPClient("/auth/forgot-password", "POST", { email });
   }

@@ -81,7 +81,6 @@ export default function PersonPage() {
             {u.flaggedForReviewAt ? (
               <Badge tone="warning">Flagged for review</Badge>
             ) : null}
-            {!u.emailVerifiedAt ? <Badge>Email unverified</Badge> : null}
           </span>
         }
         back={{ href: "/admin/people", label: "People" }}

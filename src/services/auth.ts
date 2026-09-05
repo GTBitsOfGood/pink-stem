@@ -4,7 +4,6 @@ import {
   GUARDIAN_CONSENT_DAYS,
   RATE_LIMITS,
   RESET_PASSWORD_TOKEN_MINUTES,
-  VERIFY_EMAIL_TOKEN_HOURS,
 } from "@/constants/limits";
 import { isMinor } from "@/lib/dates";
 import { assertRateLimit } from "@/lib/rateLimit";
@@ -13,8 +12,6 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
-import SignupService from "@/services/signup";
-import type { Actor } from "@/types/auth";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -31,7 +28,6 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
-  tokenSchema,
 } from "@/utils/validation/auth";
 
 export interface SessionResult {
@@ -86,7 +82,6 @@ export default class AuthService {
       passwordHash: await HashingService.hash(data.password),
     });
 
-    await AuthService.sendVerification(created);
     if (minor) await AuthService.sendGuardianConsent(created);
 
     return AuthService.session({ ...created, sessionVersion: 0 });
@@ -149,7 +144,6 @@ export default class AuthService {
         role: "volunteer",
         firstName: info.given_name ?? "New",
         lastName: info.family_name ?? "Volunteer",
-        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }
@@ -157,25 +151,6 @@ export default class AuthService {
       throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
     }
     return AuthService.session(user);
-  }
-
-  static async sendVerification(
-    user: Pick<Doc<SafeUser>, "_id" | "email" | "firstName" | "status">
-  ): Promise<void> {
-    const { secret } = await ActionTokenDAO.issue({
-      purpose: "verify_email",
-      email: user.email,
-      userId: user._id,
-      ttlMs: VERIFY_EMAIL_TOKEN_HOURS * HOUR,
-    });
-    const org = await NotificationService.org();
-    await NotificationService.send(
-      user,
-      NotificationService.templates.verifyEmail(org, {
-        name: user.firstName,
-        url: appUrl(`/verify-email?token=${secret}`),
-      })
-    );
   }
 
   static async sendGuardianConsent(
@@ -199,22 +174,6 @@ export default class AuthService {
         url: appUrl(`/consent/${secret}`),
       })
     );
-  }
-
-  static async resendVerification(actor: Actor): Promise<void> {
-    const user = await UserDAO.findById(actor.id);
-    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    if (user.emailVerifiedAt)
-      throw new ConflictError(ERRORS.AUTH.ALREADY_VERIFIED);
-    await AuthService.sendVerification(user);
-  }
-
-  static async verifyEmail(input: unknown): Promise<void> {
-    const { token } = tokenSchema.parse(input);
-    const consumed = await ActionTokenDAO.consume(token, "verify_email");
-    if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
-    await UserDAO.updateById(consumed.userId, { emailVerifiedAt: new Date() });
-    await SignupService.reevaluateForVolunteer(consumed.userId);
   }
 
   static async forgotPassword(input: unknown, ip: string): Promise<void> {
@@ -282,7 +241,6 @@ export default class AuthService {
       const before = { role: existing.role };
       await UserDAO.updateById(existing._id, {
         role: invite.role,
-        emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
         status: "active",
         deactivatedAt: null,
       });
@@ -310,7 +268,6 @@ export default class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         passwordHash,
-        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }

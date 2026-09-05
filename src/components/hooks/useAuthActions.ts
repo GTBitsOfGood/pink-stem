@@ -51,13 +51,5 @@ export function useAuthActions(next = "/dashboard") {
     forgotPassword: useMutation({
       mutationFn: (email: string) => AuthHTTPClient.forgotPassword(email),
     }),
-    verifyEmail: useMutation({
-      mutationFn: (token: string) => AuthHTTPClient.verifyEmail(token),
-      onSuccess: () =>
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session }),
-    }),
-    resendVerification: useMutation({
-      mutationFn: () => AuthHTTPClient.resendVerification(),
-    }),
   };
 }

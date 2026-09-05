@@ -55,7 +55,6 @@ const userSchema = new Schema<User>(
     bio: { type: String, maxlength: MAX_BIO_LENGTH, trim: true },
     waiverVersionAccepted: Number,
     waiverAcceptedAt: Date,
-    emailVerifiedAt: { type: Date, default: null },
     notificationPreferences: {
       type: new Schema(notificationPreferences, { _id: false }),
       default: () => ({}),

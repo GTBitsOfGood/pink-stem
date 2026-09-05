@@ -126,15 +126,6 @@ const PREFS_NOTE =
   "You can change which emails you receive under Profile in the Volunteer Hub. Confirmations for your own sign-ups are always sent.";
 
 export const emailTemplates = {
-  verifyEmail: (org: Org, p: { name: string; url: string }) =>
-    build(
-      org,
-      "Verify your email for the Pink STEM Volunteer Hub",
-      "Confirm your email address",
-      `Hi ${p.name},\n\nThanks for volunteering with Pink STEM. Confirm your email address to finish setting up your account. Sign-ups stay pending until you do.`,
-      { cta: { label: "Verify email", url: p.url } }
-    ),
-
   passwordReset: (org: Org, p: { name: string; url: string }) =>
     build(
       org,

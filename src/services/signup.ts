@@ -48,10 +48,7 @@ const isLive = (s: Pick<Signup, "status">) =>
 interface ReasonInput {
   user: Pick<
     SafeUser,
-    | "emailVerifiedAt"
-    | "waiverVersionAccepted"
-    | "dateOfBirth"
-    | "guardianConsentAt"
+    "waiverVersionAccepted" | "dateOfBirth" | "guardianConsentAt"
   >;
   clearance: Pick<Clearance, "status" | "expiresOn"> | null;
   settings: Pick<OrgSettings, "waiverVersion">;
@@ -74,7 +71,6 @@ export default class SignupService {
     approved,
   }: ReasonInput): PendingReason[] {
     const reasons: PendingReason[] = [];
-    if (!user.emailVerifiedAt) reasons.push("email_unverified");
     if ((user.waiverVersionAccepted ?? 0) < settings.waiverVersion)
       reasons.push("waiver");
     if (isMinor(user.dateOfBirth) && !user.guardianConsentAt)

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { CircleAlert, Send } from "lucide-react";
-import { useAuthActions } from "@/components/hooks/useAuthActions";
 import { useProfile } from "@/components/hooks/useProfile";
 import { useSession } from "@/components/hooks/useSession";
 import WaiverDialog from "@/components/profile/WaiverDialog";
@@ -16,7 +15,6 @@ import { useState } from "react";
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
 export default function OutstandingList() {
   const { me } = useSession();
-  const { resendVerification } = useAuthActions();
   const { acceptWaiver, resendGuardianConsent } = useProfile();
   const toast = useToast();
   const [waiverOpen, setWaiverOpen] = useState(false);
@@ -50,21 +48,7 @@ export default function OutstandingList() {
               <CircleAlert className="h-4 w-4 shrink-0 text-amber-600" />
               {PENDING_REASON_LABELS[reason]}
             </span>
-            {reason === "email_unverified" ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Send className="h-3.5 w-3.5" />}
-                loading={resendVerification.isPending}
-                onClick={() =>
-                  resendVerification.mutate(undefined, {
-                    onSuccess: () => toast("Verification email sent."),
-                  })
-                }
-              >
-                Resend email
-              </Button>
-            ) : reason === "waiver" ? (
+            {reason === "waiver" ? (
               <Button
                 size="sm"
                 variant="secondary"

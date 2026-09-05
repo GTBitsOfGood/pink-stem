@@ -84,7 +84,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `messages`         | Text only, with per-message report fields                                       |
 | `certificates`     | Immutable snapshots with a random verification code                             |
 | `auditlogs`        | Append-only record of every consequential action                                |
-| `actiontokens`     | Hashed one-time links: email verification, password reset, invites, consent     |
+| `actiontokens`     | Hashed one-time links: password reset, invites, guardian consent                |
 | `orgsettings`      | Singleton organization configuration                                            |
 | `notificationlogs` | Idempotency keys so scheduled emails send exactly once                          |
 

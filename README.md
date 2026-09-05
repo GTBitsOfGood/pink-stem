@@ -50,7 +50,7 @@ cp .env.local.example .env.local   # then set MONGODB_URI and JWT_SECRET
 
 Only `MONGODB_URI` and `JWT_SECRET` are required locally. Without
 `RESEND_API_KEY`, every email is printed to the server console instead of
-being sent, including the verification, consent, and invitation links.
+being sent, including the guardian consent and invitation links.
 
 ### Seed data
 
@@ -98,7 +98,7 @@ authorization is enforced server-side on every request by `withAuth`.
 
 | Area         | Endpoints                                                                                                                                                          |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/google`, `auth/me`, `auth/verify-email`, `auth/forgot-password`, `auth/reset-password`, `auth/invite/:token`   |
+| Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/google`, `auth/me`, `auth/forgot-password`, `auth/reset-password`, `auth/invite/:token`                        |
 | Me           | `me` (profile), `me/waiver`, `me/guardian-consent`, `me/signups`, `me/hours`, `me/certificates`                                                                    |
 | Public       | `events`, `events/:id`, `settings`, `consent/:token`, `verify/:code`                                                                                               |
 | Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |

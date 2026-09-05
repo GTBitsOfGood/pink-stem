@@ -37,7 +37,6 @@ async function ensureUser(
     ...rest,
     provider: "password",
     passwordHash: await HashingService.hash(password),
-    emailVerifiedAt: new Date(),
     waiverVersionAccepted: 1,
     waiverAcceptedAt: new Date(),
   });

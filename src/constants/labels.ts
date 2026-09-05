@@ -70,7 +70,6 @@ export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {
 };
 
 export const PENDING_REASON_LABELS: Record<PendingReason, string> = {
-  email_unverified: "Verify your email address",
   waiver: "Accept the volunteer waiver and code of conduct",
   guardian_consent: "A parent or guardian must give consent",
   clearance: "Background screening must be cleared by Pink STEM staff",
