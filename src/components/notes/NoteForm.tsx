@@ -33,14 +33,14 @@ export default function NoteForm({ onSubmit }: NoteFormProps) {
         placeholder="Title"
         maxLength={MAX_NOTE_TITLE_LENGTH}
         required
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-black"
       />
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="Body"
         rows={3}
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        className="rounded-md border border-neutral-300 px-3 py-2 text-sm text-black"
       />
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Adding..." : "Add"}
