@@ -84,6 +84,10 @@ const ContentBlockSchema = new Schema(
     sourceFormat: { type: String }, // e.g. "Google Docs", "Google Slides", "Excel", "Canva"
     // Flexible payload — shape depends on `type`. Media fields inside `data`
     // must be URLs (S3/blob storage), never inline binary.
+    // Mongoose does not deep-track `Mixed` fields: any in-place mutation of a
+    // nested property (e.g. `block.data.someField = x`) must be followed by
+    // `lesson.markModified("contentBlocks")` before `save()`, or the change
+    // will silently fail to persist.
     data: { type: Schema.Types.Mixed, required: true },
   },
   { _id: true }
@@ -97,9 +101,15 @@ const LessonSchema = new Schema(
     roughLength: { type: String }, // e.g. "1 class period"
     gradeLevel: { type: String, required: true },
     contentBlocks: [ContentBlockSchema],
+    // Reverse reference to the owning Course/Module, kept in sync with
+    // Module.lessons. Without this, "which course is this lesson part of"
+    // requires an unindexed scan over every Course's modules.lessons arrays.
+    courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
+    moduleId: { type: Schema.Types.ObjectId, required: true },
   },
   { timestamps: true }
 );
+LessonSchema.index({ courseId: 1, moduleId: 1 });
 
 // src/db/models/Module.ts
 // Embedded subdocument inside Course — thin structural grouping only.
@@ -149,6 +159,8 @@ interface ILesson {
   roughLength?: string;
   gradeLevel: string;
   contentBlocks: IContentBlock[];
+  courseId: Types.ObjectId;
+  moduleId: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
