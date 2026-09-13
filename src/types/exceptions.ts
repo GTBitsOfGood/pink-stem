@@ -24,8 +24,18 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class ForbiddenError extends Error {
+  constructor(message = "You do not have permission to do that") {
+    super(message);
+  }
+}
+
+/** Optional machine-readable code so the client can branch on the conflict. */
 export class ConflictError extends Error {
-  constructor(message = "Resource conflict") {
+  constructor(
+    message = "Resource conflict",
+    public readonly code?: string
+  ) {
     super(message);
   }
 }
@@ -42,23 +52,20 @@ export class IllegalOperationError extends Error {
   }
 }
 
-export class MethodNotAllowedError extends Error {
-  constructor(message = "Method not allowed") {
+export class TooManyRequestsError extends Error {
+  constructor(message = "Too many requests. Please try again shortly.") {
     super(message);
   }
 }
 
 /** Raised by the frontend HTTP client when a response comes back non-2xx. */
 export class HTTPError extends Error {
-  public readonly status: number;
-
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string
+  ) {
     super(message);
     this.name = "HTTPError";
-    this.status = status;
-
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, HTTPError);
-    }
   }
 }
