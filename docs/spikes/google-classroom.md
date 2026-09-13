@@ -1,6 +1,6 @@
 # Google Classroom and Google Sites Integration Spike
 
-##summary
+## Summary
 
 Route A is technically feasible as a **teacher-authorized integration**, with
 important boundaries:
