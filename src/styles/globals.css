@@ -2,19 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: 0 0% 9%;
-    --foreground: 0 0% 98%;
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-900;
+  }
+
+  /* Visible focus for every interactive element (WCAG 2.4.7). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-600 ring-offset-2 ring-offset-white;
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
   }
 }
 
-body {
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
+@layer utilities {
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.14em] text-brand-700;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }

@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { HTTPError } from "@/types/exceptions";
 
 /**
  * Holds the app-wide React Query client. Created in state so each browser
@@ -16,7 +17,9 @@ export default function QueryProvider({
         defaultOptions: {
           queries: {
             refetchOnWindowFocus: false,
-            retry: 1,
+            // Auth and permission failures are answers, not transient faults.
+            retry: (count, error) =>
+              !(error instanceof HTTPError && error.status < 500) && count < 1,
           },
         },
       })
