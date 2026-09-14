@@ -137,4 +137,5 @@ Caveats:
 - If not: fall back to linking out to the relevant course categories (AI, Computer Science, IT), similar Omniverse City plan.
 
 **Effort Estimate:**
+
 2 Sprints
