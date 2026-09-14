@@ -4,87 +4,73 @@ type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 const BASE_URL = "/api/v1";
 
-/**
- * Verifies the fetch parameters based on the method type, following MDN
- * semantics for which methods carry a body.
- * @param method HTTP method of request
- * @param request Request information
- */
-function verifyFetchRequest(method: HttpMethod, request: RequestInit): void {
-  switch (method) {
-    // GET, DELETE don't have a request body
-    case "GET":
-    case "DELETE":
-      if (request.body) {
-        throw new Error(`${method} can't have a body.`);
-      }
-      break;
-    // POST, PUT, PATCH require a request body
-    case "POST":
-    case "PUT":
-    case "PATCH":
-      if (!request.body) {
-        throw new Error(`${method} expects a request body.`);
-      }
-      if (typeof request.body !== "string") {
-        throw new Error(`Request body for ${method} must be a JSON string`);
-      }
-      try {
-        JSON.parse(request.body);
-      } catch {
-        throw new Error(
-          `Request body for ${method} must be a valid JSON string`
-        );
-      }
-      break;
-    default:
-      throw new Error(`Invalid HTTP method: ${method}.`);
-  }
+/** Drops empty filter values so cache keys and query strings stay stable. */
+export function compactFilters(
+  filters: Record<string, string | undefined>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(filters).filter(
+      (entry): entry is [string, string] => !!entry[1]
+    )
+  );
+}
+
+/** Turns a filters object into a query string, skipping empty values. */
+export function toQuery(
+  params: Record<string, string | number | boolean | undefined>
+): string {
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== ""
+  );
+  return entries.length
+    ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}`
+    : "";
 }
 
 /**
  * Single entry point for every call the frontend makes to the backend API.
- * @param endpoint Url endpoint for the fetch, relative to /api/v1
- * @param request RequestInit object, body is expected to be stringified beforehand
- * @returns <T> Promise type
+ * Sends the session cookie, JSON-encodes bodies, and converts non-2xx
+ * responses into `HTTPError` so hooks can branch on status and code.
  */
 export default async function fetchHTTPClient<T>(
   endpoint: string,
-  request: RequestInit = {}
+  method: HttpMethod = "GET",
+  body?: unknown
 ): Promise<T> {
-  const httpMethod = (request.method as HttpMethod) || "NO METHOD PROVIDED";
-  verifyFetchRequest(httpMethod, request);
-
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${endpoint}`, {
-      ...request,
-      headers: {
-        "Content-Type": "application/json",
-        ...request.headers,
-      },
+      method,
+      credentials: "include",
+      headers:
+        body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new HTTPError("Connection to server unavailable", 503);
+    throw new HTTPError(
+      "We could not reach the server. Check your connection and try again.",
+      503
+    );
   }
 
   if (!response.ok) {
-    let errorMessage = `HTTP error! Status: ${response.status}`;
-    const errorText = await response.text();
-    if (errorText) {
-      try {
-        const errorBody = JSON.parse(errorText);
-        errorMessage = errorBody.error || errorMessage;
-      } catch {
-        errorMessage = errorText;
-      }
+    let message = `Request failed (${response.status})`;
+    let code: string | undefined;
+    try {
+      const payload = (await response.json()) as {
+        error?: string;
+        code?: string;
+      };
+      message = payload.error ?? message;
+      code = payload.code;
+    } catch {
+      // Non-JSON error body; keep the generic message.
     }
-    throw new HTTPError(errorMessage, response.status);
+    throw new HTTPError(message, response.status, code);
   }
 
-  if (response.status == 204) {
+  if (response.status === 204) {
     return null as T;
   }
-
   return response.json();
 }
