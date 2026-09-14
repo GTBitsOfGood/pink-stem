@@ -1,4 +1,4 @@
-/** Product rules from the PRD that are fixed, not admin-configurable. */
+/** Product rules that are fixed, not admin-configurable. */
 
 export const SESSION_DAYS = 30;
 /** Re-issue the session cookie once a token is older than this. */

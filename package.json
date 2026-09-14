@@ -15,7 +15,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "prepare": "husky",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
-    "jobs": "curl -s -X POST -H \"Authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/v1/jobs/run"
+    "jobs": "tsx --env-file=.env.local scripts/jobs.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.2",
