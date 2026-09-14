@@ -8,12 +8,11 @@ certificate a school or employer can check. Built on **Next.js** (App Router)
 and **MongoDB**, structured to match the Bits of Good conventions used in
 [GTBitsOfGood/ican](https://github.com/GTBitsOfGood/ican).
 
-The product requirements live in the PRD (`Pink STEM Volunteer Hub`, v0.2).
-Every v1 feature in it is implemented: accounts and three roles, volunteer
-profile and clearance gate, events with shifts, browse and sign-up with a
-waitlist, roster check-off and hour approval, event updates, event-scoped
-messaging with admin oversight, certificates with public verification,
-transactional email, the admin console with CSV reports, and the audit trail.
+Everything in v1 is implemented: accounts and three roles, volunteer profile
+and clearance gate, events with shifts, browse and sign-up with a waitlist,
+roster check-off and hour approval, event updates, event-scoped messaging with
+admin oversight, certificates with public verification, transactional email,
+the admin console with CSV reports, and the audit trail.
 
 ## Tech Stack
 
@@ -45,10 +44,12 @@ npm install
 ### Environment
 
 ```sh
-cp .env.local.example .env.local   # then set MONGODB_URI and JWT_SECRET
+cp .env.local.example .env.local   # then fill in the required values below
 ```
 
-Only `MONGODB_URI` and `JWT_SECRET` are required locally. Without
+`MONGODB_URI` and `JWT_SECRET` are required to run the app. `npm run seed`
+also needs `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, and `npm run jobs`
+needs `CRON_SECRET`, so fill in all five before you start. Without
 `RESEND_API_KEY`, every email is printed to the server console instead of
 being sent, including the guardian consent and invitation links.
 
@@ -70,8 +71,9 @@ npm run dev
 ```
 
 Open http://localhost:3000. Scheduled work (reminders, digests, clearance
-expiry, roster nudges) runs from `POST /api/v1/jobs/run`; trigger it locally
-with `npm run jobs` once `CRON_SECRET` is set.
+expiry, roster nudges) runs from `POST /api/v1/jobs/run`. Trigger it locally
+with `npm run jobs` in a second terminal while the dev server is running; it
+reads `CRON_SECRET` from `.env.local`.
 
 ### Code Formatting
 
@@ -127,7 +129,7 @@ src/
   types/             Domain types, API shapes, error taxonomy
   utils/             Validation schemas, auth wrappers, error handling
   proxy.ts           Page-level access gate
-scripts/seed.ts      Seed script
+scripts/            Seed script and the local job trigger
 netlify/functions/   Hourly trigger for the job runner
 ```
 
