@@ -22,17 +22,17 @@ const NAV: NavItem[] = [
   {
     href: "/dashboard",
     label: "My shifts",
-    roles: ["volunteer", "organizer", "admin"],
+    roles: ["volunteer", "organizer"],
   },
   {
     href: "/hours",
     label: "Hours",
-    roles: ["volunteer", "organizer", "admin"],
+    roles: ["volunteer", "organizer"],
   },
   {
     href: "/messages",
     label: "Messages",
-    roles: ["volunteer", "organizer", "admin"],
+    roles: ["volunteer", "organizer"],
   },
   { href: "/organizer", label: "Organize", roles: ["organizer", "admin"] },
   { href: "/admin", label: "Admin", roles: ["admin"] },
