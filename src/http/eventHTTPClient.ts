@@ -22,7 +22,11 @@ export type ClientShift = Serialized<Doc<Shift>>;
 export type ClientSignup = Serialized<Doc<Signup>>;
 export type ClientRoster = Serialized<Roster>;
 export type ClientUpdate = Serialized<UpdateWithAuthor>;
-export type EventBody = Omit<EventInput, "eventDate"> & { eventDate: string };
+export type EventBody = Omit<EventInput, "eventDate"> & {
+  eventDate: string;
+  /** Only sent by admins creating an event. */
+  organizerId?: string;
+};
 export type ShiftBody = Omit<ShiftInput, "startsAt" | "endsAt"> & {
   startsAt: string;
   endsAt: string;

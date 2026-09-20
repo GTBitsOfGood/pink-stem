@@ -20,7 +20,7 @@ import SignupService from "@/services/signup";
 import type { EventDetail, EventWithShifts, Paginated } from "@/types/api";
 import type { Actor } from "@/types/auth";
 import type { Event, ProgramArea, Shift } from "@/types/event";
-import type { Region } from "@/types/user";
+import type { Region, SafeUser } from "@/types/user";
 import {
   ConflictError,
   IllegalOperationError,
@@ -32,12 +32,14 @@ import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import {
   assertCanManageEvent,
   canManageEvent,
+  isAdmin,
   sameId,
 } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
   adminEventFiltersSchema,
   cancelEventSchema,
+  createEventSchema,
   eventFiltersSchema,
   eventInputSchema,
   reassignEventSchema,
@@ -188,13 +190,32 @@ export default class EventService {
     }
   }
 
+  /** Events can only be owned by an active organizer or admin. */
+  private static async assignableOrganizer(
+    organizerId?: string
+  ): Promise<Doc<SafeUser>> {
+    const organizer = organizerId ? await UserDAO.findById(organizerId) : null;
+    if (
+      !organizer ||
+      organizer.role === "volunteer" ||
+      organizer.status !== "active"
+    ) {
+      throw new InvalidArgumentsError(ERRORS.EVENT.ORGANIZER_ROLE);
+    }
+    return organizer;
+  }
+
+  /** Admins pick the organizer; organizers own what they create. */
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
-    const data = eventInputSchema.parse(input);
+    const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const organizer = isAdmin(actor)
+      ? (await EventService.assignableOrganizer(organizerId))._id
+      : new Types.ObjectId(actor.id);
     const event = await EventDAO.create({
       ...data,
       minAge: data.minAge ?? undefined,
-      organizerId: new Types.ObjectId(actor.id),
+      organizerId: organizer,
     });
     const [withShifts] = await EventService.attachShifts([event]);
     return withShifts;
@@ -357,14 +378,7 @@ export default class EventService {
     const { organizerId } = reassignEventSchema.parse(input);
     const event = await EventDAO.findById(eventId);
     if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
-    const organizer = await UserDAO.findById(organizerId);
-    if (
-      !organizer ||
-      organizer.role === "volunteer" ||
-      organizer.status !== "active"
-    ) {
-      throw new InvalidArgumentsError(ERRORS.EVENT.ORGANIZER_ROLE);
-    }
+    const organizer = await EventService.assignableOrganizer(organizerId);
     const updated = (await EventDAO.updateById(eventId, {
       organizerId: organizer._id,
     })) as Doc<Event>;

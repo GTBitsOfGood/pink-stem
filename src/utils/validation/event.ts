@@ -44,6 +44,11 @@ export const eventInputSchema = z.object({
 });
 export type EventInput = z.infer<typeof eventInputSchema>;
 
+/** Only admins pick the organizer; for everyone else it is ignored. */
+export const createEventSchema = eventInputSchema.extend({
+  organizerId: objectIdSchema.optional(),
+});
+
 export const shiftInputSchema = z.object({
   roleName: text(80),
   description: optionalText(500),
