@@ -5,12 +5,10 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
-  { href: "/admin", label: "Overview" },
+  { href: "/admin", label: "Approvals" },
   { href: "/admin/people", label: "People" },
   { href: "/admin/events", label: "Events" },
-  { href: "/admin/messages", label: "Messages" },
   { href: "/admin/reports", label: "Reports" },
-  { href: "/admin/audit", label: "Audit log" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

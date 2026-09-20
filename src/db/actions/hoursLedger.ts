@@ -180,12 +180,4 @@ export default class HoursLedgerDAO {
       { $sort: { hours: -1 } },
     ]);
   }
-
-  static async grandTotal(): Promise<number> {
-    await dbConnect();
-    const rows = await HoursLedgerModel.aggregate<{ total: number }>([
-      { $group: { _id: null, total: { $sum: "$hours" } } },
-    ]);
-    return rows[0]?.total ?? 0;
-  }
 }

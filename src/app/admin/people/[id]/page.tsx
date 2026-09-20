@@ -398,13 +398,7 @@ export default function PersonPage() {
                 </Button>
               ) : null}
               <p className="text-[12px] text-ink-500">
-                Conversations involving this account: {p.threadCount}.{" "}
-                <Link
-                  href="/admin/messages"
-                  className="font-semibold text-brand-700 hover:underline"
-                >
-                  Message oversight
-                </Link>
+                Conversations involving this account: {p.threadCount}.
               </p>
             </CardBody>
           </Card>

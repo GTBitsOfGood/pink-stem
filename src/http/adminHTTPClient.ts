@@ -2,7 +2,7 @@ import fetchHTTPClient, { toQuery } from "@/http/fetchHTTPClient";
 import type { ClientEvent } from "@/http/eventHTTPClient";
 import type { ClientUser } from "@/http/authHTTPClient";
 import type {
-  AdminOverview,
+  AdminApprovals,
   AuditRow,
   Paginated,
   PersonDetail,
@@ -21,7 +21,7 @@ import type {
   UpdateUserInput,
 } from "@/utils/validation/admin";
 
-export type ClientOverview = Serialized<AdminOverview>;
+export type ClientApprovals = Serialized<AdminApprovals>;
 export type ClientPersonRow = Serialized<PersonRow>;
 export type ClientPersonDetail = Serialized<PersonDetail>;
 export type ClientAuditRow = Serialized<AuditRow>;
@@ -50,8 +50,8 @@ export interface OrganizerOption {
 type Filters = Record<string, string | undefined>;
 
 export default class AdminHTTPClient {
-  static overview(): Promise<ClientOverview> {
-    return fetchHTTPClient("/admin/overview");
+  static approvals(): Promise<ClientApprovals> {
+    return fetchHTTPClient("/admin/approvals");
   }
 
   static people(filters: Filters): Promise<Paginated<ClientPersonRow>> {

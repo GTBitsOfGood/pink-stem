@@ -147,10 +147,6 @@ export default class EventService {
     return { ...withShifts, mySignups, updates, canManage: manage };
   }
 
-  static listForIds(events: Doc<Event>[]): Promise<EventWithShifts[]> {
-    return EventService.attachShifts(events);
-  }
-
   static async listForOrganizer(actor: Actor): Promise<EventWithShifts[]> {
     const events = await EventDAO.findAll({
       organizerId: new Types.ObjectId(actor.id),

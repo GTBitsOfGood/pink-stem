@@ -6,23 +6,17 @@ import ClearanceDAO from "@/db/actions/clearance";
 import EventDAO from "@/db/actions/event";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
 import MessageThreadDAO from "@/db/actions/messageThread";
-import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
-import {
-  LOW_FILL_ALERT_HOURS,
-  ORGANIZER_INVITE_DAYS,
-  PAGE_SIZE,
-} from "@/constants/limits";
-import { addHours } from "@/lib/dates";
+import { ORGANIZER_INVITE_DAYS, PAGE_SIZE } from "@/constants/limits";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
-import EventService from "@/services/event";
 import HoursService from "@/services/hours";
+import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
 import SignupService from "@/services/signup";
 import type {
-  AdminOverview,
+  AdminApprovals,
   AuditRow,
   Paginated,
   PersonDetail,
@@ -48,52 +42,25 @@ import {
 
 /** Oversight across people, events, and the audit trail. Admin-only routes call in here. */
 export default class AdminService {
-  static async overview(): Promise<AdminOverview> {
-    const now = new Date();
-    const [
-      volunteers,
-      organizers,
-      upcomingEvents,
-      clearances,
-      flaggedVolunteers,
-      totalHours,
-      certificatesIssued,
-      upcoming,
-      audit,
-    ] = await Promise.all([
-      UserDAO.count({ role: "volunteer", status: "active" }),
-      UserDAO.count({
-        role: { $in: ["organizer", "admin"] },
-        status: "active",
-      }),
-      EventDAO.count({ status: "published", eventDate: { $gte: now } }),
-      ClearanceDAO.countByStatus(),
-      UserDAO.count({ flaggedForReviewAt: { $ne: null } }),
-      HoursLedgerDAO.grandTotal(),
-      CertificateDAO.count({ revokedAt: null }),
-      EventDAO.list(
-        { status: "published", eventDate: { $gte: now } },
-        { limit: 5 }
-      ),
-      AuditLogDAO.list({}, 1),
+  /** What is waiting on a decision: one list per kind of approval. */
+  static async approvals(admin: Actor): Promise<AdminApprovals> {
+    const [submitted, rosters, consentSignups, reported] = await Promise.all([
+      ClearanceDAO.findUserIdsByStatus("submitted"),
+      EventDAO.findAll({ status: "published", eventDate: { $lt: new Date() } }),
+      SignupDAO.find({ status: "pending", pendingReasons: "guardian_consent" }),
+      MessageService.listThreads(admin, { reported: "true" }),
     ]);
-    const [pastPublished, soonShifts] = await Promise.all([
-      EventDAO.findAll({ status: "published", eventDate: { $lt: now } }),
-      ShiftDAO.findStartingBetween(now, addHours(now, LOW_FILL_ALERT_HOURS)),
+    const [clearances, guardianConsent] = await Promise.all([
+      UserDAO.findSummaries(submitted),
+      UserDAO.findAwaitingGuardianConsent(
+        consentSignups.map((s) => s.volunteerId)
+      ),
     ]);
     return {
-      volunteers,
-      organizers,
-      upcomingEvents,
-      pendingClearances: clearances.submitted,
-      flaggedVolunteers,
-      unapprovedRosters: pastPublished.length,
-      totalHours,
-      certificatesIssued,
-      lowFillShifts: soonShifts.filter((s) => s.filledCount < s.minStaffing)
-        .length,
-      upcoming: await EventService.listForIds(upcoming.items),
-      recentAudit: await AdminService.withActors(audit.items.slice(0, 8)),
+      clearances,
+      rosters,
+      guardianConsent,
+      reportedThreads: reported.items,
     };
   }
 

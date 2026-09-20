@@ -116,6 +116,16 @@ export default class UserDAO {
       .lean<UserSummary[]>();
   }
 
+  /** Of the given users, those whose guardian has not consented yet. */
+  static async findAwaitingGuardianConsent(
+    ids: Types.ObjectId[]
+  ): Promise<UserSummary[]> {
+    await dbConnect();
+    return UserModel.find({ _id: { $in: ids }, guardianConsentAt: null })
+      .select(SUMMARY_FIELDS)
+      .lean<UserSummary[]>();
+  }
+
   static async listByRole(role: Role): Promise<Doc<SafeUser>[]> {
     await dbConnect();
     return UserModel.find({ role, status: "active" }).lean<Doc<SafeUser>[]>();

@@ -430,7 +430,7 @@ export default class MessageService {
         name: admin.firstName,
         reporterName: actor.name,
         reason,
-        url: appUrl(`/admin/messages?thread=${thread._id}`),
+        url: appUrl(`/messages/${thread._id}`),
       })
     );
   }

@@ -130,16 +130,9 @@ export interface Report {
   summary: { label: string; value: string }[];
 }
 
-export interface AdminOverview {
-  volunteers: number;
-  organizers: number;
-  upcomingEvents: number;
-  pendingClearances: number;
-  flaggedVolunteers: number;
-  unapprovedRosters: number;
-  totalHours: number;
-  certificatesIssued: number;
-  lowFillShifts: number;
-  upcoming: EventWithShifts[];
-  recentAudit: AuditRow[];
+export interface AdminApprovals {
+  clearances: UserSummary[];
+  rosters: Doc<Event>[];
+  guardianConsent: UserSummary[];
+  reportedThreads: ThreadSummary[];
 }
