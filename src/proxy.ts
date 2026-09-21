@@ -26,6 +26,11 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
+  // Admins do not volunteer, so their home is the console, not My shifts.
+  if (claims?.role === "admin" && pathname === "/dashboard") {
+    return NextResponse.redirect(new URL("/admin", req.url));
+  }
+
   const rule = PROTECTED.find(
     (r) => pathname === r.prefix || pathname.startsWith(`${r.prefix}/`)
   );
