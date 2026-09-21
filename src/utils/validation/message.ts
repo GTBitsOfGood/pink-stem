@@ -28,7 +28,6 @@ export const reportMessageSchema = z.object({
 
 export const threadFiltersSchema = z.object({
   eventId: objectIdSchema.optional(),
-  involvesMinor: queryBoolean.optional(),
   reported: queryBoolean.optional(),
   page: pageSchema,
 });

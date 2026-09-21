@@ -59,7 +59,7 @@ export default class MessageService {
 
   private static threadFilter(
     actor: Actor,
-    filters: { eventId?: string; involvesMinor?: boolean }
+    filters: { eventId?: string }
   ): QueryFilter<MessageThread> {
     const id = new Types.ObjectId(actor.id);
     const filter: QueryFilter<MessageThread> = isAdmin(actor)
@@ -68,8 +68,6 @@ export default class MessageService {
         ? { $or: [{ organizerId: id }, { volunteerId: id }] }
         : { volunteerId: id };
     if (filters.eventId) filter.eventId = new Types.ObjectId(filters.eventId);
-    if (filters.involvesMinor !== undefined)
-      filter.involvesMinor = filters.involvesMinor;
     return filter;
   }
 
