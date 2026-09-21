@@ -1,5 +1,8 @@
 import type { Types } from "mongoose";
 
+/** Reserved ObjectId used when scheduled work, rather than a user, acts. */
+export const SCHEDULED_JOB_ACTOR_ID = "000000000000000000000001";
+
 export const AUDIT_ACTIONS = [
   "user.role_changed",
   "user.deactivated",
@@ -17,6 +20,7 @@ export const AUDIT_ACTIONS = [
   "thread.admin_access",
   "organizer.invited",
   "signup.cancelled_by_staff",
+  "shift.counters_reconciled",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -30,6 +34,7 @@ export const AUDIT_ENTITY_TYPES = [
   "thread",
   "message",
   "invitation",
+  "shift",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 

@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import ClearanceDAO from "@/db/actions/clearance";
 import EventDAO from "@/db/actions/event";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
-import ShiftDAO from "@/db/actions/shift";
+import ShiftDAO, { type ShiftCounters } from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import { PENDING_REASON_LABELS } from "@/constants/labels";
@@ -54,6 +54,17 @@ interface ReasonInput {
   settings: Pick<OrgSettings, "waiverVersion">;
   event?: Pick<Event, "requiresClearance" | "requiresApproval">;
   approved?: boolean;
+}
+
+export interface ShiftCounterDrift {
+  shiftId: Types.ObjectId;
+  eventId: Types.ObjectId;
+  observed: ShiftCounters;
+  expected: ShiftCounters;
+}
+
+export interface ShiftCounterReconciliation extends ShiftCounterDrift {
+  corrected: boolean;
 }
 
 /**
@@ -160,17 +171,26 @@ export default class SignupService {
       holdUntil: null,
       attendance: null,
     } as const;
-    const signup = existing
-      ? ((await SignupDAO.updateById(existing._id, {
-          ...fields,
-          $unset: { cancellationReason: 1 },
-        })) as Doc<Signup>)
-      : await SignupDAO.create({
-          shiftId: shift._id,
-          eventId: event._id,
-          volunteerId: new Types.ObjectId(actor.id),
-          ...fields,
-        });
+    let signup: Doc<Signup>;
+    try {
+      signup = existing
+        ? ((await SignupDAO.updateById(existing._id, {
+            ...fields,
+            $unset: { cancellationReason: 1 },
+          })) as Doc<Signup>)
+        : await SignupDAO.create({
+            shiftId: shift._id,
+            eventId: event._id,
+            volunteerId: new Types.ObjectId(actor.id),
+            ...fields,
+          });
+    } catch (error) {
+      // The counter and signup are separate writes, so undo this request's
+      // counter change when the signup could not be persisted.
+      if (claimed) await ShiftDAO.releaseSpot(shiftId);
+      else await ShiftDAO.adjustWaitlist(shiftId, -1);
+      throw error;
+    }
 
     await SignupService.notifyStatus(user, event, claimed ?? shift, signup);
     return signup;
@@ -424,6 +444,64 @@ export default class SignupService {
   ): Promise<void> {
     const pending = await SignupDAO.findByVolunteer(volunteerId, ["pending"]);
     for (const signup of pending) await SignupService.reevaluate(signup);
+  }
+
+  /** Finalized events keep historical counts, so only live event counters are compared. */
+  private static async findCounterDrift(): Promise<ShiftCounterDrift[]> {
+    const events = await EventDAO.findAll({
+      status: { $nin: ["completed", "cancelled"] },
+    });
+    if (!events.length) return [];
+
+    const shifts = await ShiftDAO.findByEvents(events.map((e) => e._id));
+    const counts = await SignupDAO.countCapacityByShifts(
+      shifts.map((shift) => shift._id)
+    );
+
+    return shifts.flatMap((shift) => {
+      const observed = {
+        filledCount: shift.filledCount,
+        waitlistCount: shift.waitlistCount,
+      };
+      const expected = counts.get(shift._id.toString()) ?? {
+        filledCount: 0,
+        waitlistCount: 0,
+      };
+      const matches =
+        observed.filledCount === expected.filledCount &&
+        observed.waitlistCount === expected.waitlistCount;
+      return matches
+        ? []
+        : [{ shiftId: shift._id, eventId: shift.eventId, observed, expected }];
+    });
+  }
+
+  /** Dry-runs by default; correction mode repairs only unchanged counters. */
+  static async reconcileCounters(
+    options: { correct?: boolean } = {}
+  ): Promise<ShiftCounterReconciliation[]> {
+    const drift = await SignupService.findCounterDrift();
+    const results: ShiftCounterReconciliation[] = [];
+    for (const item of drift) {
+      let corrected = false;
+      if (options.correct) {
+        corrected = !!(await ShiftDAO.setCountersIfCurrent(
+          item.shiftId,
+          item.observed,
+          item.expected
+        ));
+        if (corrected) {
+          await AuditService.recordSystem(
+            "shift.counters_reconciled",
+            "shift",
+            item.shiftId,
+            { before: item.observed, after: item.expected }
+          );
+        }
+      }
+      results.push({ ...item, corrected });
+    }
+    return results;
   }
 
   /**

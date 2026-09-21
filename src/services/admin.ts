@@ -36,7 +36,7 @@ import {
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
 import type { SafeUser } from "@/types/user";
-import type { AuditLog } from "@/types/audit";
+import { SCHEDULED_JOB_ACTOR_ID, type AuditLog } from "@/types/audit";
 import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -259,16 +259,24 @@ export default class AdminService {
 
   static async withActors(entries: Doc<AuditLog>[]): Promise<AuditRow[]> {
     if (!entries.length) return [];
+    // Scheduled work has a reserved actor id rather than a user document.
     const actors = await UserDAO.findSummaries([
-      ...new Set(entries.map((e) => e.actorId.toString())),
+      ...new Set(
+        entries
+          .map((e) => e.actorId.toString())
+          .filter((id) => id !== SCHEDULED_JOB_ACTOR_ID)
+      ),
     ]);
     return entries.map((entry) => {
       const actor = actors.find((a) => sameId(a._id, entry.actorId));
       return {
         ...entry,
-        actorName: actor
-          ? `${actor.firstName} ${actor.lastName}`
-          : "Former member",
+        actorName:
+          entry.actorId.toString() === SCHEDULED_JOB_ACTOR_ID
+            ? "Scheduled job"
+            : actor
+              ? `${actor.firstName} ${actor.lastName}`
+              : "Former member",
       };
     });
   }

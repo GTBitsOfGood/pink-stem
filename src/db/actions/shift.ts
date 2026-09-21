@@ -7,6 +7,11 @@ import type { Doc } from "@/types/models";
 
 export type NewShift = Omit<Shift, "filledCount" | "waitlistCount">;
 
+export interface ShiftCounters {
+  filledCount: number;
+  waitlistCount: number;
+}
+
 export default class ShiftDAO {
   static async create(data: NewShift): Promise<Doc<Shift>> {
     await dbConnect();
@@ -102,6 +107,27 @@ export default class ShiftDAO {
     const filter =
       delta < 0 ? { _id: id, waitlistCount: { $gt: 0 } } : { _id: id };
     await ShiftModel.updateOne(filter, { $inc: { waitlistCount: delta } });
+  }
+
+  /**
+   * Sets both counters only when they have not changed since they were read.
+   * A null result leaves a concurrent claim/release for the next job run.
+   */
+  static async setCountersIfCurrent(
+    id: string | Types.ObjectId,
+    observed: ShiftCounters,
+    expected: ShiftCounters
+  ): Promise<Doc<Shift> | null> {
+    await dbConnect();
+    return ShiftModel.findOneAndUpdate(
+      {
+        _id: id,
+        filledCount: observed.filledCount,
+        waitlistCount: observed.waitlistCount,
+      },
+      { $set: expected },
+      { returnDocument: "after", runValidators: true }
+    ).lean<Doc<Shift>>();
   }
 
   static async findStartingBetween(
