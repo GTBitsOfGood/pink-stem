@@ -44,8 +44,10 @@ handling and role checks on the same shape and hands the service an `Actor`.
 **Authorization happens in services, on every request.** `withAuth` loads the
 user from the database each time, so deactivation and forced sign-out take
 effect immediately. Organizers are scoped to their own events through
-`assertCanManageEvent`; admins pass everywhere. `proxy.ts` only redirects
-signed-out or under-privileged visitors away from pages they cannot use.
+`assertCanManageEvent`; admins manage every event but never take part in
+one, so the sign-up and service-record routes refuse them by role. `proxy.ts`
+only redirects signed-out or under-privileged visitors away from pages they
+cannot use.
 
 **Errors are thrown, not returned.** Services throw the typed exceptions in
 `src/types/exceptions.ts`; `handleError` maps each one to a status code. Zod

@@ -189,10 +189,6 @@ export default class CertificateService {
     );
   }
 
-  static mine(actor: Actor): Promise<Doc<Certificate>[]> {
-    return CertificateDAO.findByVolunteer(actor.id);
-  }
-
   static async pdf(
     actor: Actor,
     certificateId: string

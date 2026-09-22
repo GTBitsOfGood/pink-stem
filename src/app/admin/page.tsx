@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAdminApprovals } from "@/components/hooks/useAdmin";
-import { PageHeader, Spinner, Table, td } from "@/components/ui/Primitives";
+import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { formatDate } from "@/lib/dates";
 
 interface QueueRow {
@@ -32,26 +32,29 @@ function Queue({
         </span>
       </h2>
       {rows.length ? (
-        <Table>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td className={td}>
-                  <div className="font-semibold text-ink-900">{row.label}</div>
-                  <div className="text-[12px] text-ink-500">{row.detail}</div>
-                </td>
-                <td className={`${td} text-right`}>
-                  <Link
-                    href={row.href}
-                    className="text-sm font-semibold text-brand-700 hover:underline"
-                  >
-                    {action}
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+        <ul className="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white shadow-card">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex items-center justify-between gap-4 px-4 py-3 text-sm"
+            >
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-ink-900">
+                  {row.label}
+                </div>
+                <div className="truncate text-[12px] text-ink-500">
+                  {row.detail}
+                </div>
+              </div>
+              <Link
+                href={row.href}
+                className="shrink-0 text-sm font-semibold text-brand-700 hover:underline"
+              >
+                {action}
+              </Link>
+            </li>
+          ))}
+        </ul>
       ) : (
         <p className="text-sm text-ink-500">{empty}</p>
       )}
@@ -102,7 +105,7 @@ export default function ApprovalsPage() {
       <Queue
         title="Reported threads"
         action="Read thread"
-        empty="No threads have been reported."
+        empty="No reported threads are waiting on review."
         rows={a.reportedThreads.map((t) => ({
           id: t.thread._id,
           label: t.eventTitle,

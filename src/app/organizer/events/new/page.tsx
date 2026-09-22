@@ -13,6 +13,7 @@ export default function NewEventPage() {
   const toast = useToast();
   const { create } = useEventActions();
   const { user } = useSession();
+  const admin = user?.role === "admin";
 
   return (
     <Container className="max-w-3xl py-8 sm:py-10">
@@ -20,10 +21,13 @@ export default function NewEventPage() {
         eyebrow="New event"
         title="Create an event"
         description="Events start as drafts. Add shifts next, then publish when volunteers should see it."
-        back={{ href: "/organizer", label: "Your events" }}
+        back={{
+          href: "/organizer",
+          label: admin ? "All events" : "Your events",
+        }}
       />
       <EventForm
-        chooseOrganizer={user?.role === "admin"}
+        chooseOrganizer={admin}
         submitLabel="Save draft and add shifts"
         pending={create.isPending}
         onSubmit={async (body) => {

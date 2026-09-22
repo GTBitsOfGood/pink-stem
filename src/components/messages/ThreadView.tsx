@@ -21,7 +21,7 @@ export default function ThreadView({
   detail: ClientThreadDetail;
   currentUserId: string;
 }) {
-  const { send, report } = useMessageActions(detail.thread._id);
+  const { send, report, reviewReports } = useMessageActions(detail.thread._id);
   const toast = useToast();
   const [body, setBody] = useState("");
   const [reporting, setReporting] = useState<string | null>(null);
@@ -103,7 +103,9 @@ export default function ThreadView({
                     {nameOf(m.senderId)} · {formatDateTime(m.sentAt)}
                   </span>
                   {m.reportedAt ? (
-                    <Badge tone="danger">Reported</Badge>
+                    <Badge tone={m.reviewedAt ? "neutral" : "danger"}>
+                      {m.reviewedAt ? "Report reviewed" : "Reported"}
+                    </Badge>
                   ) : !mine && !detail.isAdminView ? (
                     <button
                       type="button"
@@ -114,6 +116,11 @@ export default function ThreadView({
                     </button>
                   ) : null}
                 </div>
+                {(detail.isAdminView || detail.canReview) && m.reportedAt ? (
+                  <p className="text-[12px] text-red-800">
+                    Reported because: {m.reportReason}
+                  </p>
+                ) : null}
               </li>
             );
           })}
@@ -121,6 +128,28 @@ export default function ThreadView({
         </ol>
       </div>
 
+      {detail.canReview ? (
+        <Alert tone="warning" title="Waiting on review">
+          Read the reported message in context and act on the account from
+          People if it needs it. Marking this reviewed clears it from Approvals.
+          <div className="mt-3">
+            <Button
+              size="sm"
+              loading={reviewReports.isPending}
+              onClick={async () => {
+                try {
+                  await reviewReports.mutateAsync();
+                  toast("Marked reviewed.");
+                } catch (error) {
+                  toast(errorMessage(error), "error");
+                }
+              }}
+            >
+              Mark reviewed
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
       {detail.isAdminView ? (
         <Alert tone="info">
           You are reading this as an administrator. Your access has been

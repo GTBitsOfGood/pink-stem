@@ -88,6 +88,7 @@ const ERRORS = Object.freeze({
     RATE_LIMITED: "You are sending messages too quickly. Wait a few minutes.",
     RECIPIENT_INACTIVE:
       "The recipient's account is no longer active. Your message was saved but no email was sent.",
+    NO_OPEN_REPORT: "Nothing in this conversation is waiting on review.",
   },
   CERTIFICATE: {
     NOT_FOUND: "That certificate does not exist.",

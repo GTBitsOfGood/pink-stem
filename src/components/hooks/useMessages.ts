@@ -58,5 +58,14 @@ export function useMessageActions(threadId?: string) {
       }) => MessageHTTPClient.report(threadId as string, messageId, reason),
       onSuccess: invalidate,
     }),
+    reviewReports: useMutation({
+      mutationFn: () => MessageHTTPClient.reviewReports(threadId as string),
+      onSuccess: () => {
+        invalidate();
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.admin.approvals,
+        });
+      },
+    }),
   };
 }

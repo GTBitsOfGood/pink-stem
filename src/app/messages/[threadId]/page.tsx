@@ -18,7 +18,11 @@ export default function ThreadPage() {
       <PageHeader
         eyebrow="Messages"
         title="Conversation"
-        back={{ href: "/messages", label: "All conversations" }}
+        back={
+          user?.role === "admin"
+            ? { href: "/admin", label: "Approvals" }
+            : { href: "/messages", label: "All conversations" }
+        }
       />
       {thread.isPending || !user ? (
         <Spinner />

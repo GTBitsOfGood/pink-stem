@@ -89,6 +89,8 @@ export interface ThreadDetail {
   };
   canReply: boolean;
   isAdminView: boolean;
+  /** An admin, participant or not, can clear the thread's open reports. */
+  canReview: boolean;
 }
 
 export interface Paginated<T> {

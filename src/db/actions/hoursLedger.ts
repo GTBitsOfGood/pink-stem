@@ -25,18 +25,6 @@ export default class HoursLedgerDAO {
     return toDoc<HoursLedgerEntry>(await HoursLedgerModel.create(entry));
   }
 
-  static async createMany(entries: HoursLedgerEntry[]): Promise<void> {
-    await dbConnect();
-    if (entries.length) await HoursLedgerModel.insertMany(entries);
-  }
-
-  static async findById(
-    id: string | Types.ObjectId
-  ): Promise<Doc<HoursLedgerEntry> | null> {
-    await dbConnect();
-    return HoursLedgerModel.findById(id).lean<Doc<HoursLedgerEntry>>();
-  }
-
   static async findByVolunteer(
     volunteerId: string | Types.ObjectId
   ): Promise<Doc<HoursLedgerEntry>[]> {

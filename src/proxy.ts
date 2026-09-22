@@ -18,16 +18,29 @@ const PROTECTED: { prefix: string; roles?: Role[] }[] = [
 
 const SIGNED_OUT_ONLY = ["/login", "/register"];
 
+/**
+ * Admins do not volunteer, so these send them to the console. A single
+ * thread stays reachable, since that is where a reported message is
+ * reviewed, and so does the list scoped to one event by `eventId`, since an
+ * admin who runs an event still answers its volunteers.
+ */
+const PARTICIPANT_ONLY = ["/dashboard", "/hours", "/messages"];
+
+const home = (role: Role) => (role === "admin" ? "/admin" : "/dashboard");
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const claims = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
 
   if (claims && SIGNED_OUT_ONLY.includes(pathname)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL(home(claims.role), req.url));
   }
 
-  // Admins do not volunteer, so their home is the console, not My shifts.
-  if (claims?.role === "admin" && pathname === "/dashboard") {
+  if (
+    claims?.role === "admin" &&
+    PARTICIPANT_ONLY.includes(pathname) &&
+    !(pathname === "/messages" && req.nextUrl.searchParams.has("eventId"))
+  ) {
     return NextResponse.redirect(new URL("/admin", req.url));
   }
 
@@ -42,7 +55,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(login);
   }
   if (rule.roles && !rule.roles.includes(claims.role)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL(home(claims.role), req.url));
   }
   return NextResponse.next();
 }

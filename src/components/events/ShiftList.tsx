@@ -30,7 +30,8 @@ export default function ShiftList({ event }: { event: ClientEventDetail }) {
   const { signUp, cancel } = useSignupActions(event._id);
   const [waiverFor, setWaiverFor] = useState<string | null>(null);
   const [overlapFor, setOverlapFor] = useState<string | null>(null);
-  const open = event.status === "published";
+  // Admins run events rather than staff them, so they are never offered a spot.
+  const open = event.status === "published" && user?.role !== "admin";
   const signupFor = (shiftId: string) =>
     event.mySignups.find((s) => s.shiftId === shiftId);
 

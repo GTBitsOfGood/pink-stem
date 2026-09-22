@@ -201,18 +201,44 @@ export default class EventService {
     return organizer;
   }
 
+  /** Tells an organizer that an admin has handed them an event. */
+  private static async notifyAssigned(
+    organizer: Doc<SafeUser>,
+    event: Doc<Event>,
+    body: string
+  ) {
+    const org = await NotificationService.org();
+    await NotificationService.send(
+      organizer,
+      NotificationService.templates.organizerNotice(org, {
+        name: organizer.firstName,
+        subject: `You now organize ${event.title}`,
+        title: "An event was assigned to you",
+        body,
+        url: appUrl(`/organizer/events/${event._id}`),
+      })
+    );
+  }
+
   /** Admins pick the organizer; organizers own what they create. */
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
     const organizer = isAdmin(actor)
-      ? (await EventService.assignableOrganizer(organizerId))._id
-      : new Types.ObjectId(actor.id);
+      ? await EventService.assignableOrganizer(organizerId)
+      : null;
     const event = await EventDAO.create({
       ...data,
       minAge: data.minAge ?? undefined,
-      organizerId: organizer,
+      organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
+    if (organizer && !sameId(organizer._id, actor.id)) {
+      await EventService.notifyAssigned(
+        organizer,
+        event,
+        `${actor.name} created ${event.title} and made you its organizer. It stays a draft until it is published.`
+      );
+    }
     const [withShifts] = await EventService.attachShifts([event]);
     return withShifts;
   }
@@ -336,7 +362,8 @@ export default class EventService {
       siteContactName: source.siteContactName,
       siteContactPhone: source.siteContactPhone,
       coverImageUrl: source.coverImageUrl,
-      organizerId: new Types.ObjectId(actor.id),
+      // The copy stays with whoever runs the original, even when an admin makes it.
+      organizerId: source.organizerId,
     });
     const shifts = await ShiftDAO.findByEvent(source._id);
     await ShiftDAO.createMany(
@@ -386,16 +413,10 @@ export default class EventService {
       before: { organizerId: event.organizerId },
       after: { organizerId: organizer._id },
     });
-    const org = await NotificationService.org();
-    await NotificationService.send(
+    await EventService.notifyAssigned(
       organizer,
-      NotificationService.templates.organizerNotice(org, {
-        name: organizer.firstName,
-        subject: `You now organize ${event.title}`,
-        title: "An event was assigned to you",
-        body: `${admin.name} assigned ${event.title} to you. Its roster, updates, and volunteer conversations are now yours.`,
-        url: appUrl(`/organizer/events/${event._id}`),
-      })
+      event,
+      `${admin.name} assigned ${event.title} to you. Its roster, updates, and volunteer conversations are now yours.`
     );
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;

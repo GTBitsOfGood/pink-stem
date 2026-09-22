@@ -13,6 +13,8 @@ const messageSchema = new Schema<Message>(
     reportedAt: { type: Date, default: null },
     reportedBy: { type: Schema.ObjectId, ref: "User", default: null },
     reportReason: String,
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: Schema.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

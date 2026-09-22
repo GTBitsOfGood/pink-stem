@@ -27,4 +27,7 @@ export interface Message {
   reportedAt?: Date | null;
   reportedBy?: Types.ObjectId | null;
   reportReason?: string;
+  /** Set when an admin has looked at the report; a new report clears it. */
+  reviewedAt?: Date | null;
+  reviewedBy?: Types.ObjectId | null;
 }

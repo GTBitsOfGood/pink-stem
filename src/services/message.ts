@@ -198,6 +198,8 @@ export default class MessageService {
       },
       canReply: participant && thread.status === "open",
       isAdminView: !participant,
+      canReview:
+        isAdmin(actor) && messages.some((m) => m.reportedAt && !m.reviewedAt),
     };
   }
 
@@ -410,6 +412,8 @@ export default class MessageService {
       reportedAt: now,
       reportedBy: actorId,
       reportReason: reason,
+      reviewedAt: null,
+      reviewedBy: null,
     });
     await MessageThreadDAO.updateById(thread._id, {
       flaggedAt: now,
@@ -430,6 +434,26 @@ export default class MessageService {
         reason,
         url: appUrl(`/messages/${thread._id}`),
       })
+    );
+  }
+
+  /** An admin has read what was reported, so the thread leaves the Approvals queue. */
+  static async reviewReports(actor: Actor, threadId: string): Promise<void> {
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    const reviewed = await MessageDAO.markReportsReviewed(
+      thread._id,
+      actor.id,
+      new Date()
+    );
+    if (!reviewed)
+      throw new IllegalOperationError(ERRORS.THREAD.NO_OPEN_REPORT);
+    await AuditService.record(
+      actor,
+      "message.report_reviewed",
+      "thread",
+      thread._id,
+      { after: { messages: reviewed } }
     );
   }
 
