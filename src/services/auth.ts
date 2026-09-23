@@ -29,6 +29,8 @@ import {
   registerSchema,
   resetPasswordSchema,
 } from "@/utils/validation/auth";
+import { NO_ENTITY_ID, SYSTEM_ACTOR } from "@/types/audit";
+import { TooManyRequestsError } from "@/types/exceptions";
 
 export interface SessionResult {
   token: string;
@@ -40,6 +42,30 @@ const DAY = 24 * HOUR;
 
 /** Accounts, sessions, and every one-time link flow. */
 export default class AuthService {
+  private static async assertLimitAudited(
+    key: string,
+    limits: { limit: number; windowMs: number },
+    context: Record<string, string>
+  ): Promise<void> {
+    try {
+      await assertRateLimit(key, limits);
+    } catch (error) {
+      if (
+        error instanceof TooManyRequestsError &&
+        error.count === (error.limit ?? -1) + 1
+      ) {
+        await AuditService.record(
+          SYSTEM_ACTOR,
+          "auth.rate_limited",
+          "security_event",
+          NO_ENTITY_ID,
+          { after: { key, ...context } }
+        );
+      }
+      throw error;
+    }
+  }
+
   private static async session(user: Doc<User>): Promise<SessionResult> {
     const token = await signSession(
       user._id.toString(),
@@ -88,9 +114,16 @@ export default class AuthService {
   }
 
   static async login(input: unknown, ip: string): Promise<SessionResult> {
-    await assertRateLimit(`login:${ip}`, RATE_LIMITS.loginPerAddress);
+    await AuthService.assertLimitAudited(
+      `login:${ip}`,
+      RATE_LIMITS.loginPerAddress,
+      { ip }
+    );
     const { email, password } = loginSchema.parse(input);
-    await assertRateLimit(`login:${email}`, RATE_LIMITS.login);
+    await AuthService.assertLimitAudited(`login:${email}`, RATE_LIMITS.login, {
+      email,
+      ip,
+    });
 
     const user = await UserDAO.findAuthByEmail(email);
     if (user?.provider === "google") {
@@ -177,7 +210,11 @@ export default class AuthService {
   }
 
   static async forgotPassword(input: unknown, ip: string): Promise<void> {
-    await assertRateLimit(`reset:${ip}`, RATE_LIMITS.passwordReset);
+    await AuthService.assertLimitAudited(
+      `reset:${ip}`,
+      RATE_LIMITS.passwordReset,
+      { ip }
+    );
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);
     // Always resolve: the response never reveals whether the account exists.

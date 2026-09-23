@@ -54,13 +54,19 @@ export class IllegalOperationError extends Error {
 
 export class TooManyRequestsError extends Error {
   readonly retryAfterMs: number;
+  readonly count?: number;
+  readonly limit?: number;
 
   constructor(
     message = "Too many requests. Please try again shortly.",
-    retryAfterMs = 0
+    retryAfterMs = 0,
+    count?: number,
+    limit?: number
   ) {
     super(message);
     this.retryAfterMs = retryAfterMs;
+    this.count = count;
+    this.limit = limit;
   }
 }
 

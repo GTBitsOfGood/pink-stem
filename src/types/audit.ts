@@ -1,4 +1,5 @@
 import type { Types } from "mongoose";
+import { Actor } from "./auth";
 
 /** Reserved ObjectId used when scheduled work, rather than a user, acts. */
 export const SCHEDULED_JOB_ACTOR_ID = "000000000000000000000001";
@@ -22,6 +23,7 @@ export const AUDIT_ACTIONS = [
   "organizer.invited",
   "signup.cancelled_by_staff",
   "shift.counters_reconciled",
+  "auth.rate_limited",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -36,6 +38,7 @@ export const AUDIT_ENTITY_TYPES = [
   "message",
   "invitation",
   "shift",
+  "security_event",
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
@@ -49,3 +52,12 @@ export interface AuditLog {
   ipAddress?: string;
   createdAt: Date;
 }
+
+export const NO_ENTITY_ID = "000000000000000000000000";
+
+export const SYSTEM_ACTOR: Actor = {
+  id: "000000000000000000000000",
+  role: "admin",
+  email: "system",
+  name: "System",
+};

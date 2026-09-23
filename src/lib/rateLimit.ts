@@ -51,6 +51,11 @@ export async function assertRateLimit(
 
   if (doc.count > limit) {
     const retryAfterMs = doc.windowStart.getTime() + windowMs - now.getTime();
-    throw new TooManyRequestsError(undefined, Math.max(retryAfterMs, 0));
+    throw new TooManyRequestsError(
+      undefined,
+      retryAfterMs > 0 ? retryAfterMs : 0,
+      doc.count,
+      limit
+    );
   }
 }
