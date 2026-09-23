@@ -17,6 +17,8 @@ export const ROSTER_NUDGE_HOURS = [24, 72] as const;
 export const ROSTER_ADMIN_ESCALATION_DAYS = 7;
 export const CLEARANCE_EXPIRY_WARNING_DAYS = 30;
 export const LAPSED_SPOT_HOLD_DAYS = 7;
+/** Counter reconciliation leaves shifts touched this recently to in-flight writes. */
+export const COUNTER_SETTLE_MINUTES = 5;
 export const IMPORTANT_UPDATE_BANNER_HOURS = 12;
 export const THREAD_READ_ONLY_AFTER_EVENT_DAYS = 30;
 export const THREAD_READ_ONLY_AFTER_CANCEL_DAYS = 7;

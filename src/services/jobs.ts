@@ -29,8 +29,8 @@ type JobResult = { ok: true; count: number } | { ok: false; error: string };
 export default class JobService {
   static async runAll(): Promise<Record<string, JobResult>> {
     const jobs: Record<string, () => Promise<number>> = {
-      // Repair stored capacity counts before downstream jobs use them in alerts or digests.
-      shiftCounterReconciliation: JobService.reconcileShiftCounters,
+      // Repair counters before the jobs that read them.
+      shiftCounters: JobService.reconcileShiftCounters,
       reminders: JobService.sendReminders,
       lowFill: JobService.lowFillAlerts,
       rosterNudges: JobService.rosterNudges,
@@ -57,10 +57,10 @@ export default class JobService {
     return results;
   }
 
-  /** Repairs drifted active-shift counters and reports how many were corrected. */
+  /** Repairs drifted shift counters and counts the shifts corrected. */
   static async reconcileShiftCounters(): Promise<number> {
-    const results = await SignupService.reconcileCounters({ correct: true });
-    return results.filter((result) => result.corrected).length;
+    const drift = await SignupService.reconcileCounters({ correct: true });
+    return drift.filter((d) => d.corrected).length;
   }
 
   /** 72h and 24h reminders to confirmed volunteers, each sent once. */

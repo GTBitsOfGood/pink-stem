@@ -2,15 +2,10 @@ import { Types, UpdateQuery } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import { toDoc } from "@/db/defineModel";
 import ShiftModel from "@/db/models/shift";
-import type { Shift } from "@/types/event";
+import type { Shift, ShiftCounters } from "@/types/event";
 import type { Doc } from "@/types/models";
 
 export type NewShift = Omit<Shift, "filledCount" | "waitlistCount">;
-
-export interface ShiftCounters {
-  filledCount: number;
-  waitlistCount: number;
-}
 
 export default class ShiftDAO {
   static async create(data: NewShift): Promise<Doc<Shift>> {
@@ -57,6 +52,17 @@ export default class ShiftDAO {
     return ShiftModel.find({ eventId: { $in: eventIds } })
       .sort({ startsAt: 1 })
       .lean<Doc<Shift>[]>();
+  }
+
+  /** Shifts that have not ended yet, the only ones whose capacity still matters. */
+  static async findUnfinishedByEvents(
+    eventIds: Types.ObjectId[]
+  ): Promise<Doc<Shift>[]> {
+    await dbConnect();
+    return ShiftModel.find({
+      eventId: { $in: eventIds },
+      endsAt: { $gt: new Date() },
+    }).lean<Doc<Shift>[]>();
   }
 
   static async updateById(
@@ -110,24 +116,19 @@ export default class ShiftDAO {
   }
 
   /**
-   * Sets both counters only when they have not changed since they were read.
-   * A null result leaves a concurrent claim/release for the next job run.
+   * Overwrites both counters only if the shift has not been written since
+   * `updatedAt` was read, so a concurrent claim or release wins.
    */
-  static async setCountersIfCurrent(
-    id: string | Types.ObjectId,
-    observed: ShiftCounters,
-    expected: ShiftCounters
-  ): Promise<Doc<Shift> | null> {
+  static async setCountersIfUnchanged(
+    shift: Pick<Doc<Shift>, "_id" | "updatedAt">,
+    counters: ShiftCounters
+  ): Promise<boolean> {
     await dbConnect();
-    return ShiftModel.findOneAndUpdate(
-      {
-        _id: id,
-        filledCount: observed.filledCount,
-        waitlistCount: observed.waitlistCount,
-      },
-      { $set: expected },
-      { returnDocument: "after", runValidators: true }
-    ).lean<Doc<Shift>>();
+    const result = await ShiftModel.updateOne(
+      { _id: shift._id, updatedAt: shift.updatedAt },
+      { $set: counters }
+    );
+    return result.modifiedCount === 1;
   }
 
   static async findStartingBetween(

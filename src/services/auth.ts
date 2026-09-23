@@ -248,12 +248,7 @@ export default class AuthService {
       user = (await UserDAO.findAuthById(existing._id)) as Doc<User>;
       if (invite.invitedBy) {
         await AuditService.record(
-          {
-            id: invite.invitedBy.toString(),
-            role: "admin",
-            email: "",
-            name: "",
-          },
+          { id: invite.invitedBy.toString() },
           "user.role_changed",
           "user",
           existing._id,

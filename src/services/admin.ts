@@ -227,24 +227,19 @@ export default class AdminService {
 
   static async withActors(entries: Doc<AuditLog>[]): Promise<AuditRow[]> {
     if (!entries.length) return [];
-    // Scheduled work has a reserved actor id rather than a user document.
     const actors = await UserDAO.findSummaries([
-      ...new Set(
-        entries
-          .map((e) => e.actorId.toString())
-          .filter((id) => id !== SCHEDULED_JOB_ACTOR_ID)
-      ),
+      ...new Set(entries.map((e) => e.actorId.toString())),
     ]);
     return entries.map((entry) => {
       const actor = actors.find((a) => sameId(a._id, entry.actorId));
+      const isJob = sameId(entry.actorId, SCHEDULED_JOB_ACTOR_ID);
       return {
         ...entry,
-        actorName:
-          entry.actorId.toString() === SCHEDULED_JOB_ACTOR_ID
-            ? "Scheduled job"
-            : actor
-              ? `${actor.firstName} ${actor.lastName}`
-              : "Former member",
+        actorName: isJob
+          ? "Scheduled job"
+          : actor
+            ? `${actor.firstName} ${actor.lastName}`
+            : "Former member",
       };
     });
   }
