@@ -5,4 +5,5 @@
 export interface NotificationLog {
   key: string;
   sentAt: Date;
+  expiresAt?: Date;
 }

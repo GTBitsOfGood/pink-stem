@@ -37,6 +37,8 @@ export const VERIFICATION_CODE_LENGTH = 16;
 
 export const PAGE_SIZE = 25;
 
+export const JOB_LOCK_TTL_MS = 10 * 60_000;
+
 /**
  * In-memory rate limits, expressed as hits per window. Login is limited per
  * account so a school or office sharing one address is not locked out by a

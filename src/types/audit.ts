@@ -1,5 +1,5 @@
 import type { Types } from "mongoose";
-import { Actor } from "./auth";
+import type { Actor } from "./auth";
 
 /** Reserved ObjectId used when scheduled work, rather than a user, acts. */
 export const SCHEDULED_JOB_ACTOR_ID = "000000000000000000000001";
