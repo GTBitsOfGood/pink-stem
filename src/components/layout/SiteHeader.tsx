@@ -17,25 +17,22 @@ interface NavItem {
   roles?: Role[];
 }
 
+/** Everyone else participates, so their nav is the participant items plus Organize for organizers. */
 const NAV: NavItem[] = [
   { href: "/events", label: "Events" },
-  {
-    href: "/dashboard",
-    label: "My shifts",
-    roles: ["volunteer", "organizer", "admin"],
-  },
-  {
-    href: "/hours",
-    label: "Hours",
-    roles: ["volunteer", "organizer", "admin"],
-  },
-  {
-    href: "/messages",
-    label: "Messages",
-    roles: ["volunteer", "organizer", "admin"],
-  },
-  { href: "/organizer", label: "Organize", roles: ["organizer", "admin"] },
-  { href: "/admin", label: "Admin", roles: ["admin"] },
+  { href: "/dashboard", label: "My shifts", roles: ["volunteer", "organizer"] },
+  { href: "/hours", label: "Hours", roles: ["volunteer", "organizer"] },
+  { href: "/messages", label: "Messages", roles: ["volunteer", "organizer"] },
+  { href: "/organizer", label: "Organize", roles: ["organizer"] },
+];
+
+/** Admins administer, so their nav is the console's five sections and nothing else. */
+const ADMIN_NAV: NavItem[] = [
+  { href: "/admin", label: "Approvals" },
+  { href: "/admin/people", label: "People" },
+  { href: "/organizer", label: "Organize" },
+  { href: "/admin/reports", label: "Reports" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export default function SiteHeader() {
@@ -45,11 +42,15 @@ export default function SiteHeader() {
   const [openFor, setOpenFor] = useState<string | null>(null);
   const open = openFor === pathname;
 
-  const items = NAV.filter(
-    (item) => !item.roles || (user && item.roles.includes(user.role))
-  );
+  const items =
+    user?.role === "admin"
+      ? ADMIN_NAV
+      : NAV.filter(
+          (item) => !item.roles || (user && item.roles.includes(user.role))
+        );
+  // Approvals is the console root, so only an exact match lights it up.
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+    pathname === href || (href !== "/admin" && pathname.startsWith(`${href}/`));
   const unread = me?.unreadMessages ?? 0;
 
   const links = (

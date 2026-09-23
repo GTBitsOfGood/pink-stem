@@ -8,20 +8,14 @@ import { useAdminEvents } from "@/components/hooks/useAdmin";
 import { EventBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { Select, inputClasses } from "@/components/ui/Field";
-import {
-  PageHeader,
-  Pagination,
-  Spinner,
-  Table,
-  td,
-  th,
-} from "@/components/ui/Primitives";
+import { Pagination, Spinner, Table, td, th } from "@/components/ui/Primitives";
 import { EVENT_STATUS_LABELS, PROGRAM_AREA_LABELS } from "@/constants/labels";
 import type { ClientEvent } from "@/http/eventHTTPClient";
 import { formatDate } from "@/lib/dates";
 import { EVENT_STATUSES } from "@/types/event";
 
-export default function AdminEventsPage() {
+/** Every event across every organizer, including drafts, with reassignment. */
+export default function AllEvents() {
   const [filters, setFilters] = useState({ q: "", status: "", page: "1" });
   const events = useAdminEvents(filters);
   const [reassigning, setReassigning] = useState<ClientEvent | null>(null);
@@ -34,10 +28,6 @@ export default function AdminEventsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Events"
-        description="Every event across every organizer, including drafts."
-      />
       <div className="mb-4 grid gap-3 rounded-2xl border border-ink-200 bg-white p-4 shadow-card sm:grid-cols-[1fr_220px]">
         <input
           type="search"

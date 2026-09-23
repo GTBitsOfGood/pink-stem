@@ -20,6 +20,7 @@ import {
   useRoster,
 } from "@/components/hooks/useEvents";
 import { useNow } from "@/components/hooks/useNow";
+import { useSession } from "@/components/hooks/useSession";
 import { useSignupActions } from "@/components/hooks/useSignups";
 import Container from "@/components/layout/Container";
 import Badge, { EventBadge, SignupBadge } from "@/components/ui/Badge";
@@ -129,6 +130,7 @@ export default function ManageEventPage() {
   const roster = useRoster(id);
   const actions = useEventActions(id);
   const now = useNow();
+  const { user } = useSession();
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [text, setText] = useState("");
   const [important, setImportant] = useState(false);
@@ -218,7 +220,10 @@ export default function ManageEventPage() {
             </Link>
           </span>
         }
-        back={{ href: "/organizer", label: "Your events" }}
+        back={{
+          href: "/organizer",
+          label: user?.role === "admin" ? "All events" : "Your events",
+        }}
         action={
           <>
             {editable ? (

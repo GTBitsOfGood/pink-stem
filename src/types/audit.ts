@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = [
   "event.cancelled",
   "event.reassigned",
   "message.reported",
+  "message.report_reviewed",
   "thread.admin_access",
   "organizer.invited",
   "signup.cancelled_by_staff",

@@ -50,8 +50,4 @@ export default class MailService {
       );
     }
   }
-
-  static async sendMany(emails: OutgoingEmail[]): Promise<void> {
-    await Promise.all(emails.map((email) => MailService.send(email)));
-  }
 }

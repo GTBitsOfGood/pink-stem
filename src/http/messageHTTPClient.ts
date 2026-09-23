@@ -46,4 +46,8 @@ export default class MessageHTTPClient {
       reason,
     });
   }
+
+  static reviewReports(threadId: string): Promise<void> {
+    return fetchHTTPClient(`/threads/${threadId}/review`, "POST");
+  }
 }

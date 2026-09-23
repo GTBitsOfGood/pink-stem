@@ -70,15 +70,4 @@ export default class ClearanceDAO {
     }
     return lapsed;
   }
-
-  static async countByStatus(): Promise<Record<ClearanceStatus, number>> {
-    await dbConnect();
-    const rows = await ClearanceModel.aggregate<{
-      _id: ClearanceStatus;
-      count: number;
-    }>([{ $group: { _id: "$status", count: { $sum: 1 } } }]);
-    const counts = { none: 0, submitted: 0, cleared: 0, expired: 0 };
-    for (const row of rows) counts[row._id] = row.count;
-    return counts;
-  }
 }

@@ -59,9 +59,4 @@ export default class CertificateDAO {
       returnDocument: "after",
     }).lean<Doc<Certificate>>();
   }
-
-  static async count(filter: Record<string, unknown> = {}): Promise<number> {
-    await dbConnect();
-    return CertificateModel.countDocuments(filter);
-  }
 }

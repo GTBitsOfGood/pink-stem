@@ -89,6 +89,8 @@ export interface ThreadDetail {
   };
   canReply: boolean;
   isAdminView: boolean;
+  /** An admin, participant or not, can clear the thread's open reports. */
+  canReview: boolean;
 }
 
 export interface Paginated<T> {
@@ -130,16 +132,9 @@ export interface Report {
   summary: { label: string; value: string }[];
 }
 
-export interface AdminOverview {
-  volunteers: number;
-  organizers: number;
-  upcomingEvents: number;
-  pendingClearances: number;
-  flaggedVolunteers: number;
-  unapprovedRosters: number;
-  totalHours: number;
-  certificatesIssued: number;
-  lowFillShifts: number;
-  upcoming: EventWithShifts[];
-  recentAudit: AuditRow[];
+export interface AdminApprovals {
+  clearances: UserSummary[];
+  rosters: Doc<Event>[];
+  guardianConsent: UserSummary[];
+  reportedThreads: ThreadSummary[];
 }

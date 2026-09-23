@@ -19,7 +19,7 @@ interface FieldProps {
 }
 
 /** Every input has a real label; hints and errors are wired up for screen readers. */
-export function Field({
+function Field({
   label,
   hint,
   error,

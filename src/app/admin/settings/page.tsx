@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useAdminActions, useOrgSettings } from "@/components/hooks/useAdmin";
-import Button from "@/components/ui/Button";
+import Button, { ButtonLink } from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Checkbox, Input, Textarea } from "@/components/ui/Field";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
@@ -67,6 +67,11 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
       <PageHeader
         title="Settings"
         description="Organization details appear on emails and certificates. Rules below drive the sign-up and roster flows."
+        action={
+          <ButtonLink href="/admin/settings/audit" variant="secondary">
+            Audit log
+          </ButtonLink>
+        }
       />
       <Card>
         <CardHeader title="Organization" />
