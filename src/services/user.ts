@@ -3,7 +3,9 @@ import ActionTokenDAO from "@/db/actions/actionToken";
 import ClearanceDAO from "@/db/actions/clearance";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import UserDAO from "@/db/actions/user";
+import { RATE_LIMITS } from "@/constants/limits";
 import { isMinor } from "@/lib/dates";
+import { assertRateLimit } from "@/lib/rateLimit";
 import AuthService from "@/services/auth";
 import MessageService from "@/services/message";
 import SignupService from "@/services/signup";
@@ -117,7 +119,8 @@ export default class UserService {
   }
 
   /** What the guardian sees before deciding. */
-  static async guardianConsentInfo(token: string) {
+  static async guardianConsentInfo(token: string, ip: string) {
+    await assertRateLimit(`consent:${ip}`, RATE_LIMITS.consentLookup);
     const pending = await ActionTokenDAO.findValid(token, "guardian_consent");
     const user = pending?.userId
       ? await UserDAO.findById(pending.userId)

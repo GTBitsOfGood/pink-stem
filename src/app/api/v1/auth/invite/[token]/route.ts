@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attachSession } from "@/lib/session";
 import AuthService from "@/services/auth";
+import { clientIp } from "@/utils/withAuth";
 import { jsonNoStore } from "@/utils/request";
 import { withErrorHandler } from "@/utils/withErrorHandler";
 
 type Params = { token: string };
 
 export const GET = withErrorHandler<Params>(async (_req, { params }) =>
-  jsonNoStore(await AuthService.getInvite(params.token))
+  jsonNoStore(await AuthService.getInvite(params.token, clientIp(_req)))
 );
 
 export const POST = withErrorHandler<Params>(

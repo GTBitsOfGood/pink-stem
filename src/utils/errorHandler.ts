@@ -46,7 +46,14 @@ export const handleError = (error: unknown) => {
       if (error instanceof ConflictError && error.code) {
         body.code = error.code;
       }
-      return NextResponse.json(body, { status: match[1] });
+      const response = NextResponse.json(body, { status: match[1] });
+      if (error instanceof TooManyRequestsError) {
+        response.headers.set(
+          "Retry-After",
+          String(Math.ceil(error.retryAfterMs / 1000))
+        );
+      }
+      return response;
     }
   }
 

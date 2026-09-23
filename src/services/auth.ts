@@ -215,8 +215,10 @@ export default class AuthService {
   }
 
   static async getInvite(
-    token: string
+    token: string,
+    ip: string
   ): Promise<{ email: string; role: Role; existingAccount: boolean }> {
+    await assertRateLimit(`invite:${ip}`, RATE_LIMITS.inviteLookup);
     const invite = await ActionTokenDAO.findValid(token, "organizer_invite");
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const existing = await UserDAO.findByEmail(invite.email);
