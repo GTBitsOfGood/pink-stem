@@ -90,7 +90,7 @@ export default class AuthService {
   static async login(input: unknown, ip: string): Promise<SessionResult> {
     await assertRateLimit(`login:${ip}`, RATE_LIMITS.loginPerAddress);
     const { email, password } = loginSchema.parse(input);
-    await assertRateLimit(`login:${ip}:${email}`, RATE_LIMITS.login);
+    await assertRateLimit(`login:${email}`, RATE_LIMITS.login);
 
     const user = await UserDAO.findAuthByEmail(email);
     if (user?.provider === "google") {
