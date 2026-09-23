@@ -50,7 +50,7 @@ export default class AuthService {
   }
 
   static async register(input: unknown, ip: string): Promise<SessionResult> {
-    assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
+    await assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
     const data = registerSchema.parse(input);
 
     const existing = await UserDAO.findByEmail(data.email);
@@ -88,9 +88,9 @@ export default class AuthService {
   }
 
   static async login(input: unknown, ip: string): Promise<SessionResult> {
-    assertRateLimit(`login:${ip}`, RATE_LIMITS.loginPerAddress);
+    await assertRateLimit(`login:${ip}`, RATE_LIMITS.loginPerAddress);
     const { email, password } = loginSchema.parse(input);
-    assertRateLimit(`login:${ip}:${email}`, RATE_LIMITS.login);
+    await assertRateLimit(`login:${ip}:${email}`, RATE_LIMITS.login);
 
     const user = await UserDAO.findAuthByEmail(email);
     if (user?.provider === "google") {
@@ -177,7 +177,7 @@ export default class AuthService {
   }
 
   static async forgotPassword(input: unknown, ip: string): Promise<void> {
-    assertRateLimit(`reset:${ip}`, RATE_LIMITS.passwordReset);
+    await assertRateLimit(`reset:${ip}`, RATE_LIMITS.passwordReset);
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);
     // Always resolve: the response never reveals whether the account exists.
