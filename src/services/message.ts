@@ -59,7 +59,7 @@ export default class MessageService {
 
   private static threadFilter(
     actor: Actor,
-    filters: { eventId?: string; involvesMinor?: boolean }
+    filters: { eventId?: string }
   ): QueryFilter<MessageThread> {
     const id = new Types.ObjectId(actor.id);
     const filter: QueryFilter<MessageThread> = isAdmin(actor)
@@ -68,8 +68,6 @@ export default class MessageService {
         ? { $or: [{ organizerId: id }, { volunteerId: id }] }
         : { volunteerId: id };
     if (filters.eventId) filter.eventId = new Types.ObjectId(filters.eventId);
-    if (filters.involvesMinor !== undefined)
-      filter.involvesMinor = filters.involvesMinor;
     return filter;
   }
 
@@ -79,13 +77,33 @@ export default class MessageService {
   ): Promise<Paginated<ThreadSummary>> {
     const filters = threadFiltersSchema.parse(input);
     const filter = MessageService.threadFilter(actor, filters);
-    if (filters.reported)
-      filter._id = { $in: await MessageDAO.reportedThreadIds() };
     const { items, total } = await MessageThreadDAO.list(filter, filters.page);
-    if (!items.length)
-      return { items: [], total, page: filters.page, pageSize: PAGE_SIZE };
+    return {
+      items: await MessageService.summarize(actor, items),
+      total,
+      page: filters.page,
+      pageSize: PAGE_SIZE,
+    };
+  }
 
-    const [events, people, latest, reportedIds] = await Promise.all([
+  /** Admin only. Every thread with a report nobody has reviewed; unpaginated because it feeds the Approvals queue. */
+  static async reportedThreads(admin: Actor): Promise<ThreadSummary[]> {
+    const reportedIds = await MessageDAO.reportedThreadIds();
+    if (!reportedIds.length) return [];
+    const threads = await MessageThreadDAO.findAll({
+      _id: { $in: reportedIds },
+    });
+    return MessageService.summarize(admin, threads, reportedIds);
+  }
+
+  /** Decorates threads with what a list row shows; `reportedIds` is looked up when the caller has not already. */
+  private static async summarize(
+    actor: Actor,
+    items: Doc<MessageThread>[],
+    reportedIds?: Types.ObjectId[]
+  ): Promise<ThreadSummary[]> {
+    if (!items.length) return [];
+    const [events, people, latest, reported] = await Promise.all([
       EventDAO.findByIds(items.map((t) => t.eventId)),
       UserDAO.findSummaries([
         ...new Set(
@@ -96,9 +114,9 @@ export default class MessageService {
         ),
       ]),
       MessageDAO.latestByThreads(items.map((t) => t._id)),
-      MessageDAO.reportedThreadIds(),
+      reportedIds ?? MessageDAO.reportedThreadIds(),
     ]);
-    const summaries = await Promise.all(
+    return Promise.all(
       items.map(async (thread): Promise<ThreadSummary> => {
         const counterpartId = sameId(actor.id, thread.volunteerId)
           ? thread.organizerId
@@ -130,11 +148,10 @@ export default class MessageService {
             ? { body: last.body, sentAt: last.sentAt, senderId: last.senderId }
             : null,
           unread,
-          reported: reportedIds.some((id) => sameId(id, thread._id)),
+          reported: reported.some((id) => sameId(id, thread._id)),
         };
       })
     );
-    return { items: summaries, total, page: filters.page, pageSize: PAGE_SIZE };
   }
 
   static async unreadCount(actor: Actor): Promise<number> {
@@ -200,6 +217,8 @@ export default class MessageService {
       },
       canReply: participant && thread.status === "open",
       isAdminView: !participant,
+      canReview:
+        isAdmin(actor) && messages.some((m) => m.reportedAt && !m.reviewedAt),
     };
   }
 
@@ -430,8 +449,28 @@ export default class MessageService {
         name: admin.firstName,
         reporterName: actor.name,
         reason,
-        url: appUrl(`/admin/messages?thread=${thread._id}`),
+        url: appUrl(`/messages/${thread._id}`),
       })
+    );
+  }
+
+  /** An admin has read what was reported, so the thread leaves the Approvals queue. */
+  static async reviewReports(actor: Actor, threadId: string): Promise<void> {
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    const reviewed = await MessageDAO.markReportsReviewed(
+      thread._id,
+      actor.id,
+      new Date()
+    );
+    if (!reviewed)
+      throw new IllegalOperationError(ERRORS.THREAD.NO_OPEN_REPORT);
+    await AuditService.record(
+      actor,
+      "message.report_reviewed",
+      "thread",
+      thread._id,
+      { after: { messages: reviewed } }
     );
   }
 

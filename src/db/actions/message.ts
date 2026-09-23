@@ -103,9 +103,26 @@ export default class MessageDAO {
     await MessageModel.updateMany({ _id: { $in: ids } }, { notifiedAt: at });
   }
 
-  /** Thread ids that contain at least one reported message. */
+  /** Thread ids with a reported message no admin has reviewed yet. */
   static async reportedThreadIds(): Promise<Types.ObjectId[]> {
     await dbConnect();
-    return MessageModel.distinct("threadId", { reportedAt: { $ne: null } });
+    return MessageModel.distinct("threadId", {
+      reportedAt: { $ne: null },
+      reviewedAt: null,
+    });
+  }
+
+  /** Marks every open report in a thread reviewed; returns how many there were. */
+  static async markReportsReviewed(
+    threadId: Types.ObjectId,
+    reviewerId: string | Types.ObjectId,
+    at: Date
+  ): Promise<number> {
+    await dbConnect();
+    const result = await MessageModel.updateMany(
+      { threadId, reportedAt: { $ne: null }, reviewedAt: null },
+      { reviewedAt: at, reviewedBy: new Types.ObjectId(reviewerId) }
+    );
+    return result.modifiedCount;
   }
 }

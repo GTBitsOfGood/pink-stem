@@ -64,6 +64,10 @@ export default function HomePage() {
                 <ButtonLink href="/register" size="lg" variant="secondary">
                   Create a volunteer account
                 </ButtonLink>
+              ) : user.role === "admin" ? (
+                <ButtonLink href="/admin" size="lg" variant="secondary">
+                  Open Approvals
+                </ButtonLink>
               ) : (
                 <ButtonLink href="/dashboard" size="lg" variant="secondary">
                   My shifts

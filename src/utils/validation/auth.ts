@@ -28,7 +28,7 @@ export const googleSchema = z.object({ credential: z.string().min(1) });
 
 export const emailOnlySchema = z.object({ email: emailSchema });
 
-export const tokenSchema = z.object({ token: z.string().min(1) });
+const tokenSchema = z.object({ token: z.string().min(1) });
 
 export const resetPasswordSchema = tokenSchema.extend({
   password: passwordSchema,

@@ -38,6 +38,7 @@ export default function AuditPage() {
       <PageHeader
         title="Audit log"
         description="Append-only record of every consequential action: who, what, before, after, when, and from where."
+        back={{ href: "/admin/settings", label: "Settings" }}
         action={
           <a
             href={AdminHTTPClient.auditCsvUrl(filters)}

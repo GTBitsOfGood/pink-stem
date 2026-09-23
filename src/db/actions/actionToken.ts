@@ -71,12 +71,4 @@ export default class ActionTokenDAO {
       .sort({ createdAt: -1 })
       .lean<Doc<ActionToken>[]>();
   }
-
-  static async deleteForUser(
-    userId: Types.ObjectId,
-    purpose: TokenPurpose
-  ): Promise<void> {
-    await dbConnect();
-    await ActionTokenModel.deleteMany({ userId, purpose });
-  }
 }

@@ -44,6 +44,11 @@ export const eventInputSchema = z.object({
 });
 export type EventInput = z.infer<typeof eventInputSchema>;
 
+/** Only admins pick the organizer; for everyone else it is ignored. */
+export const createEventSchema = eventInputSchema.extend({
+  organizerId: objectIdSchema.optional(),
+});
+
 export const shiftInputSchema = z.object({
   roleName: text(80),
   description: optionalText(500),
@@ -66,7 +71,6 @@ export const eventFiltersSchema = dateRangeSchema.extend({
   q: z.string().trim().max(100).optional(),
   page: pageSchema,
 });
-export type EventFilters = z.infer<typeof eventFiltersSchema>;
 
 export const adminEventFiltersSchema = eventFiltersSchema.extend({
   status: z.enum(EVENT_STATUSES).optional(),

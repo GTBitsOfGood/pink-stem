@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useOrganizers } from "@/components/hooks/useAdmin";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Checkbox, Input, Select, Textarea } from "@/components/ui/Field";
@@ -12,13 +13,39 @@ import { REGIONS } from "@/types/user";
 
 interface EventFormProps {
   initial?: ClientEvent;
+  /** Admins pick who organizes the event they are creating. */
+  chooseOrganizer?: boolean;
   submitLabel: string;
   pending: boolean;
   onSubmit: (body: EventBody) => Promise<unknown>;
 }
 
+function OrganizerSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (organizerId: string) => void;
+}) {
+  const organizers = useOrganizers();
+  return (
+    <Select
+      label="Organizer"
+      required
+      placeholder="Choose"
+      options={(organizers.data ?? []).map((o) => ({
+        value: o._id,
+        label: `${o.name} · ${o.role}`,
+      }))}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
 export default function EventForm({
   initial,
+  chooseOrganizer,
   submitLabel,
   pending,
   onSubmit,
@@ -43,6 +70,7 @@ export default function EventForm({
     siteContactPhone: initial?.siteContactPhone ?? "",
     coverImageUrl: initial?.coverImageUrl ?? "",
   });
+  const [organizerId, setOrganizerId] = useState("");
   const set = <K extends keyof typeof v>(key: K, value: (typeof v)[K]) =>
     setV((s) => ({ ...s, [key]: value }));
 
@@ -55,6 +83,7 @@ export default function EventForm({
       region: v.region as EventBody["region"],
       eventDate: fromDateTimeLocal(v.eventDate).toISOString(),
       minAge: v.minAge ? Number(v.minAge) : null,
+      organizerId: chooseOrganizer ? organizerId : undefined,
     });
   };
 
@@ -79,6 +108,9 @@ export default function EventForm({
             value={v.description}
             onChange={(e) => set("description", e.target.value)}
           />
+          {chooseOrganizer ? (
+            <OrganizerSelect value={organizerId} onChange={setOrganizerId} />
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-3">
             <Select
               label="Program area"

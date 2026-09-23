@@ -122,6 +122,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "event.cancelled": "Event cancelled",
   "event.reassigned": "Event reassigned",
   "message.reported": "Message reported",
+  "message.report_reviewed": "Report reviewed",
   "thread.admin_access": "Admin read a thread",
   "organizer.invited": "Organizer invited",
   "signup.cancelled_by_staff": "Sign-up cancelled by staff",

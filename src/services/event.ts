@@ -20,7 +20,7 @@ import SignupService from "@/services/signup";
 import type { EventDetail, EventWithShifts, Paginated } from "@/types/api";
 import type { Actor } from "@/types/auth";
 import type { Event, ProgramArea, Shift } from "@/types/event";
-import type { Region } from "@/types/user";
+import type { Region, SafeUser } from "@/types/user";
 import {
   ConflictError,
   IllegalOperationError,
@@ -32,12 +32,14 @@ import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import {
   assertCanManageEvent,
   canManageEvent,
+  isAdmin,
   sameId,
 } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
   adminEventFiltersSchema,
   cancelEventSchema,
+  createEventSchema,
   eventFiltersSchema,
   eventInputSchema,
   reassignEventSchema,
@@ -145,10 +147,6 @@ export default class EventService {
     return { ...withShifts, mySignups, updates, canManage: manage };
   }
 
-  static listForIds(events: Doc<Event>[]): Promise<EventWithShifts[]> {
-    return EventService.attachShifts(events);
-  }
-
   static async listForOrganizer(actor: Actor): Promise<EventWithShifts[]> {
     const events = await EventDAO.findAll({
       organizerId: new Types.ObjectId(actor.id),
@@ -188,14 +186,59 @@ export default class EventService {
     }
   }
 
+  /** Events can only be owned by an active organizer or admin. */
+  private static async assignableOrganizer(
+    organizerId?: string
+  ): Promise<Doc<SafeUser>> {
+    const organizer = organizerId ? await UserDAO.findById(organizerId) : null;
+    if (
+      !organizer ||
+      organizer.role === "volunteer" ||
+      organizer.status !== "active"
+    ) {
+      throw new InvalidArgumentsError(ERRORS.EVENT.ORGANIZER_ROLE);
+    }
+    return organizer;
+  }
+
+  /** Tells an organizer that an admin has handed them an event. */
+  private static async notifyAssigned(
+    organizer: Doc<SafeUser>,
+    event: Doc<Event>,
+    body: string
+  ) {
+    const org = await NotificationService.org();
+    await NotificationService.send(
+      organizer,
+      NotificationService.templates.organizerNotice(org, {
+        name: organizer.firstName,
+        subject: `You now organize ${event.title}`,
+        title: "An event was assigned to you",
+        body,
+        url: appUrl(`/organizer/events/${event._id}`),
+      })
+    );
+  }
+
+  /** Admins pick the organizer; organizers own what they create. */
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
-    const data = eventInputSchema.parse(input);
+    const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const organizer = isAdmin(actor)
+      ? await EventService.assignableOrganizer(organizerId)
+      : null;
     const event = await EventDAO.create({
       ...data,
       minAge: data.minAge ?? undefined,
-      organizerId: new Types.ObjectId(actor.id),
+      organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
+    if (organizer && !sameId(organizer._id, actor.id)) {
+      await EventService.notifyAssigned(
+        organizer,
+        event,
+        `${actor.name} created ${event.title} and made you its organizer. It stays a draft until it is published.`
+      );
+    }
     const [withShifts] = await EventService.attachShifts([event]);
     return withShifts;
   }
@@ -300,6 +343,10 @@ export default class EventService {
     const source = await EventDAO.findById(eventId);
     if (!source) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     assertCanManageEvent(actor, source);
+    // The copy stays with whoever runs the original, even when an admin makes it.
+    const organizer = await EventService.assignableOrganizer(
+      source.organizerId.toString()
+    );
     const copy = await EventDAO.create({
       title: `Copy of ${source.title}`,
       description: source.description,
@@ -319,7 +366,7 @@ export default class EventService {
       siteContactName: source.siteContactName,
       siteContactPhone: source.siteContactPhone,
       coverImageUrl: source.coverImageUrl,
-      organizerId: new Types.ObjectId(actor.id),
+      organizerId: organizer._id,
     });
     const shifts = await ShiftDAO.findByEvent(source._id);
     await ShiftDAO.createMany(
@@ -357,14 +404,7 @@ export default class EventService {
     const { organizerId } = reassignEventSchema.parse(input);
     const event = await EventDAO.findById(eventId);
     if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
-    const organizer = await UserDAO.findById(organizerId);
-    if (
-      !organizer ||
-      organizer.role === "volunteer" ||
-      organizer.status !== "active"
-    ) {
-      throw new InvalidArgumentsError(ERRORS.EVENT.ORGANIZER_ROLE);
-    }
+    const organizer = await EventService.assignableOrganizer(organizerId);
     const updated = (await EventDAO.updateById(eventId, {
       organizerId: organizer._id,
     })) as Doc<Event>;
@@ -376,16 +416,10 @@ export default class EventService {
       before: { organizerId: event.organizerId },
       after: { organizerId: organizer._id },
     });
-    const org = await NotificationService.org();
-    await NotificationService.send(
+    await EventService.notifyAssigned(
       organizer,
-      NotificationService.templates.organizerNotice(org, {
-        name: organizer.firstName,
-        subject: `You now organize ${event.title}`,
-        title: "An event was assigned to you",
-        body: `${admin.name} assigned ${event.title} to you. Its roster, updates, and volunteer conversations are now yours.`,
-        url: appUrl(`/organizer/events/${event._id}`),
-      })
+      event,
+      `${admin.name} assigned ${event.title} to you. Its roster, updates, and volunteer conversations are now yours.`
     );
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;

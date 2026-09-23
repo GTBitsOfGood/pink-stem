@@ -105,9 +105,9 @@ authorization is enforced server-side on every request by `withAuth`.
 | Public       | `events`, `events/:id`, `settings`, `consent/:token`, `verify/:code`                                                                                               |
 | Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |
 | Sign-ups     | `signups`, `signups/:id/{cancel,approve,promote,attendance,calendar}`                                                                                              |
-| Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`                                                                                             |
+| Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`, `threads/:id/review`                                                                       |
 | Certificates | `certificates/:id/pdf`, `certificates/:id/revoke`                                                                                                                  |
-| Admin        | `admin/{overview,people,people/:id,people/:id/clearance,people/:id/signout,invitations,organizers,events,hours,audit,reports/:kind,settings}`                      |
+| Admin        | `admin/{approvals,people,people/:id,people/:id/clearance,people/:id/signout,invitations,organizers,events,hours,audit,reports/:kind,settings}`                     |
 | Jobs         | `jobs/run` (bearer `CRON_SECRET`)                                                                                                                                  |
 
 ## Structure

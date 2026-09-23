@@ -14,14 +14,12 @@ export const QUERY_KEYS = {
   settings: ["settings"] as const,
   publicSettings: ["settings", "public"] as const,
   admin: {
-    overview: ["admin", "overview"] as const,
+    approvals: ["admin", "approvals"] as const,
     people: (filters: Record<string, string>) =>
       ["admin", "people", filters] as const,
     person: (id: string) => ["admin", "people", id] as const,
     events: (filters: Record<string, string>) =>
       ["admin", "events", filters] as const,
-    threads: (filters: Record<string, string>) =>
-      ["admin", "threads", filters] as const,
     audit: (filters: Record<string, string>) =>
       ["admin", "audit", filters] as const,
     report: (kind: string, filters: Record<string, string>) =>
