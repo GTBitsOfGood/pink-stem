@@ -67,6 +67,8 @@ export interface Shift {
   waitlistCount: number;
 }
 
+export type ShiftCounters = Pick<Shift, "filledCount" | "waitlistCount">;
+
 export const UPDATE_KINDS = ["note", "important"] as const;
 export type UpdateKind = (typeof UPDATE_KINDS)[number];
 

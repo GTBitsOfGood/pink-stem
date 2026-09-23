@@ -2,8 +2,21 @@ import { QueryFilter, Types, UpdateQuery } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import { toDoc } from "@/db/defineModel";
 import SignupModel from "@/db/models/signup";
+import type { ShiftCounters } from "@/types/event";
 import type { Doc } from "@/types/models";
-import type { Signup, SignupStatus } from "@/types/signup";
+import {
+  ACTIVE_SIGNUP_STATUSES,
+  ATTENDANCE_STATUSES,
+  type Signup,
+  type SignupStatus,
+} from "@/types/signup";
+
+const SPOT_HOLDING_STATUSES = [
+  ...ACTIVE_SIGNUP_STATUSES,
+  ...ATTENDANCE_STATUSES,
+];
+
+type ShiftSignupCounts = ShiftCounters & { lastChangedAt: Date };
 
 export default class SignupDAO {
   static async create(
@@ -67,6 +80,19 @@ export default class SignupDAO {
     }).lean<Doc<Signup>>();
   }
 
+  /** Applies the update only while the sign-up is still in `status`. */
+  static async updateByIdIfStatus(
+    id: string | Types.ObjectId,
+    status: SignupStatus,
+    updates: UpdateQuery<Signup>
+  ): Promise<Doc<Signup> | null> {
+    await dbConnect();
+    return SignupModel.findOneAndUpdate({ _id: id, status }, updates, {
+      returnDocument: "after",
+      runValidators: true,
+    }).lean<Doc<Signup>>();
+  }
+
   static async updateMany(
     filter: QueryFilter<Signup>,
     updates: UpdateQuery<Signup>
@@ -100,6 +126,38 @@ export default class SignupDAO {
   static async count(filter: QueryFilter<Signup>): Promise<number> {
     await dbConnect();
     return SignupModel.countDocuments(filter);
+  }
+
+  /**
+   * What each shift's counters should be. Pending and confirmed sign-ups hold
+   * a spot, and so do attended/no-show ones, since roster approval moves them
+   * there without releasing it; waitlisted ones hold a waitlist place.
+   * `lastChangedAt` spans every status, so a just-cancelled sign-up counts.
+   */
+  static async countCapacityByShifts(
+    shiftIds: Types.ObjectId[]
+  ): Promise<Map<string, ShiftSignupCounts>> {
+    await dbConnect();
+    const rows = await SignupModel.aggregate<
+      ShiftSignupCounts & { _id: Types.ObjectId }
+    >([
+      { $match: { shiftId: { $in: shiftIds } } },
+      {
+        $group: {
+          _id: "$shiftId",
+          filledCount: {
+            $sum: {
+              $cond: [{ $in: ["$status", SPOT_HOLDING_STATUSES] }, 1, 0],
+            },
+          },
+          waitlistCount: {
+            $sum: { $cond: [{ $eq: ["$status", "waitlisted"] }, 1, 0] },
+          },
+          lastChangedAt: { $max: "$updatedAt" },
+        },
+      },
+    ]);
+    return new Map(rows.map(({ _id, ...counts }) => [_id.toString(), counts]));
   }
 
   /** Sign-ups per event in the given statuses, for fill and no-show reporting. */

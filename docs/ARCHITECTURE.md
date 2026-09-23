@@ -105,7 +105,14 @@ Two decisions carry most of the weight:
 alerts, unapproved-roster nudges, clearance expiry warnings, note and message
 digests, and the organizer digest, and closes stale threads. Every send is
 keyed in `notificationlogs`, so the runner is safe to fire hourly and a late
-or repeated run is harmless. `netlify/functions/scheduled-jobs.mts` is the
+or repeated run is harmless.
+
+It first reconciles shift counters. `filledCount` and `waitlistCount` are
+written separately from the sign-up, so `SignupService.reconcileCounters`
+recomputes them from the sign-ups of upcoming shifts on live events and
+repairs any drift, recording each correction in the audit log as "Scheduled
+job". A repair only lands if the shift is unchanged since it was read, so
+repeated runs are harmless too. `netlify/functions/scheduled-jobs.mts` is the
 hourly trigger in production.
 
 ## Adding a new resource

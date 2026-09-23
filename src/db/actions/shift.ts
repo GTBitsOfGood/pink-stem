@@ -2,7 +2,7 @@ import { Types, UpdateQuery } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import { toDoc } from "@/db/defineModel";
 import ShiftModel from "@/db/models/shift";
-import type { Shift } from "@/types/event";
+import type { Shift, ShiftCounters } from "@/types/event";
 import type { Doc } from "@/types/models";
 
 export type NewShift = Omit<Shift, "filledCount" | "waitlistCount">;
@@ -54,6 +54,17 @@ export default class ShiftDAO {
       .lean<Doc<Shift>[]>();
   }
 
+  /** Shifts that have not ended yet, the only ones whose capacity still matters. */
+  static async findUnfinishedByEvents(
+    eventIds: Types.ObjectId[]
+  ): Promise<Doc<Shift>[]> {
+    await dbConnect();
+    return ShiftModel.find({
+      eventId: { $in: eventIds },
+      endsAt: { $gt: new Date() },
+    }).lean<Doc<Shift>[]>();
+  }
+
   static async updateById(
     id: string | Types.ObjectId,
     updates: UpdateQuery<Shift>
@@ -102,6 +113,22 @@ export default class ShiftDAO {
     const filter =
       delta < 0 ? { _id: id, waitlistCount: { $gt: 0 } } : { _id: id };
     await ShiftModel.updateOne(filter, { $inc: { waitlistCount: delta } });
+  }
+
+  /**
+   * Overwrites both counters only if the shift has not been written since
+   * `updatedAt` was read, so a concurrent claim or release wins.
+   */
+  static async setCountersIfUnchanged(
+    shift: Pick<Doc<Shift>, "_id" | "updatedAt">,
+    counters: ShiftCounters
+  ): Promise<boolean> {
+    await dbConnect();
+    const result = await ShiftModel.updateOne(
+      { _id: shift._id, updatedAt: shift.updatedAt },
+      { $set: counters }
+    );
+    return result.modifiedCount === 1;
   }
 
   static async findStartingBetween(

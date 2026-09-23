@@ -1,6 +1,10 @@
 import { Types } from "mongoose";
 import AuditLogDAO from "@/db/actions/auditLog";
-import type { AuditAction, AuditEntityType } from "@/types/audit";
+import {
+  SCHEDULED_JOB_ACTOR_ID,
+  type AuditAction,
+  type AuditEntityType,
+} from "@/types/audit";
 import type { Actor } from "@/types/auth";
 
 /**
@@ -10,7 +14,7 @@ import type { Actor } from "@/types/auth";
  */
 export default class AuditService {
   static async record(
-    actor: Actor,
+    actor: Pick<Actor, "id" | "ip">,
     action: AuditAction,
     entityType: AuditEntityType,
     entityId: string | Types.ObjectId,
@@ -25,5 +29,21 @@ export default class AuditService {
       after: change.after,
       ipAddress: actor.ip,
     });
+  }
+
+  /** Records work done by the job runner, which has no user account. */
+  static async recordScheduledJob(
+    action: AuditAction,
+    entityType: AuditEntityType,
+    entityId: string | Types.ObjectId,
+    change?: { before?: unknown; after?: unknown }
+  ): Promise<void> {
+    await AuditService.record(
+      { id: SCHEDULED_JOB_ACTOR_ID },
+      action,
+      entityType,
+      entityId,
+      change
+    );
   }
 }

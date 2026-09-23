@@ -30,7 +30,7 @@ import {
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
 import type { SafeUser } from "@/types/user";
-import type { AuditLog } from "@/types/audit";
+import { SCHEDULED_JOB_ACTOR_ID, type AuditLog } from "@/types/audit";
 import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -232,11 +232,14 @@ export default class AdminService {
     ]);
     return entries.map((entry) => {
       const actor = actors.find((a) => sameId(a._id, entry.actorId));
+      const isJob = sameId(entry.actorId, SCHEDULED_JOB_ACTOR_ID);
       return {
         ...entry,
-        actorName: actor
-          ? `${actor.firstName} ${actor.lastName}`
-          : "Former member",
+        actorName: isJob
+          ? "Scheduled job"
+          : actor
+            ? `${actor.firstName} ${actor.lastName}`
+            : "Former member",
       };
     });
   }
