@@ -19,9 +19,14 @@ export default function ThreadPage() {
         eyebrow="Messages"
         title="Conversation"
         back={
-          user?.role === "admin"
+          thread.data?.isAdminView
             ? { href: "/admin", label: "Approvals" }
-            : { href: "/messages", label: "All conversations" }
+            : user?.role === "admin" && thread.data
+              ? {
+                  href: `/messages?eventId=${thread.data.eventId}`,
+                  label: thread.data.eventTitle,
+                }
+              : { href: "/messages", label: "All conversations" }
         }
       />
       {thread.isPending || !user ? (

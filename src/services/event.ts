@@ -343,6 +343,10 @@ export default class EventService {
     const source = await EventDAO.findById(eventId);
     if (!source) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     assertCanManageEvent(actor, source);
+    // The copy stays with whoever runs the original, even when an admin makes it.
+    const organizer = await EventService.assignableOrganizer(
+      source.organizerId.toString()
+    );
     const copy = await EventDAO.create({
       title: `Copy of ${source.title}`,
       description: source.description,
@@ -362,8 +366,7 @@ export default class EventService {
       siteContactName: source.siteContactName,
       siteContactPhone: source.siteContactPhone,
       coverImageUrl: source.coverImageUrl,
-      // The copy stays with whoever runs the original, even when an admin makes it.
-      organizerId: source.organizerId,
+      organizerId: organizer._id,
     });
     const shifts = await ShiftDAO.findByEvent(source._id);
     await ShiftDAO.createMany(

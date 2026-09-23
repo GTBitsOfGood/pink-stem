@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { MAX_MESSAGE_LENGTH } from "@/constants/limits";
-import {
-  objectIdSchema,
-  pageSchema,
-  queryBoolean,
-  text,
-} from "@/utils/validation/common";
+import { objectIdSchema, pageSchema, text } from "@/utils/validation/common";
 
 export const createThreadSchema = z.object({
   eventId: objectIdSchema,
@@ -28,6 +23,5 @@ export const reportMessageSchema = z.object({
 
 export const threadFiltersSchema = z.object({
   eventId: objectIdSchema.optional(),
-  reported: queryBoolean.optional(),
   page: pageSchema,
 });

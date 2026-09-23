@@ -39,7 +39,7 @@ export async function proxy(req: NextRequest) {
   if (
     claims?.role === "admin" &&
     PARTICIPANT_ONLY.includes(pathname) &&
-    !(pathname === "/messages" && req.nextUrl.searchParams.has("eventId"))
+    !(pathname === "/messages" && req.nextUrl.searchParams.get("eventId"))
   ) {
     return NextResponse.redirect(new URL("/admin", req.url));
   }

@@ -48,19 +48,20 @@ export default class AdminService {
       ClearanceDAO.findUserIdsByStatus("submitted"),
       EventDAO.findAll({ status: "published", eventDate: { $lt: new Date() } }),
       SignupDAO.find({ status: "pending", pendingReasons: "guardian_consent" }),
-      MessageService.listThreads(admin, { reported: "true" }),
+      MessageService.reportedThreads(admin),
     ]);
     const [clearances, guardianConsent] = await Promise.all([
       UserDAO.findSummaries(submitted),
-      UserDAO.findAwaitingGuardianConsent(
-        consentSignups.map((s) => s.volunteerId)
+      UserDAO.findSummaries(
+        consentSignups.map((s) => s.volunteerId),
+        { guardianConsentAt: null }
       ),
     ]);
     return {
       clearances,
       rosters,
       guardianConsent,
-      reportedThreads: reported.items,
+      reportedThreads: reported,
     };
   }
 

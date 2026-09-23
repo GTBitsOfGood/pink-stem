@@ -107,21 +107,13 @@ export default class UserDAO {
     await UserModel.updateOne({ _id: id }, { $inc: { sessionVersion: 1 } });
   }
 
+  /** Name and contact fields for the given users, narrowed further by `filter`. */
   static async findSummaries(
-    ids: (string | Types.ObjectId)[]
+    ids: (string | Types.ObjectId)[],
+    filter: QueryFilter<User> = {}
   ): Promise<UserSummary[]> {
     await dbConnect();
-    return UserModel.find({ _id: { $in: ids } })
-      .select(SUMMARY_FIELDS)
-      .lean<UserSummary[]>();
-  }
-
-  /** Of the given users, those whose guardian has not consented yet. */
-  static async findAwaitingGuardianConsent(
-    ids: Types.ObjectId[]
-  ): Promise<UserSummary[]> {
-    await dbConnect();
-    return UserModel.find({ _id: { $in: ids }, guardianConsentAt: null })
+    return UserModel.find({ ...filter, _id: { $in: ids } })
       .select(SUMMARY_FIELDS)
       .lean<UserSummary[]>();
   }
