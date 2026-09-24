@@ -48,7 +48,7 @@ function ResetForm() {
             autoComplete="new-password"
             required
             minLength={PASSWORD_MIN_LENGTH}
-            hint={`At least ${PASSWORD_MIN_LENGTH} characters with a number.`}
+            hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />

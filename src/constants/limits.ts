@@ -4,7 +4,7 @@ export const SESSION_DAYS = 30;
 /** Re-issue the session cookie once a token is older than this. */
 export const SESSION_RENEW_AFTER_HOURS = 24;
 
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 12;
 export const RESET_PASSWORD_TOKEN_MINUTES = 30;
 export const ORGANIZER_INVITE_DAYS = 7;
 export const GUARDIAN_CONSENT_DAYS = 14;

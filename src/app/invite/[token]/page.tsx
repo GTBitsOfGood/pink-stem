@@ -80,7 +80,7 @@ export default function InvitePage() {
           autoComplete="new-password"
           required
           minLength={PASSWORD_MIN_LENGTH}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters with a number.`}
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
           value={values.password}
           onChange={(e) => set("password")(e.target.value)}
         />
