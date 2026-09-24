@@ -133,14 +133,12 @@ export default class AuthService {
     if (user?.provider === "google") {
       throw new ConflictError(ERRORS.AUTH.GOOGLE_ACCOUNT);
     }
-    const matches = user?.passwordHash
-      ? await HashingService.compare(password, user.passwordHash)
-      : false;
-    if (!user || !matches) {
+    const matches = await HashingService.compare(
+      password,
+      user?.passwordHash ?? HashingService.DUMMY_HASH
+    );
+    if (!user || !matches || user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
-    }
-    if (user.status !== "active") {
-      throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
     }
     return AuthService.session(user);
   }
