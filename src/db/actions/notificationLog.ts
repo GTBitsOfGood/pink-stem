@@ -1,3 +1,4 @@
+import { mongo } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import NotificationLogModel from "@/db/models/notificationLog";
 
@@ -8,6 +9,8 @@ export default class NotificationLogDAO {
    */
   static async claim(key: string): Promise<boolean> {
     await dbConnect();
+    // Duplicate keys here would block the unique index the lock depends on.
+    await NotificationLogModel.init();
     const result = await NotificationLogModel.updateOne(
       { key },
       { $setOnInsert: { key, sentAt: new Date() } },
@@ -17,33 +20,35 @@ export default class NotificationLogDAO {
   }
 
   /**
-   * Atomic expiring lock, sharing this collection's unique key index.
-   * Succeeds if no document exists for `key`, or the existing one has
-   * expired. Fails (returns false) if another process holds it. A crashed
-   * holder is recovered from automatically once expiresAt passes — no
-   * manual cleanup needed.
+   * Takes an expiring lock on `key` and returns its expiry, which identifies
+   * this holder. Returns null while another holder's lock is unexpired; a
+   * holder that dies loses it once expiresAt passes.
    */
-  static async acquireLock(key: string, ttlMs: number): Promise<boolean> {
+  static async acquireLock(key: string, ttlMs: number): Promise<Date | null> {
     await dbConnect();
+    // A fresh database lacks the unique key index the lock depends on.
+    await NotificationLogModel.init();
     const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlMs);
     try {
-      await NotificationLogModel.findOneAndUpdate(
+      await NotificationLogModel.updateOne(
         { key, expiresAt: { $lte: now } },
-        { $set: { sentAt: now, expiresAt: new Date(now.getTime() + ttlMs) } },
+        { $set: { sentAt: now, expiresAt } },
         { upsert: true }
       );
-      return true;
+      return expiresAt;
     } catch (error) {
-      // E11000: another process's lock document exists and hasn't expired,
-      // so the upsert's implicit insert collided with the unique key index.
-      if ((error as { code?: number }).code === 11000) return false;
+      // A live lock makes the upsert's insert collide on the unique key.
+      if (error instanceof mongo.MongoServerError && error.code === 11000) {
+        return null;
+      }
       throw error;
     }
   }
 
-  /** Releases a lock early so the next scheduled run doesn't wait out the TTL. */
-  static async releaseLock(key: string): Promise<void> {
+  /** Releases the lock only if it is still the one `acquireLock` returned. */
+  static async releaseLock(key: string, expiresAt: Date): Promise<void> {
     await dbConnect();
-    await NotificationLogModel.deleteOne({ key });
+    await NotificationLogModel.deleteOne({ key, expiresAt });
   }
 }

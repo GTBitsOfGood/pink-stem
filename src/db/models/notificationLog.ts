@@ -11,8 +11,6 @@ const notificationLogSchema = new Schema<NotificationLog>(
   { timestamps: false }
 );
 
-notificationLogSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
 export default defineModel<NotificationLog>(
   "NotificationLog",
   notificationLogSchema

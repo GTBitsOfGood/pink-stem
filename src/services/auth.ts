@@ -12,10 +12,12 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
+import { NO_ENTITY_ID, SYSTEM_ACTOR_ID } from "@/types/audit";
 import {
   ConflictError,
   InvalidArgumentsError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
@@ -29,8 +31,6 @@ import {
   registerSchema,
   resetPasswordSchema,
 } from "@/utils/validation/auth";
-import { NO_ENTITY_ID, SYSTEM_ACTOR } from "@/types/audit";
-import { TooManyRequestsError } from "@/types/exceptions";
 
 export interface SessionResult {
   token: string;
@@ -42,24 +42,22 @@ const DAY = 24 * HOUR;
 
 /** Accounts, sessions, and every one-time link flow. */
 export default class AuthService {
+  /** Audits the first 429 in each window; there may be no account behind it. */
   private static async assertLimitAudited(
     key: string,
     limits: { limit: number; windowMs: number },
-    context: Record<string, string>
+    ip: string
   ): Promise<void> {
     try {
       await assertRateLimit(key, limits);
     } catch (error) {
-      if (
-        error instanceof TooManyRequestsError &&
-        error.count === (error.limit ?? -1) + 1
-      ) {
+      if (error instanceof TooManyRequestsError && error.firstInWindow) {
         await AuditService.record(
-          SYSTEM_ACTOR,
+          { id: SYSTEM_ACTOR_ID, ip },
           "auth.rate_limited",
           "security_event",
           NO_ENTITY_ID,
-          { after: { key, ...context } }
+          { after: { key } }
         );
       }
       throw error;
@@ -117,13 +115,19 @@ export default class AuthService {
     await AuthService.assertLimitAudited(
       `login:${ip}`,
       RATE_LIMITS.loginPerAddress,
-      { ip }
+      ip
     );
     const { email, password } = loginSchema.parse(input);
-    await AuthService.assertLimitAudited(`login:${email}`, RATE_LIMITS.login, {
-      email,
-      ip,
-    });
+    await AuthService.assertLimitAudited(
+      `login:${ip}:${email}`,
+      RATE_LIMITS.login,
+      ip
+    );
+    await AuthService.assertLimitAudited(
+      `login:${email}`,
+      RATE_LIMITS.loginPerAccount,
+      ip
+    );
 
     const user = await UserDAO.findAuthByEmail(email);
     if (user?.provider === "google") {
@@ -213,7 +217,7 @@ export default class AuthService {
     await AuthService.assertLimitAudited(
       `reset:${ip}`,
       RATE_LIMITS.passwordReset,
-      { ip }
+      ip
     );
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);

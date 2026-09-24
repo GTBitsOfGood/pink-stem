@@ -37,15 +37,19 @@ export const VERIFICATION_CODE_LENGTH = 16;
 
 export const PAGE_SIZE = 25;
 
+/** How long a crashed job run can hold the runner's lock before it lapses. */
 export const JOB_LOCK_TTL_MS = 10 * 60_000;
 
 /**
- * In-memory rate limits, expressed as hits per window. Login is limited per
- * account so a school or office sharing one address is not locked out by a
- * neighbour's typos, with a looser per-address ceiling against enumeration.
+ * Rate limits, expressed as hits per fixed window. Login is limited per
+ * account and address, so a neighbour's typos on a shared address do not lock
+ * an account out. Looser ceilings per address stop enumeration and per
+ * account stop distributed guessing, at the cost that attempts from several
+ * addresses can lock an account for one window.
  */
 export const RATE_LIMITS = {
   login: { limit: 10, windowMs: 15 * 60_000 },
+  loginPerAccount: { limit: 50, windowMs: 15 * 60_000 },
   loginPerAddress: { limit: 100, windowMs: 15 * 60_000 },
   register: { limit: 5, windowMs: 60 * 60_000 },
   passwordReset: { limit: 5, windowMs: 60 * 60_000 },

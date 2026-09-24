@@ -1,8 +1,11 @@
 import type { Types } from "mongoose";
-import type { Actor } from "./auth";
 
 /** Reserved ObjectId used when scheduled work, rather than a user, acts. */
 export const SCHEDULED_JOB_ACTOR_ID = "000000000000000000000001";
+
+/** Reserved ObjectIds for rows with no user actor or no target entity. */
+export const SYSTEM_ACTOR_ID = "000000000000000000000002";
+export const NO_ENTITY_ID = "000000000000000000000000";
 
 export const AUDIT_ACTIONS = [
   "user.role_changed",
@@ -52,12 +55,3 @@ export interface AuditLog {
   ipAddress?: string;
   createdAt: Date;
 }
-
-export const NO_ENTITY_ID = "000000000000000000000000";
-
-export const SYSTEM_ACTOR: Actor = {
-  id: "000000000000000000000000",
-  role: "admin",
-  email: "system",
-  name: "System",
-};

@@ -47,7 +47,7 @@ export const handleError = (error: unknown) => {
         body.code = error.code;
       }
       const response = NextResponse.json(body, { status: match[1] });
-      if (error instanceof TooManyRequestsError) {
+      if (error instanceof TooManyRequestsError && error.retryAfterMs) {
         response.headers.set(
           "Retry-After",
           String(Math.ceil(error.retryAfterMs / 1000))

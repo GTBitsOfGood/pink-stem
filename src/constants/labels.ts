@@ -126,6 +126,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "thread.admin_access": "Admin read a thread",
   "organizer.invited": "Organizer invited",
   "signup.cancelled_by_staff": "Sign-up cancelled by staff",
-  "auth.rate_limited": "Rate limit triggered",
   "shift.counters_reconciled": "Shift counters reconciled",
+  "auth.rate_limited": "Rate limit triggered",
 };

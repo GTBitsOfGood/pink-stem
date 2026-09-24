@@ -30,7 +30,11 @@ import {
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
 import type { SafeUser } from "@/types/user";
-import { SCHEDULED_JOB_ACTOR_ID, type AuditLog } from "@/types/audit";
+import {
+  SCHEDULED_JOB_ACTOR_ID,
+  SYSTEM_ACTOR_ID,
+  type AuditLog,
+} from "@/types/audit";
 import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -39,6 +43,12 @@ import {
   peopleFiltersSchema,
   updateUserSchema,
 } from "@/utils/validation/admin";
+
+/** Audit actors with no user account behind them. */
+const RESERVED_ACTOR_NAMES: Record<string, string> = {
+  [SCHEDULED_JOB_ACTOR_ID]: "Scheduled job",
+  [SYSTEM_ACTOR_ID]: "System",
+};
 
 /** Oversight across people, events, and the audit trail. Admin-only routes call in here. */
 export default class AdminService {
@@ -232,14 +242,11 @@ export default class AdminService {
     ]);
     return entries.map((entry) => {
       const actor = actors.find((a) => sameId(a._id, entry.actorId));
-      const isJob = sameId(entry.actorId, SCHEDULED_JOB_ACTOR_ID);
       return {
         ...entry,
-        actorName: isJob
-          ? "Scheduled job"
-          : actor
-            ? `${actor.firstName} ${actor.lastName}`
-            : "Former member",
+        actorName:
+          RESERVED_ACTOR_NAMES[entry.actorId.toString()] ??
+          (actor ? `${actor.firstName} ${actor.lastName}` : "Former member"),
       };
     });
   }
