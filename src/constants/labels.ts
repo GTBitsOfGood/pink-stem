@@ -127,4 +127,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "organizer.invited": "Organizer invited",
   "signup.cancelled_by_staff": "Sign-up cancelled by staff",
   "shift.counters_reconciled": "Shift counters reconciled",
+  "auth.rate_limited": "Rate limit triggered",
 };

@@ -5,7 +5,9 @@ import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import MessageThreadDAO from "@/db/actions/messageThread";
 import MessageDAO from "@/db/actions/message";
+import NotificationLogDAO from "@/db/actions/notificationLog";
 import {
+  JOB_LOCK_TTL_MS,
   LOW_FILL_ALERT_HOURS,
   REMINDER_HOURS,
   ROSTER_ADMIN_ESCALATION_DAYS,
@@ -22,11 +24,29 @@ import { sameId } from "@/utils/authorization";
 
 type JobResult = { ok: true; count: number } | { ok: false; error: string };
 
+const JOB_LOCK_KEY = "jobs:run:lock";
+
 /**
  * Everything time-driven. Each job is idempotent (see NotificationLog), so
  * the runner can fire hourly and a late or repeated run is harmless.
  */
 export default class JobService {
+  /** Runs every job unless an overlapping run holds the lock. */
+  static async runExclusive(): Promise<
+    Record<string, JobResult> | { skipped: true }
+  > {
+    const lock = await NotificationLogDAO.acquireLock(
+      JOB_LOCK_KEY,
+      JOB_LOCK_TTL_MS
+    );
+    if (!lock) return { skipped: true };
+    try {
+      return await JobService.runAll();
+    } finally {
+      await NotificationLogDAO.releaseLock(JOB_LOCK_KEY, lock);
+    }
+  }
+
   static async runAll(): Promise<Record<string, JobResult>> {
     const jobs: Record<string, () => Promise<number>> = {
       // Repair counters before the jobs that read them.

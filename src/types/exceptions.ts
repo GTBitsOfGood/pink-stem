@@ -52,8 +52,13 @@ export class IllegalOperationError extends Error {
   }
 }
 
+/** `firstInWindow` marks the one request that tripped the limit. */
 export class TooManyRequestsError extends Error {
-  constructor(message = "Too many requests. Please try again shortly.") {
+  constructor(
+    message = "Too many requests. Please try again shortly.",
+    public readonly retryAfterMs = 0,
+    public readonly firstInWindow = false
+  ) {
     super(message);
   }
 }

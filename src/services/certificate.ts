@@ -216,7 +216,7 @@ export default class CertificateService {
 
   /** Public. Shows only what a third party needs, and nothing else. */
   static async verify(code: string, ip: string): Promise<VerificationResult> {
-    assertRateLimit(`verify:${ip}`, RATE_LIMITS.verify);
+    await assertRateLimit(`verify:${ip}`, RATE_LIMITS.verify);
     const certificate = await CertificateDAO.findByCode(
       normalizeVerificationCode(code)
     );

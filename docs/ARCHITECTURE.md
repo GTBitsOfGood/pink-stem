@@ -88,7 +88,8 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `auditlogs`        | Append-only record of every consequential action                                |
 | `actiontokens`     | Hashed one-time links: password reset, invites, guardian consent                |
 | `orgsettings`      | Singleton organization configuration                                            |
-| `notificationlogs` | Idempotency keys so scheduled emails send exactly once                          |
+| `notificationlogs` | Idempotency keys so scheduled emails send exactly once; the job runner's lock   |
+| `ratelimitwindows` | Fixed-window rate-limit counters, shared by every server instance               |
 
 Two decisions carry most of the weight:
 
@@ -105,7 +106,8 @@ Two decisions carry most of the weight:
 alerts, unapproved-roster nudges, clearance expiry warnings, note and message
 digests, and the organizer digest, and closes stale threads. Every send is
 keyed in `notificationlogs`, so the runner is safe to fire hourly and a late
-or repeated run is harmless.
+or repeated run is harmless. `JobService.runExclusive` holds an expiring lock
+in the same collection, so a manual run never overlaps the scheduled one.
 
 It first reconciles shift counters. `filledCount` and `waitlistCount` are
 written separately from the sign-up, so `SignupService.reconcileCounters`

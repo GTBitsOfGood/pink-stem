@@ -6,6 +6,7 @@ const notificationLogSchema = new Schema<NotificationLog>(
   {
     key: { type: String, required: true, unique: true },
     sentAt: { type: Date, required: true },
+    expiresAt: { type: Date },
   },
   { timestamps: false }
 );

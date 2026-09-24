@@ -12,10 +12,12 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
+import { NO_ENTITY_ID, SYSTEM_ACTOR_ID } from "@/types/audit";
 import {
   ConflictError,
   InvalidArgumentsError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
@@ -40,6 +42,28 @@ const DAY = 24 * HOUR;
 
 /** Accounts, sessions, and every one-time link flow. */
 export default class AuthService {
+  /** Audits the first 429 in each window; there may be no account behind it. */
+  private static async assertLimitAudited(
+    key: string,
+    limits: { limit: number; windowMs: number },
+    ip: string
+  ): Promise<void> {
+    try {
+      await assertRateLimit(key, limits);
+    } catch (error) {
+      if (error instanceof TooManyRequestsError && error.firstInWindow) {
+        await AuditService.record(
+          { id: SYSTEM_ACTOR_ID, ip },
+          "auth.rate_limited",
+          "security_event",
+          NO_ENTITY_ID,
+          { after: { key } }
+        );
+      }
+      throw error;
+    }
+  }
+
   private static async session(user: Doc<User>): Promise<SessionResult> {
     const token = await signSession(
       user._id.toString(),
@@ -50,7 +74,7 @@ export default class AuthService {
   }
 
   static async register(input: unknown, ip: string): Promise<SessionResult> {
-    assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
+    await assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
     const data = registerSchema.parse(input);
 
     const existing = await UserDAO.findByEmail(data.email);
@@ -88,9 +112,22 @@ export default class AuthService {
   }
 
   static async login(input: unknown, ip: string): Promise<SessionResult> {
-    assertRateLimit(`login:${ip}`, RATE_LIMITS.loginPerAddress);
+    await AuthService.assertLimitAudited(
+      `login:${ip}`,
+      RATE_LIMITS.loginPerAddress,
+      ip
+    );
     const { email, password } = loginSchema.parse(input);
-    assertRateLimit(`login:${ip}:${email}`, RATE_LIMITS.login);
+    await AuthService.assertLimitAudited(
+      `login:${ip}:${email}`,
+      RATE_LIMITS.login,
+      ip
+    );
+    await AuthService.assertLimitAudited(
+      `login:${email}`,
+      RATE_LIMITS.loginPerAccount,
+      ip
+    );
 
     const user = await UserDAO.findAuthByEmail(email);
     if (user?.provider === "google") {
@@ -177,7 +214,11 @@ export default class AuthService {
   }
 
   static async forgotPassword(input: unknown, ip: string): Promise<void> {
-    assertRateLimit(`reset:${ip}`, RATE_LIMITS.passwordReset);
+    await AuthService.assertLimitAudited(
+      `reset:${ip}`,
+      RATE_LIMITS.passwordReset,
+      ip
+    );
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);
     // Always resolve: the response never reveals whether the account exists.
@@ -215,8 +256,10 @@ export default class AuthService {
   }
 
   static async getInvite(
-    token: string
+    token: string,
+    ip: string
   ): Promise<{ email: string; role: Role; existingAccount: boolean }> {
+    await assertRateLimit(`invite:${ip}`, RATE_LIMITS.inviteLookup);
     const invite = await ActionTokenDAO.findValid(token, "organizer_invite");
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const existing = await UserDAO.findByEmail(invite.email);

@@ -10,5 +10,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     throw new UnauthorizedError(ERRORS.JOBS.UNAUTHORIZED);
   }
-  return NextResponse.json(await JobService.runAll());
+  return NextResponse.json(await JobService.runExclusive());
 });
