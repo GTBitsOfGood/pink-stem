@@ -4,10 +4,11 @@ export const SESSION_DAYS = 30;
 /** Re-issue the session cookie once a token is older than this. */
 export const SESSION_RENEW_AFTER_HOURS = 24;
 
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 12;
 export const RESET_PASSWORD_TOKEN_MINUTES = 30;
 export const ORGANIZER_INVITE_DAYS = 7;
 export const GUARDIAN_CONSENT_DAYS = 14;
+export const EMAIL_VERIFICATION_DAYS = 7;
 
 export const ADULT_AGE = 18;
 
@@ -45,15 +46,18 @@ export const JOB_LOCK_TTL_MS = 10 * 60_000;
  * account and address, so a neighbour's typos on a shared address do not lock
  * an account out. Looser ceilings per address stop enumeration and per
  * account stop distributed guessing, at the cost that attempts from several
- * addresses can lock an account for one window.
+ * addresses can lock an account for one window; its owner can still get in
+ * through a password reset.
  */
 export const RATE_LIMITS = {
   login: { limit: 10, windowMs: 15 * 60_000 },
-  loginPerAccount: { limit: 50, windowMs: 15 * 60_000 },
+  loginPerAccount: { limit: 20, windowMs: 15 * 60_000 },
   loginPerAddress: { limit: 100, windowMs: 15 * 60_000 },
   register: { limit: 5, windowMs: 60 * 60_000 },
   passwordReset: { limit: 5, windowMs: 60 * 60_000 },
   verify: { limit: 60, windowMs: 60_000 },
   inviteLookup: { limit: 20, windowMs: 15 * 60_000 },
   consentLookup: { limit: 20, windowMs: 15 * 60_000 },
+  verifyEmailResend: { limit: 5, windowMs: 60 * 60_000 },
+  verifyEmailLookup: { limit: 20, windowMs: 15 * 60_000 },
 } as const;

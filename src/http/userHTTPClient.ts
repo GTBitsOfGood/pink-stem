@@ -22,6 +22,11 @@ export interface ConsentInfo {
   codeOfConductText: string;
 }
 
+interface VerifyEmailInfo {
+  firstName: string;
+  alreadyVerified: boolean;
+}
+
 export default class UserHTTPClient {
   static updateProfile(body: ProfileBody): Promise<Me> {
     return fetchHTTPClient("/me", "PATCH", body);
@@ -33,6 +38,10 @@ export default class UserHTTPClient {
 
   static resendGuardianConsent(): Promise<void> {
     return fetchHTTPClient("/me/guardian-consent", "POST");
+  }
+
+  static resendEmailVerification(): Promise<void> {
+    return fetchHTTPClient("/me/verify-email", "POST");
   }
 
   static mySignups(): Promise<ClientSignupWithContext[]> {
@@ -59,6 +68,14 @@ export default class UserHTTPClient {
 
   static giveConsent(token: string): Promise<{ volunteerName: string }> {
     return fetchHTTPClient(`/consent/${token}`, "POST");
+  }
+
+  static verifyEmailInfo(token: string): Promise<VerifyEmailInfo> {
+    return fetchHTTPClient(`/verify-email/${token}`);
+  }
+
+  static confirmEmailVerification(token: string): Promise<void> {
+    return fetchHTTPClient(`/verify-email/${token}`, "POST");
   }
 
   static publicSettings(): Promise<PublicSettings> {

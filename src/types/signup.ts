@@ -21,6 +21,7 @@ export const LIVE_SIGNUP_STATUSES = [
 ] as const;
 
 export const PENDING_REASONS = [
+  "email_verification",
   "waiver",
   "guardian_consent",
   "clearance",

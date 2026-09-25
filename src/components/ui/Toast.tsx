@@ -10,6 +10,7 @@ import {
 } from "react";
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HTTPError } from "@/types/exceptions";
 
 type ToastTone = "success" | "error" | "info";
 
@@ -89,3 +90,7 @@ export const errorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message
     : "Something went wrong. Please try again.";
+
+/** True when a request was turned away by a rate limit, not rejected. */
+export const isRateLimited = (error: unknown) =>
+  error instanceof HTTPError && error.status === 429;

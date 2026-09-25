@@ -8,16 +8,18 @@ import WaiverDialog from "@/components/profile/WaiverDialog";
 import { ClearanceBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
-import { useToast } from "@/components/ui/Toast";
+import { errorMessage, isRateLimited, useToast } from "@/components/ui/Toast";
 import { PENDING_REASON_LABELS } from "@/constants/labels";
 import { useState } from "react";
 
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
 export default function OutstandingList() {
   const { me } = useSession();
-  const { acceptWaiver, resendGuardianConsent } = useProfile();
+  const { acceptWaiver, resendGuardianConsent, resendEmailVerification } =
+    useProfile();
   const toast = useToast();
   const [waiverOpen, setWaiverOpen] = useState(false);
+  const [verifyResendBlocked, setVerifyResendBlocked] = useState(false);
 
   if (!me) return null;
   const items = me.outstanding;
@@ -48,7 +50,33 @@ export default function OutstandingList() {
               <CircleAlert className="h-4 w-4 shrink-0 text-amber-600" />
               {PENDING_REASON_LABELS[reason]}
             </span>
-            {reason === "waiver" ? (
+            {reason === "email_verification" ? (
+              verifyResendBlocked ? (
+                <span className="text-[13px] text-amber-800">
+                  Resend limit reached. Try again in an hour, or use the link
+                  from an earlier email.
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Send className="h-3.5 w-3.5" />}
+                  loading={resendEmailVerification.isPending}
+                  onClick={() =>
+                    resendEmailVerification.mutate(undefined, {
+                      onSuccess: () =>
+                        toast("Verification link re-sent to your email."),
+                      onError: (error) =>
+                        isRateLimited(error)
+                          ? setVerifyResendBlocked(true)
+                          : toast(errorMessage(error), "error"),
+                    })
+                  }
+                >
+                  Resend verification link
+                </Button>
+              )
+            ) : reason === "waiver" ? (
               <Button
                 size="sm"
                 variant="secondary"

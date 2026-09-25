@@ -15,8 +15,7 @@ export const emailSchema = z
 
 export const passwordSchema = z
   .string()
-  .min(PASSWORD_MIN_LENGTH, ERRORS.AUTH.WEAK_PASSWORD)
-  .regex(/\d/, ERRORS.AUTH.WEAK_PASSWORD);
+  .min(PASSWORD_MIN_LENGTH, ERRORS.AUTH.WEAK_PASSWORD);
 
 export const phoneSchema = z.string().trim().min(7).max(25);
 

@@ -13,7 +13,7 @@ const ERRORS = Object.freeze({
       "This email signs in with a password. Enter it below instead of using Google.",
     GOOGLE_NOT_CONFIGURED: "Google sign-in is not enabled.",
     GOOGLE_TOKEN: "Google could not verify that sign-in. Try again.",
-    WEAK_PASSWORD: `Password must be at least ${PASSWORD_MIN_LENGTH} characters and include a number.`,
+    WEAK_PASSWORD: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
     TOKEN_INVALID: "This link is invalid or has already been used.",
     SESSION_REQUIRED: "Sign in to continue.",
     FORBIDDEN: "You do not have permission to do that.",

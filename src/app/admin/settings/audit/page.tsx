@@ -15,7 +15,7 @@ import {
 import { AUDIT_ACTION_LABELS } from "@/constants/labels";
 import AdminHTTPClient from "@/http/adminHTTPClient";
 import { formatDateTime } from "@/lib/dates";
-import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } from "@/types/audit";
+import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES, NO_ENTITY_ID } from "@/types/audit";
 
 export default function AuditPage() {
   const [filters, setFilters] = useState({
@@ -108,7 +108,9 @@ export default function AuditPage() {
                   <td className={td}>{row.actorName}</td>
                   <td className={td}>{AUDIT_ACTION_LABELS[row.action]}</td>
                   <td className={`${td} font-mono text-xs`}>
-                    {row.entityType} {String(row.entityId).slice(-6)}
+                    {row.entityType}{" "}
+                    {String(row.entityId) !== NO_ENTITY_ID &&
+                      String(row.entityId).slice(-6)}
                   </td>
                   <td
                     className={`${td} max-w-48 break-all font-mono text-xs text-ink-500`}

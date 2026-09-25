@@ -1,6 +1,7 @@
 import ActionTokenDAO from "@/db/actions/actionToken";
 import UserDAO from "@/db/actions/user";
 import {
+  EMAIL_VERIFICATION_DAYS,
   GUARDIAN_CONSENT_DAYS,
   RATE_LIMITS,
   RESET_PASSWORD_TOKEN_MINUTES,
@@ -12,7 +13,7 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
-import { NO_ENTITY_ID, SYSTEM_ACTOR_ID } from "@/types/audit";
+import SignupService from "@/services/signup";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -42,7 +43,10 @@ const DAY = 24 * HOUR;
 
 /** Accounts, sessions, and every one-time link flow. */
 export default class AuthService {
-  /** Audits the first 429 in each window; there may be no account behind it. */
+  /**
+   * Audits the first 429 in each window; there may be no account behind it.
+   * A failed audit write is logged so the caller still gets the 429.
+   */
   private static async assertLimitAudited(
     key: string,
     limits: { limit: number; windowMs: number },
@@ -52,12 +56,10 @@ export default class AuthService {
       await assertRateLimit(key, limits);
     } catch (error) {
       if (error instanceof TooManyRequestsError && error.firstInWindow) {
-        await AuditService.record(
-          { id: SYSTEM_ACTOR_ID, ip },
-          "auth.rate_limited",
-          "security_event",
-          NO_ENTITY_ID,
-          { after: { key } }
+        await AuditService.recordSecurityEvent("auth.rate_limited", ip, {
+          key,
+        }).catch((auditError) =>
+          console.error("[rate-limit] audit write failed", auditError)
         );
       }
       throw error;
@@ -107,13 +109,14 @@ export default class AuthService {
     });
 
     if (minor) await AuthService.sendGuardianConsent(created);
+    await AuthService.sendEmailVerification(created);
 
     return AuthService.session({ ...created, sessionVersion: 0 });
   }
 
   static async login(input: unknown, ip: string): Promise<SessionResult> {
     await AuthService.assertLimitAudited(
-      `login:${ip}`,
+      `login-address:${ip}`,
       RATE_LIMITS.loginPerAddress,
       ip
     );
@@ -124,7 +127,7 @@ export default class AuthService {
       ip
     );
     await AuthService.assertLimitAudited(
-      `login:${email}`,
+      `login-account:${email}`,
       RATE_LIMITS.loginPerAccount,
       ip
     );
@@ -133,14 +136,12 @@ export default class AuthService {
     if (user?.provider === "google") {
       throw new ConflictError(ERRORS.AUTH.GOOGLE_ACCOUNT);
     }
-    const matches = user?.passwordHash
-      ? await HashingService.compare(password, user.passwordHash)
-      : false;
-    if (!user || !matches) {
+    const matches = await HashingService.compare(
+      password,
+      user?.passwordHash ?? HashingService.DUMMY_HASH
+    );
+    if (!user || !matches || user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
-    }
-    if (user.status !== "active") {
-      throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
     }
     return AuthService.session(user);
   }
@@ -181,11 +182,18 @@ export default class AuthService {
         role: "volunteer",
         firstName: info.given_name ?? "New",
         lastName: info.family_name ?? "Volunteer",
+        // Google checked the address (email_verified above).
+        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }
     if (user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
+    }
+    if (!user.emailVerifiedAt) {
+      // Accounts from before verification existed; Google vouches for them.
+      await UserDAO.updateById(user._id, { emailVerifiedAt: new Date() });
+      await SignupService.reevaluateForVolunteer(user._id);
     }
     return AuthService.session(user);
   }
@@ -209,6 +217,25 @@ export default class AuthService {
       NotificationService.templates.guardianConsent(org, {
         volunteerName: `${user.firstName} ${user.lastName}`,
         url: appUrl(`/consent/${secret}`),
+      })
+    );
+  }
+
+  static async sendEmailVerification(
+    user: Pick<Doc<SafeUser>, "_id" | "email" | "firstName" | "status">
+  ): Promise<void> {
+    const { secret } = await ActionTokenDAO.issue({
+      purpose: "verify_email",
+      email: user.email,
+      userId: user._id,
+      ttlMs: EMAIL_VERIFICATION_DAYS * DAY,
+    });
+    const org = await NotificationService.org();
+    await NotificationService.send(
+      user,
+      NotificationService.templates.verifyEmail(org, {
+        name: user.firstName,
+        url: appUrl(`/verify-email/${secret}`),
       })
     );
   }
@@ -286,8 +313,12 @@ export default class AuthService {
         role: invite.role,
         status: "active",
         deactivatedAt: null,
+        // The invite link was delivered to this address.
+        emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
       });
       await UserDAO.setPassword(existing._id, passwordHash);
+      // Sign-ups held only on email verification can confirm now.
+      await SignupService.reevaluateForVolunteer(existing._id);
       user = (await UserDAO.findAuthById(existing._id)) as Doc<User>;
       if (invite.invitedBy) {
         await AuditService.record(
@@ -306,6 +337,8 @@ export default class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         passwordHash,
+        // The invite link was delivered to this address.
+        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }

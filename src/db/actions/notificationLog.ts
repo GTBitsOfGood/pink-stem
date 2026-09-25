@@ -1,5 +1,6 @@
 import { mongo } from "mongoose";
 import dbConnect from "@/db/dbConnect";
+import { ensureIndexes } from "@/db/defineModel";
 import NotificationLogModel from "@/db/models/notificationLog";
 
 export default class NotificationLogDAO {
@@ -10,7 +11,7 @@ export default class NotificationLogDAO {
   static async claim(key: string): Promise<boolean> {
     await dbConnect();
     // Duplicate keys here would block the unique index the lock depends on.
-    await NotificationLogModel.init();
+    await ensureIndexes(NotificationLogModel);
     const result = await NotificationLogModel.updateOne(
       { key },
       { $setOnInsert: { key, sentAt: new Date() } },
@@ -27,7 +28,7 @@ export default class NotificationLogDAO {
   static async acquireLock(key: string, ttlMs: number): Promise<Date | null> {
     await dbConnect();
     // A fresh database lacks the unique key index the lock depends on.
-    await NotificationLogModel.init();
+    await ensureIndexes(NotificationLogModel);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlMs);
     try {

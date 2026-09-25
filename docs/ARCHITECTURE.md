@@ -86,7 +86,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `messages`         | Text only, with per-message report fields                                       |
 | `certificates`     | Immutable snapshots with a random verification code                             |
 | `auditlogs`        | Append-only record of every consequential action                                |
-| `actiontokens`     | Hashed one-time links: password reset, invites, guardian consent                |
+| `actiontokens`     | Hashed one-time links: password reset, invites, consent, email verification     |
 | `orgsettings`      | Singleton organization configuration                                            |
 | `notificationlogs` | Idempotency keys so scheduled emails send exactly once; the job runner's lock   |
 | `ratelimitwindows` | Fixed-window rate-limit counters, shared by every server instance               |
@@ -102,7 +102,7 @@ Two decisions carry most of the weight:
 
 ## Scheduled work
 
-`JobService.runAll` (`POST /api/v1/jobs/run`) sends shift reminders, low-fill
+`JobService.runAll` (`POST /api/v1/jobs/run`, through `runExclusive`) sends shift reminders, low-fill
 alerts, unapproved-roster nudges, clearance expiry warnings, note and message
 digests, and the organizer digest, and closes stale threads. Every send is
 keyed in `notificationlogs`, so the runner is safe to fire hourly and a late

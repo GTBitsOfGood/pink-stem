@@ -9,7 +9,7 @@ import { useFormValues } from "@/components/hooks/useFormValues";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { Alert, Spinner } from "@/components/ui/Primitives";
-import { errorMessage } from "@/components/ui/Toast";
+import { errorMessage, isRateLimited } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/constants/labels";
 import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
 import AuthHTTPClient from "@/http/authHTTPClient";
@@ -41,7 +41,13 @@ export default function InvitePage() {
     );
   if (invite.isError)
     return (
-      <AuthCard title="Invitation not found">
+      <AuthCard
+        title={
+          isRateLimited(invite.error)
+            ? "Too many attempts"
+            : "Invitation not found"
+        }
+      >
         <Alert tone="danger">{errorMessage(invite.error)}</Alert>
       </AuthCard>
     );
@@ -80,7 +86,7 @@ export default function InvitePage() {
           autoComplete="new-password"
           required
           minLength={PASSWORD_MIN_LENGTH}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters with a number.`}
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
           value={values.password}
           onChange={(e) => set("password")(e.target.value)}
         />
