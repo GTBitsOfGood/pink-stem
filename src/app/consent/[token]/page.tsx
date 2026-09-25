@@ -6,7 +6,7 @@ import Container from "@/components/layout/Container";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Alert, PageHeader, Spinner } from "@/components/ui/Primitives";
-import { errorMessage } from "@/components/ui/Toast";
+import { errorMessage, isRateLimited } from "@/components/ui/Toast";
 import UserHTTPClient from "@/http/userHTTPClient";
 
 /** Public page a parent or guardian lands on from the consent email. */
@@ -30,10 +30,16 @@ export default function ConsentPage() {
   if (info.isError) {
     return (
       <Container className="max-w-2xl py-12">
-        <Alert tone="danger" title="This link is no longer valid">
-          {errorMessage(info.error)} Ask the volunteer to send a new consent
-          request from their profile.
-        </Alert>
+        {isRateLimited(info.error) ? (
+          <Alert tone="danger" title="Too many attempts">
+            {errorMessage(info.error)}
+          </Alert>
+        ) : (
+          <Alert tone="danger" title="This link is no longer valid">
+            {errorMessage(info.error)} Ask the volunteer to send a new consent
+            request from their profile.
+          </Alert>
+        )}
       </Container>
     );
   }

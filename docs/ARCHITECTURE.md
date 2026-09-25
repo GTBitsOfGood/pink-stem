@@ -102,7 +102,7 @@ Two decisions carry most of the weight:
 
 ## Scheduled work
 
-`JobService.runAll` (`POST /api/v1/jobs/run`) sends shift reminders, low-fill
+`JobService.runAll` (`POST /api/v1/jobs/run`, through `runExclusive`) sends shift reminders, low-fill
 alerts, unapproved-roster nudges, clearance expiry warnings, note and message
 digests, and the organizer digest, and closes stale threads. Every send is
 keyed in `notificationlogs`, so the runner is safe to fire hourly and a late

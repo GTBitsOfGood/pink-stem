@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { AUDIT_ACTION_LABELS } from "@/constants/labels";
 import { toCsv } from "@/lib/csv";
 import AdminService from "@/services/admin";
+import { NO_ENTITY_ID } from "@/types/audit";
 import { fileResponse, jsonNoStore, queryOf } from "@/utils/request";
 import { withAuth } from "@/utils/withAuth";
 
@@ -16,7 +17,11 @@ export const GET = withAuth(
       { header: "Actor", value: (r) => r.actorName },
       { header: "Action", value: (r) => AUDIT_ACTION_LABELS[r.action] },
       { header: "Entity type", value: (r) => r.entityType },
-      { header: "Entity id", value: (r) => r.entityId },
+      {
+        header: "Entity id",
+        value: (r) =>
+          String(r.entityId) === NO_ENTITY_ID ? "" : String(r.entityId),
+      },
       {
         header: "Before",
         value: (r) => (r.before == null ? "" : JSON.stringify(r.before)),

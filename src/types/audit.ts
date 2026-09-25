@@ -3,8 +3,10 @@ import type { Types } from "mongoose";
 /** Reserved ObjectId used when scheduled work, rather than a user, acts. */
 export const SCHEDULED_JOB_ACTOR_ID = "000000000000000000000001";
 
-/** Reserved ObjectIds for rows with no user actor or no target entity. */
+/** Reserved ObjectId used when the system, not a user, raises an event. */
 export const SYSTEM_ACTOR_ID = "000000000000000000000002";
+
+/** Reserved ObjectId for rows with no target entity, like a security event. */
 export const NO_ENTITY_ID = "000000000000000000000000";
 
 export const AUDIT_ACTIONS = [

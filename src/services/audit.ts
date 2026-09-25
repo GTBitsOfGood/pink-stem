@@ -1,7 +1,9 @@
 import { Types } from "mongoose";
 import AuditLogDAO from "@/db/actions/auditLog";
 import {
+  NO_ENTITY_ID,
   SCHEDULED_JOB_ACTOR_ID,
+  SYSTEM_ACTOR_ID,
   type AuditAction,
   type AuditEntityType,
 } from "@/types/audit";
@@ -44,6 +46,24 @@ export default class AuditService {
       entityType,
       entityId,
       change
+    );
+  }
+
+  /**
+   * Records a security event such as a rate-limit trip, which may have no
+   * account behind it. Identifying context goes in `after`.
+   */
+  static async recordSecurityEvent(
+    action: AuditAction,
+    ip: string,
+    after: unknown
+  ): Promise<void> {
+    await AuditService.record(
+      { id: SYSTEM_ACTOR_ID, ip },
+      action,
+      "security_event",
+      NO_ENTITY_ID,
+      { after }
     );
   }
 }

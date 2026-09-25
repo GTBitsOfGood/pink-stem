@@ -1,4 +1,5 @@
 import dbConnect from "@/db/dbConnect";
+import { ensureIndexes } from "@/db/defineModel";
 import RateLimitWindowModel from "@/db/models/rateLimitWindow";
 import type { RateLimitWindow } from "@/types/rateLimit";
 
@@ -11,7 +12,7 @@ export default class RateLimitWindowDAO {
   static async hit(key: string, windowMs: number): Promise<RateLimitWindow> {
     await dbConnect();
     // Concurrent first hits share one window only once the unique index exists.
-    await RateLimitWindowModel.init();
+    await ensureIndexes(RateLimitWindowModel);
     const now = new Date();
     const stale = { $lte: ["$expiresAt", now] };
     return RateLimitWindowModel.findOneAndUpdate(

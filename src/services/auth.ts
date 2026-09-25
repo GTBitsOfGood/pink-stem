@@ -13,7 +13,6 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
-import { NO_ENTITY_ID, SYSTEM_ACTOR_ID } from "@/types/audit";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -43,7 +42,10 @@ const DAY = 24 * HOUR;
 
 /** Accounts, sessions, and every one-time link flow. */
 export default class AuthService {
-  /** Audits the first 429 in each window; there may be no account behind it. */
+  /**
+   * Audits the first 429 in each window; there may be no account behind it.
+   * A failed audit write is logged so the caller still gets the 429.
+   */
   private static async assertLimitAudited(
     key: string,
     limits: { limit: number; windowMs: number },
@@ -53,12 +55,10 @@ export default class AuthService {
       await assertRateLimit(key, limits);
     } catch (error) {
       if (error instanceof TooManyRequestsError && error.firstInWindow) {
-        await AuditService.record(
-          { id: SYSTEM_ACTOR_ID, ip },
-          "auth.rate_limited",
-          "security_event",
-          NO_ENTITY_ID,
-          { after: { key } }
+        await AuditService.recordSecurityEvent("auth.rate_limited", ip, {
+          key,
+        }).catch((auditError) =>
+          console.error("[rate-limit] audit write failed", auditError)
         );
       }
       throw error;
@@ -115,7 +115,7 @@ export default class AuthService {
 
   static async login(input: unknown, ip: string): Promise<SessionResult> {
     await AuthService.assertLimitAudited(
-      `login:${ip}`,
+      `login-address:${ip}`,
       RATE_LIMITS.loginPerAddress,
       ip
     );
@@ -126,7 +126,7 @@ export default class AuthService {
       ip
     );
     await AuthService.assertLimitAudited(
-      `login:${email}`,
+      `login-account:${email}`,
       RATE_LIMITS.loginPerAccount,
       ip
     );
