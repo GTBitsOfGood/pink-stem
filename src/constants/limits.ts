@@ -46,11 +46,12 @@ export const JOB_LOCK_TTL_MS = 10 * 60_000;
  * account and address, so a neighbour's typos on a shared address do not lock
  * an account out. Looser ceilings per address stop enumeration and per
  * account stop distributed guessing, at the cost that attempts from several
- * addresses can lock an account for one window.
+ * addresses can lock an account for one window; its owner can still get in
+ * through a password reset.
  */
 export const RATE_LIMITS = {
   login: { limit: 10, windowMs: 15 * 60_000 },
-  loginPerAccount: { limit: 50, windowMs: 15 * 60_000 },
+  loginPerAccount: { limit: 20, windowMs: 15 * 60_000 },
   loginPerAddress: { limit: 100, windowMs: 15 * 60_000 },
   register: { limit: 5, windowMs: 60 * 60_000 },
   passwordReset: { limit: 5, windowMs: 60 * 60_000 },
