@@ -152,7 +152,7 @@ export default class UserService {
   }
 
   static async resendEmailVerification(actor: Actor): Promise<void> {
-    assertRateLimit(
+    await assertRateLimit(
       `verify-email-resend:${actor.id}`,
       RATE_LIMITS.verifyEmailResend
     );

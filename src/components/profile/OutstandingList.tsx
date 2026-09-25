@@ -10,6 +10,8 @@ import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { PENDING_REASON_LABELS } from "@/constants/labels";
+import { RATE_LIMITS } from "@/constants/limits";
+import { HTTPError } from "@/types/exceptions";
 import { useState } from "react";
 
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
@@ -19,6 +21,11 @@ export default function OutstandingList() {
     useProfile();
   const toast = useToast();
   const [waiverOpen, setWaiverOpen] = useState(false);
+  const [verifyResendCount, setVerifyResendCount] = useState(0);
+  const [verifyResendBlocked, setVerifyResendBlocked] = useState(false);
+  const verifyResendLimitReached =
+    verifyResendBlocked ||
+    verifyResendCount >= RATE_LIMITS.verifyEmailResend.limit;
 
   if (!me) return null;
   const items = me.outstanding;
@@ -50,20 +57,37 @@ export default function OutstandingList() {
               {PENDING_REASON_LABELS[reason]}
             </span>
             {reason === "email_verification" ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Send className="h-3.5 w-3.5" />}
-                loading={resendEmailVerification.isPending}
-                onClick={() =>
-                  resendEmailVerification.mutate(undefined, {
-                    onSuccess: () =>
-                      toast("Verification link re-sent to your email."),
-                  })
-                }
-              >
-                Resend verification link
-              </Button>
+              verifyResendLimitReached ? (
+                <span className="text-[13px] text-amber-800">
+                  Resend limit reached. Try again in an hour, or use the link
+                  from an earlier email.
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Send className="h-3.5 w-3.5" />}
+                  loading={resendEmailVerification.isPending}
+                  onClick={() =>
+                    resendEmailVerification.mutate(undefined, {
+                      onSuccess: () => {
+                        setVerifyResendCount((n) => n + 1);
+                        toast("Verification link re-sent to your email.");
+                      },
+                      onError: (error) => {
+                        if (
+                          error instanceof HTTPError &&
+                          error.status === 429
+                        ) {
+                          setVerifyResendBlocked(true);
+                        }
+                      },
+                    })
+                  }
+                >
+                  Resend verification link
+                </Button>
+              )
             ) : reason === "waiver" ? (
               <Button
                 size="sm"
