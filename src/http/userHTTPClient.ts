@@ -22,7 +22,7 @@ export interface ConsentInfo {
   codeOfConductText: string;
 }
 
-export interface VerifyEmailInfo {
+interface VerifyEmailInfo {
   firstName: string;
   alreadyVerified: boolean;
 }
@@ -74,9 +74,7 @@ export default class UserHTTPClient {
     return fetchHTTPClient(`/verify-email/${token}`);
   }
 
-  static confirmEmailVerification(
-    token: string
-  ): Promise<{ firstName: string }> {
+  static confirmEmailVerification(token: string): Promise<void> {
     return fetchHTTPClient(`/verify-email/${token}`, "POST");
   }
 

@@ -109,9 +109,8 @@ export default function AuditPage() {
                   <td className={td}>{AUDIT_ACTION_LABELS[row.action]}</td>
                   <td className={`${td} font-mono text-xs`}>
                     {row.entityType}{" "}
-                    {String(row.entityId) === NO_ENTITY_ID
-                      ? ""
-                      : String(row.entityId).slice(-6)}
+                    {String(row.entityId) !== NO_ENTITY_ID &&
+                      String(row.entityId).slice(-6)}
                   </td>
                   <td
                     className={`${td} max-w-48 break-all font-mono text-xs text-ink-500`}

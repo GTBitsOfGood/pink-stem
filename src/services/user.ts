@@ -169,14 +169,14 @@ export default class UserService {
     const user = pending?.userId
       ? await UserDAO.findById(pending.userId)
       : null;
-    if (!pending || !user) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    if (!user) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     return {
       firstName: user.firstName,
       alreadyVerified: !!user.emailVerifiedAt,
     };
   }
 
-  static async verifyEmail(token: string): Promise<{ firstName: string }> {
+  static async verifyEmail(token: string): Promise<void> {
     const consumed = await ActionTokenDAO.consume(token, "verify_email");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const user = await UserDAO.updateById(consumed.userId, {
@@ -184,6 +184,5 @@ export default class UserService {
     });
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
     await SignupService.reevaluateForVolunteer(user._id);
-    return { firstName: user.firstName };
   }
 }

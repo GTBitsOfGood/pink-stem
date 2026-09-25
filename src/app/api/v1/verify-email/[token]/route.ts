@@ -10,6 +10,7 @@ export const GET = withErrorHandler<Params>(async (req, { params }) =>
   jsonNoStore(await UserService.verifyEmailInfo(params.token, clientIp(req)))
 );
 
-export const POST = withErrorHandler<Params>(async (_req, { params }) =>
-  NextResponse.json(await UserService.verifyEmail(params.token))
-);
+export const POST = withErrorHandler<Params>(async (_req, { params }) => {
+  await UserService.verifyEmail(params.token);
+  return new NextResponse(null, { status: 204 });
+});

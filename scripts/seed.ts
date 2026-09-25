@@ -33,9 +33,8 @@ async function ensureUser(
   const existing = await UserDAO.findAuthByEmail(data.email);
   if (existing) {
     // Databases seeded before email verification existed.
-    if (!existing.emailVerifiedAt) {
+    if (!existing.emailVerifiedAt)
       await UserDAO.updateById(existing._id, { emailVerifiedAt: new Date() });
-    }
     return existing;
   }
   const { password, ...rest } = data;
