@@ -39,6 +39,7 @@ async function ensureUser(
     passwordHash: await HashingService.hash(password),
     waiverVersionAccepted: 1,
     waiverAcceptedAt: new Date(),
+    emailVerifiedAt: new Date(),
   });
   console.log(`  created ${data.role}: ${data.email}`);
   return { ...created, sessionVersion: 0 };

@@ -150,4 +150,39 @@ export default class UserService {
     await SignupService.reevaluateForVolunteer(user._id);
     return { volunteerName: `${user.firstName} ${user.lastName}` };
   }
+
+  static async resendEmailVerification(actor: Actor): Promise<void> {
+    assertRateLimit(
+      `verify-email-resend:${actor.id}`,
+      RATE_LIMITS.verifyEmailResend
+    );
+    const user = await UserDAO.findById(actor.id);
+    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    if (user.emailVerifiedAt) return;
+    await AuthService.sendEmailVerification(user);
+  }
+
+  /** What the page shows before confirming. */
+  static async verifyEmailInfo(token: string) {
+    const pending = await ActionTokenDAO.findValid(token, "verify_email");
+    const user = pending?.userId
+      ? await UserDAO.findById(pending.userId)
+      : null;
+    if (!pending || !user) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    return {
+      firstName: user.firstName,
+      alreadyVerified: !!user.emailVerifiedAt,
+    };
+  }
+
+  static async verifyEmail(token: string): Promise<{ firstName: string }> {
+    const consumed = await ActionTokenDAO.consume(token, "verify_email");
+    if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    const user = await UserDAO.updateById(consumed.userId, {
+      emailVerifiedAt: new Date(),
+    });
+    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    await SignupService.reevaluateForVolunteer(user._id);
+    return { firstName: user.firstName };
+  }
 }

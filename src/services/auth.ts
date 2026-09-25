@@ -1,6 +1,7 @@
 import ActionTokenDAO from "@/db/actions/actionToken";
 import UserDAO from "@/db/actions/user";
 import {
+  EMAIL_VERIFICATION_DAYS,
   GUARDIAN_CONSENT_DAYS,
   RATE_LIMITS,
   RESET_PASSWORD_TOKEN_MINUTES,
@@ -107,6 +108,7 @@ export default class AuthService {
     });
 
     if (minor) await AuthService.sendGuardianConsent(created);
+    await AuthService.sendEmailVerification(created);
 
     return AuthService.session({ ...created, sessionVersion: 0 });
   }
@@ -179,6 +181,7 @@ export default class AuthService {
         role: "volunteer",
         firstName: info.given_name ?? "New",
         lastName: info.family_name ?? "Volunteer",
+        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }
@@ -207,6 +210,25 @@ export default class AuthService {
       NotificationService.templates.guardianConsent(org, {
         volunteerName: `${user.firstName} ${user.lastName}`,
         url: appUrl(`/consent/${secret}`),
+      })
+    );
+  }
+
+  static async sendEmailVerification(
+    user: Pick<Doc<SafeUser>, "_id" | "email" | "firstName" | "status">
+  ): Promise<void> {
+    const { secret } = await ActionTokenDAO.issue({
+      purpose: "verify_email",
+      email: user.email,
+      userId: user._id,
+      ttlMs: EMAIL_VERIFICATION_DAYS * DAY,
+    });
+    const org = await NotificationService.org();
+    await NotificationService.send(
+      user,
+      NotificationService.templates.verifyEmail(org, {
+        name: user.firstName,
+        url: appUrl(`/verify-email/${secret}`),
       })
     );
   }
@@ -284,6 +306,7 @@ export default class AuthService {
         role: invite.role,
         status: "active",
         deactivatedAt: null,
+        emailVerifiedAt: new Date(),
       });
       await UserDAO.setPassword(existing._id, passwordHash);
       user = (await UserDAO.findAuthById(existing._id)) as Doc<User>;
@@ -304,6 +327,7 @@ export default class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         passwordHash,
+        emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }

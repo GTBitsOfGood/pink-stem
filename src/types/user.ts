@@ -42,6 +42,7 @@ export interface EmergencyContact {
 
 export interface User {
   email: string;
+  emailVerifiedAt?: Date | null;
   passwordHash?: string;
   provider: AuthProvider;
   role: Role;

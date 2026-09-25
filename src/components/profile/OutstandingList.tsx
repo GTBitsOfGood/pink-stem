@@ -15,7 +15,8 @@ import { useState } from "react";
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
 export default function OutstandingList() {
   const { me } = useSession();
-  const { acceptWaiver, resendGuardianConsent } = useProfile();
+  const { acceptWaiver, resendGuardianConsent, resendEmailVerification } =
+    useProfile();
   const toast = useToast();
   const [waiverOpen, setWaiverOpen] = useState(false);
 
@@ -48,7 +49,22 @@ export default function OutstandingList() {
               <CircleAlert className="h-4 w-4 shrink-0 text-amber-600" />
               {PENDING_REASON_LABELS[reason]}
             </span>
-            {reason === "waiver" ? (
+            {reason === "email_verification" ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Send className="h-3.5 w-3.5" />}
+                loading={resendEmailVerification.isPending}
+                onClick={() =>
+                  resendEmailVerification.mutate(undefined, {
+                    onSuccess: () =>
+                      toast("Verification link re-sent to your email."),
+                  })
+                }
+              >
+                Resend verification link
+              </Button>
+            ) : reason === "waiver" ? (
               <Button
                 size="sm"
                 variant="secondary"

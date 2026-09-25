@@ -28,6 +28,7 @@ const userSchema = new Schema<User>(
       lowercase: true,
       trim: true,
     },
+    emailVerifiedAt: { type: Date, default: null },
     passwordHash: { type: String, select: false },
     provider: { type: String, enum: AUTH_PROVIDERS, required: true },
     role: { type: String, enum: ROLES, default: "volunteer", index: true },

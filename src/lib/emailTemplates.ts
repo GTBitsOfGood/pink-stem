@@ -126,6 +126,15 @@ const PREFS_NOTE =
   "You can change which emails you receive under Profile in the Volunteer Hub. Confirmations for your own sign-ups are always sent.";
 
 export const emailTemplates = {
+  verifyEmail: (org: Org, p: { name: string; url: string }) =>
+    build(
+      org,
+      "Confirm your Volunteer Hub email address",
+      "Confirm your email address",
+      `Hi ${p.name},\n\nUse the link below to confirm this is your email address. You can browse and sign in without doing this, but a sign-up cannot be confirmed for a shift until you do. It expires in 7 days.`,
+      { cta: { label: "Confirm my email", url: p.url } }
+    ),
+
   passwordReset: (org: Org, p: { name: string; url: string }) =>
     build(
       org,

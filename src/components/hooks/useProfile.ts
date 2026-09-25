@@ -25,6 +25,9 @@ export function useProfile() {
     resendGuardianConsent: useMutation({
       mutationFn: () => UserHTTPClient.resendGuardianConsent(),
     }),
+    resendEmailVerification: useMutation({
+      mutationFn: () => UserHTTPClient.resendEmailVerification(),
+    }),
   };
 }
 

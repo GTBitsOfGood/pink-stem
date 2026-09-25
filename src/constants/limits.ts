@@ -8,6 +8,7 @@ export const PASSWORD_MIN_LENGTH = 12;
 export const RESET_PASSWORD_TOKEN_MINUTES = 30;
 export const ORGANIZER_INVITE_DAYS = 7;
 export const GUARDIAN_CONSENT_DAYS = 14;
+export const EMAIL_VERIFICATION_DAYS = 7;
 
 export const ADULT_AGE = 18;
 
@@ -56,4 +57,5 @@ export const RATE_LIMITS = {
   verify: { limit: 60, windowMs: 60_000 },
   inviteLookup: { limit: 20, windowMs: 15 * 60_000 },
   consentLookup: { limit: 20, windowMs: 15 * 60_000 },
+  verifyEmailResend: { limit: 5, windowMs: 60 * 60_000 },
 } as const;
