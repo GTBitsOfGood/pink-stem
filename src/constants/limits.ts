@@ -59,4 +59,5 @@ export const RATE_LIMITS = {
   inviteLookup: { limit: 20, windowMs: 15 * 60_000 },
   consentLookup: { limit: 20, windowMs: 15 * 60_000 },
   verifyEmailResend: { limit: 5, windowMs: 60 * 60_000 },
+  verifyEmailLookup: { limit: 20, windowMs: 15 * 60_000 },
 } as const;

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Container from "@/components/layout/Container";
 import Button from "@/components/ui/Button";
 import { Alert, PageHeader, Spinner } from "@/components/ui/Primitives";
-import { errorMessage } from "@/components/ui/Toast";
+import { errorMessage, isRateLimited } from "@/components/ui/Toast";
+import { QUERY_KEYS } from "@/constants/queryKeys";
 import UserHTTPClient from "@/http/userHTTPClient";
 
 /** Public page reached from the "confirm your email" link. */
@@ -16,8 +17,14 @@ export default function VerifyEmailPage() {
     queryFn: () => UserHTTPClient.verifyEmailInfo(token),
     retry: false,
   });
+  const queryClient = useQueryClient();
   const verify = useMutation({
     mutationFn: () => UserHTTPClient.confirmEmailVerification(token),
+    // A signed-in tab would otherwise keep showing the outstanding item.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.mySignups });
+    },
   });
 
   if (info.isPending)
@@ -29,10 +36,17 @@ export default function VerifyEmailPage() {
   if (info.isError) {
     return (
       <Container className="max-w-2xl py-12">
-        <Alert tone="danger" title="This link is no longer valid">
-          {errorMessage(info.error)} Sign in and request a new verification link
-          from your profile.
-        </Alert>
+        {isRateLimited(info.error) ? (
+          <Alert tone="danger" title="Too many attempts">
+            {errorMessage(info.error)}
+          </Alert>
+        ) : (
+          <Alert tone="danger" title="This link is no longer valid">
+            {errorMessage(info.error)} If you already confirmed your email,
+            there is nothing more to do. Otherwise, sign in and request a new
+            verification link from your dashboard.
+          </Alert>
+        )}
       </Container>
     );
   }

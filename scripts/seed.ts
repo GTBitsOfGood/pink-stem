@@ -31,7 +31,13 @@ async function ensureUser(
   } & Partial<User>
 ): Promise<Doc<User>> {
   const existing = await UserDAO.findAuthByEmail(data.email);
-  if (existing) return existing;
+  if (existing) {
+    // Databases seeded before email verification existed.
+    if (!existing.emailVerifiedAt) {
+      await UserDAO.updateById(existing._id, { emailVerifiedAt: new Date() });
+    }
+    return existing;
+  }
   const { password, ...rest } = data;
   const created = await UserDAO.create({
     ...rest,

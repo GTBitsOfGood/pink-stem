@@ -20,7 +20,7 @@ import { updateProfileSchema } from "@/utils/validation/user";
 /** Fields that an empty string clears rather than stores. */
 const CLEARABLE = ["phone", "city", "guardianEmail", "bio"] as const;
 
-/** The signed-in user's own profile, waiver, and guardian consent. */
+/** The signed-in user's own profile, waiver, guardian consent, and email verification. */
 export default class UserService {
   static async getMe(actor: Actor): Promise<MeResponse> {
     const [user, clearance, settings, unreadMessages] = await Promise.all([
@@ -163,7 +163,8 @@ export default class UserService {
   }
 
   /** What the page shows before confirming. */
-  static async verifyEmailInfo(token: string) {
+  static async verifyEmailInfo(token: string, ip: string) {
+    await assertRateLimit(`verify-email:${ip}`, RATE_LIMITS.verifyEmailLookup);
     const pending = await ActionTokenDAO.findValid(token, "verify_email");
     const user = pending?.userId
       ? await UserDAO.findById(pending.userId)

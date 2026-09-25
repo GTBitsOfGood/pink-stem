@@ -8,10 +8,8 @@ import WaiverDialog from "@/components/profile/WaiverDialog";
 import { ClearanceBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
-import { useToast } from "@/components/ui/Toast";
+import { errorMessage, isRateLimited, useToast } from "@/components/ui/Toast";
 import { PENDING_REASON_LABELS } from "@/constants/labels";
-import { RATE_LIMITS } from "@/constants/limits";
-import { HTTPError } from "@/types/exceptions";
 import { useState } from "react";
 
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
@@ -21,11 +19,7 @@ export default function OutstandingList() {
     useProfile();
   const toast = useToast();
   const [waiverOpen, setWaiverOpen] = useState(false);
-  const [verifyResendCount, setVerifyResendCount] = useState(0);
   const [verifyResendBlocked, setVerifyResendBlocked] = useState(false);
-  const verifyResendLimitReached =
-    verifyResendBlocked ||
-    verifyResendCount >= RATE_LIMITS.verifyEmailResend.limit;
 
   if (!me) return null;
   const items = me.outstanding;
@@ -57,7 +51,7 @@ export default function OutstandingList() {
               {PENDING_REASON_LABELS[reason]}
             </span>
             {reason === "email_verification" ? (
-              verifyResendLimitReached ? (
+              verifyResendBlocked ? (
                 <span className="text-[13px] text-amber-800">
                   Resend limit reached. Try again in an hour, or use the link
                   from an earlier email.
@@ -70,18 +64,12 @@ export default function OutstandingList() {
                   loading={resendEmailVerification.isPending}
                   onClick={() =>
                     resendEmailVerification.mutate(undefined, {
-                      onSuccess: () => {
-                        setVerifyResendCount((n) => n + 1);
-                        toast("Verification link re-sent to your email.");
-                      },
-                      onError: (error) => {
-                        if (
-                          error instanceof HTTPError &&
-                          error.status === 429
-                        ) {
-                          setVerifyResendBlocked(true);
-                        }
-                      },
+                      onSuccess: () =>
+                        toast("Verification link re-sent to your email."),
+                      onError: (error) =>
+                        isRateLimited(error)
+                          ? setVerifyResendBlocked(true)
+                          : toast(errorMessage(error), "error"),
                     })
                   }
                 >

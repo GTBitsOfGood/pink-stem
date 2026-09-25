@@ -13,6 +13,7 @@ import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
+import SignupService from "@/services/signup";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -181,12 +182,18 @@ export default class AuthService {
         role: "volunteer",
         firstName: info.given_name ?? "New",
         lastName: info.family_name ?? "Volunteer",
+        // Google checked the address (email_verified above).
         emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
     }
     if (user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
+    }
+    if (!user.emailVerifiedAt) {
+      // Accounts from before verification existed; Google vouches for them.
+      await UserDAO.updateById(user._id, { emailVerifiedAt: new Date() });
+      await SignupService.reevaluateForVolunteer(user._id);
     }
     return AuthService.session(user);
   }
@@ -306,9 +313,12 @@ export default class AuthService {
         role: invite.role,
         status: "active",
         deactivatedAt: null,
-        emailVerifiedAt: new Date(),
+        // The invite link was delivered to this address.
+        emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
       });
       await UserDAO.setPassword(existing._id, passwordHash);
+      // Sign-ups held only on email verification can confirm now.
+      await SignupService.reevaluateForVolunteer(existing._id);
       user = (await UserDAO.findAuthById(existing._id)) as Doc<User>;
       if (invite.invitedBy) {
         await AuditService.record(
@@ -327,6 +337,7 @@ export default class AuthService {
         firstName: data.firstName,
         lastName: data.lastName,
         passwordHash,
+        // The invite link was delivered to this address.
         emailVerifiedAt: new Date(),
       });
       user = { ...created, sessionVersion: 0 };
