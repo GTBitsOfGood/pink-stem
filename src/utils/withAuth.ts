@@ -95,7 +95,7 @@ function wrap<T, A extends Actor | null>(
       const response = await handler(req, { params }, actor as A);
 
       // Sessions expire after 30 days of inactivity, so activity slides them.
-      if (renew) {
+      if (renew && !response.cookies.has(SESSION_COOKIE)) {
         const token = await signSession(
           renew.userId,
           renew.role,
