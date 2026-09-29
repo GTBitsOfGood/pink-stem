@@ -114,6 +114,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "user.deactivated": "Account deactivated",
   "user.reactivated": "Account reactivated",
   "user.force_signout": "Forced sign-out",
+  "user.password_changed": "Password changed",
   "user.flagged_for_review": "Flagged for review",
   "clearance.recorded": "Clearance recorded",
   "hours.approved": "Hours approved",

@@ -33,8 +33,8 @@ const SUMMARY_FIELDS = "firstName lastName email phone skills role status";
 
 /**
  * Data access for users. Private fields (`passwordHash`, `sessionVersion`)
- * are `select: false` on the schema, so only the two `findAuth*` methods
- * ever load them.
+ * are `select: false` on the schema, so only the `findAuth*` methods,
+ * `findPasswordHash` and `setPassword` ever load them.
  */
 export default class UserDAO {
   /** Strips the fields that must never reach a client. */
@@ -79,6 +79,16 @@ export default class UserDAO {
     return UserModel.findById(id).select("+sessionVersion").lean<Doc<User>>();
   }
 
+  static async findPasswordHash(
+    id: string | Types.ObjectId
+  ): Promise<string | undefined> {
+    await dbConnect();
+    const user = await UserModel.findById(id)
+      .select("+passwordHash")
+      .lean<Pick<User, "passwordHash">>();
+    return user?.passwordHash;
+  }
+
   static async updateById(
     id: string | Types.ObjectId,
     updates: UpdateQuery<User>
@@ -93,13 +103,17 @@ export default class UserDAO {
   /** Changing the password signs every other session out. */
   static async setPassword(
     id: string | Types.ObjectId,
-    passwordHash: string
-  ): Promise<void> {
+    passwordHash: string,
+    currentHash?: string
+  ): Promise<Doc<User> | null> {
     await dbConnect();
-    await UserModel.updateOne(
-      { _id: id },
-      { passwordHash, $inc: { sessionVersion: 1 } }
-    );
+    return UserModel.findOneAndUpdate(
+      currentHash ? { _id: id, passwordHash: currentHash } : { _id: id },
+      { passwordHash, $inc: { sessionVersion: 1 } },
+      { returnDocument: "after" }
+    )
+      .select("+sessionVersion")
+      .lean<Doc<User>>();
   }
 
   static async bumpSessionVersion(id: string | Types.ObjectId): Promise<void> {

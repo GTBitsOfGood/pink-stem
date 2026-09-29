@@ -6,7 +6,7 @@ export type Role = (typeof ROLES)[number];
 export const USER_STATUSES = ["active", "inactive"] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
-export const AUTH_PROVIDERS = ["password", "google"] as const;
+export const AUTH_PROVIDERS = ["password"] as const;
 export type AuthProvider = (typeof AUTH_PROVIDERS)[number];
 
 export const SKILLS = [

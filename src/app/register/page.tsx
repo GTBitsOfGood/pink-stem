@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
-import GoogleButton from "@/components/auth/GoogleButton";
 import { useAuthActions } from "@/components/hooks/useAuthActions";
 import { useFormValues } from "@/components/hooks/useFormValues";
 import Button from "@/components/ui/Button";
@@ -16,7 +15,7 @@ import { isMinor } from "@/lib/dates";
 
 function RegisterForm() {
   const next = useSearchParams().get("next") ?? "/dashboard";
-  const { register, google } = useAuthActions(next);
+  const { register } = useAuthActions(next);
   const { values, set } = useFormValues({
     firstName: "",
     lastName: "",
@@ -27,7 +26,6 @@ function RegisterForm() {
     phone: "",
   });
   const minor = values.dateOfBirth ? isMinor(values.dateOfBirth) : false;
-  const error = register.error ?? google.error;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -55,7 +53,9 @@ function RegisterForm() {
       }
     >
       <form onSubmit={submit} className="grid gap-4">
-        {error ? <Alert tone="danger">{errorMessage(error)}</Alert> : null}
+        {register.error ? (
+          <Alert tone="danger">{errorMessage(register.error)}</Alert>
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
             label="First name"
@@ -123,7 +123,6 @@ function RegisterForm() {
           of conduct, which you will review before your first sign-up.
         </p>
       </form>
-      <GoogleButton onCredential={(credential) => google.mutate(credential)} />
     </AuthCard>
   );
 }

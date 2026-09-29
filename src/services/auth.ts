@@ -14,6 +14,7 @@ import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
 import SignupService from "@/services/signup";
+import type { Actor } from "@/types/auth";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -26,8 +27,8 @@ import type { Role, SafeUser, User } from "@/types/user";
 import ERRORS from "@/utils/errorMessages";
 import {
   acceptInviteSchema,
+  changePasswordSchema,
   emailOnlySchema,
-  googleSchema,
   loginSchema,
   registerSchema,
   resetPasswordSchema,
@@ -75,18 +76,27 @@ export default class AuthService {
     return { token, user: UserDAO.toSafe(user) };
   }
 
+  private static async auditPasswordChange(
+    actor: Pick<Actor, "id" | "ip">,
+    via: "change" | "reset"
+  ): Promise<void> {
+    await AuditService.record(
+      actor,
+      "user.password_changed",
+      "user",
+      actor.id,
+      { after: { via } }
+    ).catch((auditError) =>
+      console.error("[password] audit write failed", auditError)
+    );
+  }
+
   static async register(input: unknown, ip: string): Promise<SessionResult> {
     await assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
     const data = registerSchema.parse(input);
 
     const existing = await UserDAO.findByEmail(data.email);
-    if (existing) {
-      throw new ConflictError(
-        existing.provider === "google"
-          ? ERRORS.AUTH.GOOGLE_ACCOUNT
-          : ERRORS.AUTH.EMAIL_TAKEN
-      );
-    }
+    if (existing) throw new ConflictError(ERRORS.AUTH.EMAIL_TAKEN);
 
     const minor = isMinor(data.dateOfBirth);
     if (minor && !data.guardianEmail) {
@@ -133,67 +143,12 @@ export default class AuthService {
     );
 
     const user = await UserDAO.findAuthByEmail(email);
-    if (user?.provider === "google") {
-      throw new ConflictError(ERRORS.AUTH.GOOGLE_ACCOUNT);
-    }
     const matches = await HashingService.compare(
       password,
       user?.passwordHash ?? HashingService.DUMMY_HASH
     );
     if (!user || !matches || user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
-    }
-    return AuthService.session(user);
-  }
-
-  static async loginWithGoogle(input: unknown): Promise<SessionResult> {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    if (!clientId)
-      throw new InvalidArgumentsError(ERRORS.AUTH.GOOGLE_NOT_CONFIGURED);
-    const { credential } = googleSchema.parse(input);
-
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-    );
-    const info = (await response.json()) as {
-      aud?: string;
-      email?: string;
-      email_verified?: string;
-      given_name?: string;
-      family_name?: string;
-    };
-    if (
-      !response.ok ||
-      info.aud !== clientId ||
-      !info.email ||
-      info.email_verified !== "true"
-    ) {
-      throw new UnauthorizedError(ERRORS.AUTH.GOOGLE_TOKEN);
-    }
-
-    let user = await UserDAO.findAuthByEmail(info.email);
-    if (user?.provider === "password") {
-      throw new ConflictError(ERRORS.AUTH.PASSWORD_ACCOUNT);
-    }
-    if (!user) {
-      const created = await UserDAO.create({
-        email: info.email,
-        provider: "google",
-        role: "volunteer",
-        firstName: info.given_name ?? "New",
-        lastName: info.family_name ?? "Volunteer",
-        // Google checked the address (email_verified above).
-        emailVerifiedAt: new Date(),
-      });
-      user = { ...created, sessionVersion: 0 };
-    }
-    if (user.status !== "active") {
-      throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
-    }
-    if (!user.emailVerifiedAt) {
-      // Accounts from before verification existed; Google vouches for them.
-      await UserDAO.updateById(user._id, { emailVerifiedAt: new Date() });
-      await SignupService.reevaluateForVolunteer(user._id);
     }
     return AuthService.session(user);
   }
@@ -249,8 +204,7 @@ export default class AuthService {
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);
     // Always resolve: the response never reveals whether the account exists.
-    if (!user || user.provider !== "password" || user.status !== "active")
-      return;
+    if (!user || user.status !== "active") return;
 
     const { secret } = await ActionTokenDAO.issue({
       purpose: "reset_password",
@@ -268,17 +222,48 @@ export default class AuthService {
     );
   }
 
-  static async resetPassword(input: unknown): Promise<SessionResult> {
+  static async resetPassword(
+    input: unknown,
+    ip: string
+  ): Promise<SessionResult> {
     const { token, password } = resetPasswordSchema.parse(input);
     const consumed = await ActionTokenDAO.consume(token, "reset_password");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
-
-    await UserDAO.setPassword(
+    const user = await UserDAO.setPassword(
       consumed.userId,
       await HashingService.hash(password)
     );
-    const user = await UserDAO.findAuthById(consumed.userId);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    await AuthService.auditPasswordChange(
+      { id: user._id.toString(), ip },
+      "reset"
+    );
+    return AuthService.session(user);
+  }
+
+  static async changePassword(
+    actor: Actor,
+    input: unknown
+  ): Promise<SessionResult> {
+    await assertRateLimit(
+      `password-change:${actor.id}`,
+      RATE_LIMITS.passwordChange
+    );
+    const { currentPassword, newPassword } = changePasswordSchema.parse(input);
+    const passwordHash = await UserDAO.findPasswordHash(actor.id);
+    if (
+      !passwordHash ||
+      !(await HashingService.compare(currentPassword, passwordHash))
+    ) {
+      throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    }
+    const user = await UserDAO.setPassword(
+      actor.id,
+      await HashingService.hash(newPassword),
+      passwordHash
+    );
+    if (!user) throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    await AuthService.auditPasswordChange(actor, "change");
     return AuthService.session(user);
   }
 
