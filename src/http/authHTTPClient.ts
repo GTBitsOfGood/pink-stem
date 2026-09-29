@@ -30,10 +30,6 @@ export default class AuthHTTPClient {
     return fetchHTTPClient("/auth/login", "POST", body);
   }
 
-  static loginWithGoogle(credential: string): Promise<ClientUser> {
-    return fetchHTTPClient("/auth/google", "POST", { credential });
-  }
-
   static logout(): Promise<void> {
     return fetchHTTPClient("/auth/logout", "POST");
   }

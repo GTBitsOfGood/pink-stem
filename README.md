@@ -100,7 +100,7 @@ authorization is enforced server-side on every request by `withAuth`.
 
 | Area         | Endpoints                                                                                                                                                          |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/google`, `auth/me`, `auth/forgot-password`, `auth/reset-password`, `auth/invite/:token`                        |
+| Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/me`, `auth/forgot-password`, `auth/reset-password`, `auth/invite/:token`                                       |
 | Me           | `me` (profile), `me/waiver`, `me/guardian-consent`, `me/verify-email`, `me/signups`, `me/hours`, `me/certificates`                                                 |
 | Public       | `events`, `events/:id`, `settings`, `consent/:token`, `verify-email/:token`, `verify/:code`                                                                        |
 | Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |

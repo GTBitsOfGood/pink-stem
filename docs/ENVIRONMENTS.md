@@ -49,7 +49,6 @@ at its own database so a staging deploy can never write to production data.
 | `CRON_SECRET`                    | Yes      | Shared secret for `POST /api/v1/jobs/run`                      |
 | `RESEND_API_KEY`                 | Prod     | Sends email through Resend; unset, emails go to the server log |
 | `EMAIL_FROM`                     | Prod     | Sender shown on every email                                    |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`   | No       | Enables the Google sign-in button                              |
 | `SEED_ADMIN_EMAIL` / `_PASSWORD` | Seed     | First admin created by `npm run seed`                          |
 
 Leave `RESEND_API_KEY` unset on deploy previews so test sign-ups never email

@@ -4,15 +4,7 @@ import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
 const ERRORS = Object.freeze({
   AUTH: {
     INVALID_CREDENTIALS: "That email and password combination is not right.",
-    ACCOUNT_INACTIVE:
-      "This account has been deactivated. Contact Pink STEM if you think that is a mistake.",
     EMAIL_TAKEN: "An account with this email already exists.",
-    GOOGLE_ACCOUNT:
-      "This email signs in with Google. Use the Google button instead.",
-    PASSWORD_ACCOUNT:
-      "This email signs in with a password. Enter it below instead of using Google.",
-    GOOGLE_NOT_CONFIGURED: "Google sign-in is not enabled.",
-    GOOGLE_TOKEN: "Google could not verify that sign-in. Try again.",
     WEAK_PASSWORD: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
     TOKEN_INVALID: "This link is invalid or has already been used.",
     SESSION_REQUIRED: "Sign in to continue.",

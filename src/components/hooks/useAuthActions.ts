@@ -26,11 +26,6 @@ export function useAuthActions(next = "/dashboard") {
       mutationFn: (body: RegisterBody) => AuthHTTPClient.register(body),
       onSuccess: onSignedIn,
     }),
-    google: useMutation({
-      mutationFn: (credential: string) =>
-        AuthHTTPClient.loginWithGoogle(credential),
-      onSuccess: onSignedIn,
-    }),
     resetPassword: useMutation({
       mutationFn: (body: ResetPasswordInput) =>
         AuthHTTPClient.resetPassword(body),

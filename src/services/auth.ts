@@ -27,7 +27,6 @@ import ERRORS from "@/utils/errorMessages";
 import {
   acceptInviteSchema,
   emailOnlySchema,
-  googleSchema,
   loginSchema,
   registerSchema,
   resetPasswordSchema,
@@ -80,13 +79,7 @@ export default class AuthService {
     const data = registerSchema.parse(input);
 
     const existing = await UserDAO.findByEmail(data.email);
-    if (existing) {
-      throw new ConflictError(
-        existing.provider === "google"
-          ? ERRORS.AUTH.GOOGLE_ACCOUNT
-          : ERRORS.AUTH.EMAIL_TAKEN
-      );
-    }
+    if (existing) throw new ConflictError(ERRORS.AUTH.EMAIL_TAKEN);
 
     const minor = isMinor(data.dateOfBirth);
     if (minor && !data.guardianEmail) {
@@ -133,67 +126,12 @@ export default class AuthService {
     );
 
     const user = await UserDAO.findAuthByEmail(email);
-    if (user?.provider === "google") {
-      throw new ConflictError(ERRORS.AUTH.GOOGLE_ACCOUNT);
-    }
     const matches = await HashingService.compare(
       password,
       user?.passwordHash ?? HashingService.DUMMY_HASH
     );
     if (!user || !matches || user.status !== "active") {
       throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
-    }
-    return AuthService.session(user);
-  }
-
-  static async loginWithGoogle(input: unknown): Promise<SessionResult> {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    if (!clientId)
-      throw new InvalidArgumentsError(ERRORS.AUTH.GOOGLE_NOT_CONFIGURED);
-    const { credential } = googleSchema.parse(input);
-
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
-    );
-    const info = (await response.json()) as {
-      aud?: string;
-      email?: string;
-      email_verified?: string;
-      given_name?: string;
-      family_name?: string;
-    };
-    if (
-      !response.ok ||
-      info.aud !== clientId ||
-      !info.email ||
-      info.email_verified !== "true"
-    ) {
-      throw new UnauthorizedError(ERRORS.AUTH.GOOGLE_TOKEN);
-    }
-
-    let user = await UserDAO.findAuthByEmail(info.email);
-    if (user?.provider === "password") {
-      throw new ConflictError(ERRORS.AUTH.PASSWORD_ACCOUNT);
-    }
-    if (!user) {
-      const created = await UserDAO.create({
-        email: info.email,
-        provider: "google",
-        role: "volunteer",
-        firstName: info.given_name ?? "New",
-        lastName: info.family_name ?? "Volunteer",
-        // Google checked the address (email_verified above).
-        emailVerifiedAt: new Date(),
-      });
-      user = { ...created, sessionVersion: 0 };
-    }
-    if (user.status !== "active") {
-      throw new UnauthorizedError(ERRORS.AUTH.ACCOUNT_INACTIVE);
-    }
-    if (!user.emailVerifiedAt) {
-      // Accounts from before verification existed; Google vouches for them.
-      await UserDAO.updateById(user._id, { emailVerifiedAt: new Date() });
-      await SignupService.reevaluateForVolunteer(user._id);
     }
     return AuthService.session(user);
   }
