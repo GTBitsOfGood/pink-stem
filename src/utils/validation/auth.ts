@@ -33,6 +33,12 @@ export const resetPasswordSchema = tokenSchema.extend({
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: passwordSchema,
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
 export const acceptInviteSchema = tokenSchema.extend({
   firstName: text(60),
   lastName: text(60),

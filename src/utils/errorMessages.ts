@@ -6,6 +6,7 @@ const ERRORS = Object.freeze({
     INVALID_CREDENTIALS: "That email and password combination is not right.",
     EMAIL_TAKEN: "An account with this email already exists.",
     WEAK_PASSWORD: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
+    WRONG_PASSWORD: "That is not your current password.",
     TOKEN_INVALID: "This link is invalid or has already been used.",
     SESSION_REQUIRED: "Sign in to continue.",
     FORBIDDEN: "You do not have permission to do that.",

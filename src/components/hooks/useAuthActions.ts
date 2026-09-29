@@ -4,7 +4,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { QUERY_KEYS } from "@/constants/queryKeys";
 import AuthHTTPClient, { RegisterBody } from "@/http/authHTTPClient";
-import type { LoginInput, ResetPasswordInput } from "@/utils/validation/auth";
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  ResetPasswordInput,
+} from "@/utils/validation/auth";
 
 /** Sign-in flows. Each lands the user on `next` and reloads the session. */
 export function useAuthActions(next = "/dashboard") {
@@ -45,6 +49,10 @@ export function useAuthActions(next = "/dashboard") {
     }),
     forgotPassword: useMutation({
       mutationFn: (email: string) => AuthHTTPClient.forgotPassword(email),
+    }),
+    changePassword: useMutation({
+      mutationFn: (body: ChangePasswordInput) =>
+        AuthHTTPClient.changePassword(body),
     }),
   };
 }

@@ -33,8 +33,8 @@ const SUMMARY_FIELDS = "firstName lastName email phone skills role status";
 
 /**
  * Data access for users. Private fields (`passwordHash`, `sessionVersion`)
- * are `select: false` on the schema, so only the two `findAuth*` methods
- * ever load them.
+ * are `select: false` on the schema, so only the `findAuth*` methods and
+ * `findPasswordHash` ever load them.
  */
 export default class UserDAO {
   /** Strips the fields that must never reach a client. */
@@ -77,6 +77,16 @@ export default class UserDAO {
     await dbConnect();
     if (!Types.ObjectId.isValid(id)) return null;
     return UserModel.findById(id).select("+sessionVersion").lean<Doc<User>>();
+  }
+
+  static async findPasswordHash(
+    id: string | Types.ObjectId
+  ): Promise<string | undefined> {
+    await dbConnect();
+    const user = await UserModel.findById(id)
+      .select("+passwordHash")
+      .lean<Pick<User, "passwordHash">>();
+    return user?.passwordHash;
   }
 
   static async updateById(

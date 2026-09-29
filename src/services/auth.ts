@@ -14,6 +14,7 @@ import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
 import SignupService from "@/services/signup";
+import type { Actor } from "@/types/auth";
 import {
   ConflictError,
   InvalidArgumentsError,
@@ -26,6 +27,7 @@ import type { Role, SafeUser, User } from "@/types/user";
 import ERRORS from "@/utils/errorMessages";
 import {
   acceptInviteSchema,
+  changePasswordSchema,
   emailOnlySchema,
   loginSchema,
   registerSchema,
@@ -72,6 +74,16 @@ export default class AuthService {
       user.sessionVersion ?? 0
     );
     return { token, user: UserDAO.toSafe(user) };
+  }
+
+  private static async replacePassword(
+    userId: string,
+    password: string
+  ): Promise<SessionResult> {
+    await UserDAO.setPassword(userId, await HashingService.hash(password));
+    const user = await UserDAO.findAuthById(userId);
+    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    return AuthService.session(user);
   }
 
   static async register(input: unknown, ip: string): Promise<SessionResult> {
@@ -209,14 +221,26 @@ export default class AuthService {
     const { token, password } = resetPasswordSchema.parse(input);
     const consumed = await ActionTokenDAO.consume(token, "reset_password");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    return AuthService.replacePassword(consumed.userId.toString(), password);
+  }
 
-    await UserDAO.setPassword(
-      consumed.userId,
-      await HashingService.hash(password)
+  static async changePassword(
+    actor: Actor,
+    input: unknown
+  ): Promise<SessionResult> {
+    await assertRateLimit(
+      `password-change:${actor.id}`,
+      RATE_LIMITS.passwordChange
     );
-    const user = await UserDAO.findAuthById(consumed.userId);
-    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    return AuthService.session(user);
+    const { currentPassword, newPassword } = changePasswordSchema.parse(input);
+    const passwordHash = await UserDAO.findPasswordHash(actor.id);
+    if (
+      !passwordHash ||
+      !(await HashingService.compare(currentPassword, passwordHash))
+    ) {
+      throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    }
+    return AuthService.replacePassword(actor.id, newPassword);
   }
 
   static async getInvite(
