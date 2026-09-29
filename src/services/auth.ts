@@ -187,8 +187,7 @@ export default class AuthService {
     const { email } = emailOnlySchema.parse(input);
     const user = await UserDAO.findByEmail(email);
     // Always resolve: the response never reveals whether the account exists.
-    if (!user || user.provider !== "password" || user.status !== "active")
-      return;
+    if (!user || user.status !== "active") return;
 
     const { secret } = await ActionTokenDAO.issue({
       purpose: "reset_password",
