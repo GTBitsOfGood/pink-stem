@@ -86,6 +86,8 @@ export default class AuthService {
       "user",
       actor.id,
       { after: { via } }
+    ).catch((auditError) =>
+      console.error("[password] audit write failed", auditError)
     );
   }
 
