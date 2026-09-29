@@ -77,11 +77,19 @@ export default class AuthService {
   }
 
   private static async replacePassword(
-    userId: string,
-    password: string
+    actor: Pick<Actor, "id" | "ip">,
+    password: string,
+    via: "change" | "reset"
   ): Promise<SessionResult> {
-    await UserDAO.setPassword(userId, await HashingService.hash(password));
-    const user = await UserDAO.findAuthById(userId);
+    await UserDAO.setPassword(actor.id, await HashingService.hash(password));
+    await AuditService.record(
+      actor,
+      "user.password_changed",
+      "user",
+      actor.id,
+      { after: { via } }
+    );
+    const user = await UserDAO.findAuthById(actor.id);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
     return AuthService.session(user);
   }
@@ -217,11 +225,18 @@ export default class AuthService {
     );
   }
 
-  static async resetPassword(input: unknown): Promise<SessionResult> {
+  static async resetPassword(
+    input: unknown,
+    ip: string
+  ): Promise<SessionResult> {
     const { token, password } = resetPasswordSchema.parse(input);
     const consumed = await ActionTokenDAO.consume(token, "reset_password");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
-    return AuthService.replacePassword(consumed.userId.toString(), password);
+    return AuthService.replacePassword(
+      { id: consumed.userId.toString(), ip },
+      password,
+      "reset"
+    );
   }
 
   static async changePassword(
@@ -240,7 +255,7 @@ export default class AuthService {
     ) {
       throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
     }
-    return AuthService.replacePassword(actor.id, newPassword);
+    return AuthService.replacePassword(actor, newPassword, "change");
   }
 
   static async getInvite(
