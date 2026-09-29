@@ -76,12 +76,10 @@ export default class AuthService {
     return { token, user: UserDAO.toSafe(user) };
   }
 
-  private static async replacePassword(
+  private static async auditPasswordChange(
     actor: Pick<Actor, "id" | "ip">,
-    password: string,
     via: "change" | "reset"
-  ): Promise<SessionResult> {
-    await UserDAO.setPassword(actor.id, await HashingService.hash(password));
+  ): Promise<void> {
     await AuditService.record(
       actor,
       "user.password_changed",
@@ -89,9 +87,6 @@ export default class AuthService {
       actor.id,
       { after: { via } }
     );
-    const user = await UserDAO.findAuthById(actor.id);
-    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    return AuthService.session(user);
   }
 
   static async register(input: unknown, ip: string): Promise<SessionResult> {
@@ -232,11 +227,16 @@ export default class AuthService {
     const { token, password } = resetPasswordSchema.parse(input);
     const consumed = await ActionTokenDAO.consume(token, "reset_password");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
-    return AuthService.replacePassword(
-      { id: consumed.userId.toString(), ip },
-      password,
+    const user = await UserDAO.setPassword(
+      consumed.userId,
+      await HashingService.hash(password)
+    );
+    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    await AuthService.auditPasswordChange(
+      { id: user._id.toString(), ip },
       "reset"
     );
+    return AuthService.session(user);
   }
 
   static async changePassword(
@@ -255,7 +255,14 @@ export default class AuthService {
     ) {
       throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
     }
-    return AuthService.replacePassword(actor, newPassword, "change");
+    const user = await UserDAO.setPassword(
+      actor.id,
+      await HashingService.hash(newPassword),
+      passwordHash
+    );
+    if (!user) throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    await AuthService.auditPasswordChange(actor, "change");
+    return AuthService.session(user);
   }
 
   static async getInvite(
