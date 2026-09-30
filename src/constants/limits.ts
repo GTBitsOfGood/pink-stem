@@ -61,3 +61,13 @@ export const RATE_LIMITS = {
   verifyEmailResend: { limit: 5, windowMs: 60 * 60_000 },
   verifyEmailLookup: { limit: 20, windowMs: 15 * 60_000 },
 } as const;
+
+/**
+ * Screening pre-check. Registries publish a birth year (or an age), not a
+ * date, so a name hit counts when its year is within this many years of the
+ * volunteer's. One year absorbs age rounding and data-entry slips.
+ */
+export const SCREENING_BIRTH_YEAR_TOLERANCE = 1;
+
+/** A registry download that answers slower than this is reported as unavailable. */
+export const SCREENING_FETCH_TIMEOUT_MS = 8_000;

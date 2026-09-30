@@ -15,7 +15,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "prepare": "husky",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
-    "jobs": "tsx --env-file=.env.local scripts/jobs.ts"
+    "jobs": "tsx --env-file=.env.local scripts/jobs.ts",
+    "screening:check": "tsx scripts/screening-check.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.2",
