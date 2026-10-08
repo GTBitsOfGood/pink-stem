@@ -4,6 +4,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Netlify fails the build when any environment variable's value appears in
+  # the repo. APP_URL is the public site URL, which the README links to.
+  SECRETS_SCAN_OMIT_KEYS = "APP_URL"
 
 [dev]
   command = "npm run dev"
