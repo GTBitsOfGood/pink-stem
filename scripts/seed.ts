@@ -3,10 +3,18 @@
  *
  *   npm run seed          creates org settings and the first admin
  *   npm run seed -- demo  also adds an organizer, volunteers, and sample events
+ *   npm run seed:staging  the demo seed, against .env.staging.local
  *
  * The admin email and password come from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD.
- * Re-running is safe: existing accounts are left alone.
+ * Demo accounts use SEED_DEMO_PASSWORD when set, so a hosted database never
+ * runs on the password committed here. Re-running is safe: existing accounts
+ * are left alone.
+ *
+ * Any database that is not on this machine has to be confirmed by typing its
+ * name first. A MONGODB_URI exported in the shell beats the one in the env
+ * file, so the file alone does not say where the seed is about to write.
  */
+import { createInterface } from "node:readline/promises";
 import mongoose, { Types } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import ClearanceDAO from "@/db/actions/clearance";
@@ -19,7 +27,36 @@ import { addDays, fromDateTimeLocal, toDateInput } from "@/lib/dates";
 import type { Doc } from "@/types/models";
 import type { Role, User } from "@/types/user";
 
-const DEMO_PASSWORD = "PinkStem!2026";
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || "PinkStem!2026";
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+/** Names the target database and, unless it is local, asks before writing. */
+async function confirmTarget(): Promise<void> {
+  const match = /^mongodb(?:\+srv)?:\/\/(?:[^@/]*@)?([^/?]+)\/?([^?]*)/.exec(
+    process.env.MONGODB_URI ?? ""
+  );
+  if (!match) throw new Error("MONGODB_URI is missing or malformed");
+  const [, hostList, database] = match;
+  const hosts = hostList.split(",").map((h) => h.replace(/:\d+$/, ""));
+  console.log(`Seeding "${database || "test"}" on ${hosts.join(", ")}`);
+  if (hosts.every((h) => LOCAL_HOSTS.includes(h))) return;
+
+  if (!database) {
+    throw new Error(
+      "MONGODB_URI names no database, so Mongo would write to `test`. Add it after the host: ...mongodb.net/pink-stem-staging"
+    );
+  }
+  if (!process.stdin.isTTY) {
+    throw new Error("Seeding a remote database needs an interactive terminal");
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const typed = await rl.question(
+    "Remote database. Type its name to seed it: "
+  );
+  rl.close();
+  if (typed.trim() !== database)
+    throw new Error("Name did not match; nothing written");
+}
 
 async function ensureUser(
   data: {
@@ -52,6 +89,7 @@ async function ensureUser(
 
 async function main() {
   const demo = process.argv.includes("demo");
+  await confirmTarget();
   await dbConnect();
   await OrgSettingsDAO.get();
   console.log("Org settings ready.");
@@ -60,7 +98,7 @@ async function main() {
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
   if (!adminEmail || !adminPassword) {
     throw new Error(
-      "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env.local"
+      "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in the env file"
     );
   }
   const admin = await ensureUser({

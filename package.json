@@ -15,6 +15,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "prepare": "husky",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "seed:staging": "tsx --env-file=.env.staging.local scripts/seed.ts demo",
     "jobs": "tsx --env-file=.env.local scripts/jobs.ts"
   },
   "dependencies": {
