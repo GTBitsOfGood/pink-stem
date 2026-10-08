@@ -91,6 +91,7 @@ in VSCode. A pre-commit hook formats and lints staged files automatically.
 | `npm run format`       | Prettier write                              |
 | `npm run format:check` | Prettier check (runs in CI)                 |
 | `npm run seed`         | Create settings and the first admin account |
+| `npm run seed:staging` | Seed the staging database with demo data    |
 | `npm run jobs`         | Run the scheduled jobs against a dev server |
 
 ## API
@@ -135,9 +136,27 @@ netlify/functions/   Hourly trigger for the job runner
 
 ## Environments
 
+**Staging:** https://pink-stem-staging.netlify.app
+
 Branches, deploy previews, environment variables, and branch protection are
 documented in [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
 
-- `production` → production site
-- `main` → staging site (default branch, base for feature PRs)
-- every branch and PR → Netlify deploy preview
+- `main` → staging site, on every merge (default branch, base for feature PRs)
+- every PR → Netlify deploy preview, backed by the staging database
+- `production` → production site, not set up until the domain is decided
+
+Demo logins for staging are in Slack. Staging never sends email; messages are
+written to the Netlify function log instead.
+
+### Reseeding staging
+
+Put the staging `MONGODB_URI` and seed credentials in `.env.staging.local`
+(the variables are listed in
+[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md#seeding-staging)), then:
+
+```sh
+npm run seed:staging   # asks you to type the database name before writing
+```
+
+Re-running only fills in what is missing. For fresh demo events, drop the
+`pink-stem-staging` database in Atlas first.
