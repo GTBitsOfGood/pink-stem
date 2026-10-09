@@ -25,6 +25,20 @@ export type EventStatus = (typeof EVENT_STATUSES)[number];
 export const EVENT_VISIBILITIES = ["public", "unlisted"] as const;
 export type EventVisibility = (typeof EVENT_VISIBILITIES)[number];
 
+export const EVENT_COMMITMENTS = ["short_term", "long_term"] as const;
+export type EventCommitment = (typeof EVENT_COMMITMENTS)[number];
+
+export const WEEKDAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
 export interface Event {
   organizerId: Types.ObjectId;
   title: string;
@@ -32,6 +46,13 @@ export interface Event {
   programArea: ProgramArea;
   status: EventStatus;
   visibility: EventVisibility;
+  commitment: EventCommitment;
+  /** Sessions in one long-term program share this identifier. */
+  seriesId?: Types.ObjectId;
+  /** Recurrence facts retained so changing the end date remains deterministic. */
+  seriesWeekdays?: Weekday[];
+  seriesStartDate?: Date;
+  seriesEndDate?: Date;
   eventDate: Date;
   region: Region;
   isVirtual: boolean;

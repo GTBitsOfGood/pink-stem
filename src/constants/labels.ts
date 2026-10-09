@@ -1,6 +1,11 @@
 import type { AuditAction } from "@/types/audit";
 import type { CertificateType } from "@/types/certificate";
-import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
+import type {
+  EventCommitment,
+  EventStatus,
+  ProgramArea,
+  UpdateKind,
+} from "@/types/event";
 import type { PendingReason, SignupStatus } from "@/types/signup";
 import type {
   ClearanceStatus,
@@ -58,6 +63,11 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   published: "Published",
   completed: "Completed",
   cancelled: "Cancelled",
+};
+
+export const EVENT_COMMITMENT_LABELS: Record<EventCommitment, string> = {
+  short_term: "Short-term",
+  long_term: "Long-term",
 };
 
 export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {

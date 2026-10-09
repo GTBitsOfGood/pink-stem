@@ -12,6 +12,8 @@ import type { Signup } from "@/types/signup";
 import type {
   EventInput,
   EventUpdateInput,
+  LongTermEventInput,
+  SeriesUpdateInput,
   ShiftInput,
 } from "@/utils/validation/event";
 import type { AttendanceInput } from "@/utils/validation/signup";
@@ -26,6 +28,20 @@ export type EventBody = Omit<EventInput, "eventDate"> & {
   eventDate: string;
   /** Only sent by admins creating an event. */
   organizerId?: string;
+};
+export type LongTermEventBody = Omit<LongTermEventInput, "schedule"> & {
+  schedule: Omit<LongTermEventInput["schedule"], "firstDate" | "lastDate"> & {
+    firstDate: string;
+    lastDate: string;
+  };
+  /** Only sent by admins creating an event. */
+  organizerId?: string;
+};
+export type CreateEventBody = EventBody | LongTermEventBody;
+export type SeriesUpdateBody = Omit<SeriesUpdateInput, "schedule"> & {
+  schedule: Omit<SeriesUpdateInput["schedule"], "lastDate"> & {
+    lastDate: string;
+  };
 };
 export type ShiftBody = Omit<ShiftInput, "startsAt" | "endsAt"> & {
   startsAt: string;
@@ -47,12 +63,19 @@ export default class EventHTTPClient {
     return fetchHTTPClient("/organizer/events");
   }
 
-  static create(body: EventBody): Promise<ClientEvent> {
+  static create(body: CreateEventBody): Promise<ClientEvent> {
     return fetchHTTPClient("/events", "POST", body);
   }
 
   static update(eventId: string, body: EventBody): Promise<ClientEvent> {
     return fetchHTTPClient(`/events/${eventId}`, "PATCH", body);
+  }
+
+  static updateSeries(
+    eventId: string,
+    body: SeriesUpdateBody
+  ): Promise<ClientEvent> {
+    return fetchHTTPClient(`/events/${eventId}/series`, "PATCH", body);
   }
 
   static publish(eventId: string): Promise<ClientEvent> {
@@ -61,6 +84,15 @@ export default class EventHTTPClient {
 
   static cancel(eventId: string, reason: string): Promise<ClientEvent> {
     return fetchHTTPClient(`/events/${eventId}/cancel`, "POST", { reason });
+  }
+
+  static cancelSeries(
+    eventId: string,
+    reason: string
+  ): Promise<{ cancelled: number }> {
+    return fetchHTTPClient(`/events/${eventId}/series/cancel`, "POST", {
+      reason,
+    });
   }
 
   static duplicate(eventId: string): Promise<ClientEvent> {
