@@ -1,5 +1,9 @@
 import { ORG_TIMEZONE } from "@/constants/org";
 import { ADULT_AGE } from "@/constants/limits";
+import { WEEKDAYS, type Weekday } from "@/types/event";
+
+export { WEEKDAYS };
+export type { Weekday };
 
 /**
  * Every date the product shows is rendered in Pink STEM's time zone, on the
@@ -150,3 +154,49 @@ export const fromDateTimeLocal = (value: string): Date => {
 /** Start of the org-zone day containing the instant. */
 export const startOfDay = (value: DateLike) =>
   fromDateTimeLocal(toDateInput(value));
+
+export interface WeeklySessionDate {
+  eventDate: Date;
+  startsAt: Date;
+  endsAt: Date;
+}
+
+/** Builds inclusive weekly sessions using calendar days in the org time zone. */
+export const generateWeeklySessionDates = (
+  firstDate: DateLike,
+  lastDate: DateLike,
+  weekdays: readonly Weekday[],
+  startTime: string,
+  endTime: string
+): WeeklySessionDate[] => {
+  const calendarDate = (value: DateLike) =>
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? value
+      : toDateInput(value);
+  const first = calendarDate(firstDate);
+  const last = calendarDate(lastDate);
+  if (first > last) return [];
+
+  const selectedDays = new Set(weekdays.map((day) => WEEKDAYS.indexOf(day)));
+  const [year, month, day] = first.split("-").map(Number);
+  const [lastYear, lastMonth, lastDay] = last.split("-").map(Number);
+  const cursor = new Date(Date.UTC(year, month - 1, day));
+  const end = Date.UTC(lastYear, lastMonth - 1, lastDay);
+  const sessions: WeeklySessionDate[] = [];
+
+  // UTC is used only to advance calendar labels; each timestamp is then built
+  // in the org zone so its wall-clock time survives daylight-saving changes.
+  while (cursor.getTime() <= end) {
+    if (selectedDays.has(cursor.getUTCDay())) {
+      const date = cursor.toISOString().slice(0, 10);
+      sessions.push({
+        eventDate: fromDateTimeLocal(date),
+        startsAt: fromDateTimeLocal(`${date}T${startTime}`),
+        endsAt: fromDateTimeLocal(`${date}T${endTime}`),
+      });
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return sessions;
+};

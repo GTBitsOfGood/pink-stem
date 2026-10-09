@@ -23,7 +23,12 @@ import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import UserDAO from "@/db/actions/user";
 import HashingService from "@/services/hashing";
-import { addDays, fromDateTimeLocal, toDateInput } from "@/lib/dates";
+import {
+  addDays,
+  fromDateTimeLocal,
+  generateWeeklySessionDates,
+  toDateInput,
+} from "@/lib/dates";
 import type { Doc } from "@/types/models";
 import type { Role, User } from "@/types/user";
 
@@ -169,11 +174,10 @@ async function main() {
     });
   }
 
-  const existingEvents = await EventDAO.count({ organizerId: organizer._id });
-  if (existingEvents) {
-    console.log("Demo events already exist.");
-    return;
-  }
+  const existingEvents = await EventDAO.findAll({
+    organizerId: organizer._id,
+  });
+  const existingTitles = new Set(existingEvents.map((event) => event.title));
 
   const day = (offset: number, time: string) =>
     fromDateTimeLocal(`${toDateInput(addDays(new Date(), offset))}T${time}`);
@@ -278,13 +282,15 @@ async function main() {
   ];
 
   for (const { shifts, ...event } of events) {
+    if (existingTitles.has(event.title)) continue;
     const created = await EventDAO.create({
       ...event,
       organizerId: organizer._id as Types.ObjectId,
       status: "published",
       visibility: "public",
+      commitment: "short_term",
       isVirtual: event.isVirtual ?? false,
-      requiresClearance: event.requiresClearance ?? true,
+      requiresClearance: event.requiresClearance ?? false,
       requiresApproval: false,
       publishedAt: new Date(),
     });
@@ -301,6 +307,64 @@ async function main() {
       }))
     );
     console.log(`  created event: ${created.title}`);
+  }
+
+  const longTermTitle = "Sacred Heart Robotics & Mechatronics";
+  if (!existingTitles.has(longTermTitle)) {
+    const seriesId = new Types.ObjectId();
+    const weekdays = ["tuesday", "thursday"] as const;
+    const firstDate = "2026-10-27";
+    const lastDate = "2026-11-12";
+    const sessions = generateWeeklySessionDates(
+      firstDate,
+      lastDate,
+      weekdays,
+      "16:00",
+      "18:00"
+    );
+    const created = await EventDAO.createMany(
+      sessions.map((session) => ({
+        organizerId: organizer._id as Types.ObjectId,
+        title: longTermTitle,
+        description:
+          "A twice-weekly after-school program where volunteers help students build and program robots, troubleshoot mechatronics projects, and prepare demonstrations.",
+        programArea: "robotics",
+        status: "published",
+        visibility: "public",
+        commitment: "long_term",
+        seriesId,
+        seriesWeekdays: [...weekdays],
+        seriesStartDate: fromDateTimeLocal(firstDate),
+        seriesEndDate: fromDateTimeLocal(lastDate),
+        eventDate: session.eventDate,
+        region: "metro_atlanta",
+        isVirtual: false,
+        locationName: "Sacred Heart",
+        city: "Atlanta",
+        requiresClearance: true,
+        requiresApproval: false,
+        minAge: 18,
+        siteContactName: "Jordan Reyes",
+        siteContactPhone: "(404) 555-0142",
+        publishedAt: new Date(),
+      }))
+    );
+    await ShiftDAO.createMany(
+      created.map((event, index) => ({
+        eventId: event._id,
+        roleName: "Robotics classroom volunteer",
+        description:
+          "Coach student teams through the day's robotics and mechatronics activities.",
+        startsAt: sessions[index].startsAt,
+        endsAt: sessions[index].endsAt,
+        capacity: 6,
+        minStaffing: 3,
+        requiredSkills: ["robotics"],
+      }))
+    );
+    console.log(
+      `  created long-term program: ${longTermTitle} (${sessions.length} sessions)`
+    );
   }
   console.log(`\nDemo accounts use the password ${DEMO_PASSWORD}`);
 }

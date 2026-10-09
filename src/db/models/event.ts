@@ -2,9 +2,11 @@ import { Schema } from "mongoose";
 import { defineModel } from "@/db/defineModel";
 import {
   Event,
+  EVENT_COMMITMENTS,
   EVENT_STATUSES,
   EVENT_VISIBILITIES,
   PROGRAM_AREAS,
+  WEEKDAYS,
 } from "@/types/event";
 import { REGIONS } from "@/types/user";
 
@@ -16,6 +18,15 @@ const eventSchema = new Schema<Event>(
     programArea: { type: String, enum: PROGRAM_AREAS, required: true },
     status: { type: String, enum: EVENT_STATUSES, default: "draft" },
     visibility: { type: String, enum: EVENT_VISIBILITIES, default: "public" },
+    commitment: {
+      type: String,
+      enum: EVENT_COMMITMENTS,
+      default: "short_term",
+    },
+    seriesId: { type: Schema.ObjectId },
+    seriesWeekdays: { type: [String], enum: WEEKDAYS },
+    seriesStartDate: Date,
+    seriesEndDate: Date,
     eventDate: { type: Date, required: true },
     region: { type: String, enum: REGIONS, required: true },
     isVirtual: { type: Boolean, default: false },
@@ -24,7 +35,7 @@ const eventSchema = new Schema<Event>(
     address: String,
     locationNote: String,
     city: String,
-    requiresClearance: { type: Boolean, default: true },
+    requiresClearance: { type: Boolean, default: false },
     requiresApproval: { type: Boolean, default: false },
     minAge: Number,
     siteContactName: String,
@@ -41,5 +52,6 @@ const eventSchema = new Schema<Event>(
 
 eventSchema.index({ status: 1, eventDate: 1 });
 eventSchema.index({ organizerId: 1, eventDate: -1 });
+eventSchema.index({ seriesId: 1, eventDate: 1 });
 
 export default defineModel<Event>("Event", eventSchema);

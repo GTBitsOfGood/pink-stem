@@ -6,11 +6,18 @@ import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import {
+  ADULT_AGE,
   MAX_SHIFT_HOURS,
   MAX_SHIFTS_PER_EVENT,
   PAGE_SIZE,
 } from "@/constants/limits";
-import { hoursBetween, startOfDay } from "@/lib/dates";
+import {
+  fromDateTimeLocal,
+  generateWeeklySessionDates,
+  hoursBetween,
+  startOfDay,
+  toDateInput,
+} from "@/lib/dates";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -19,7 +26,13 @@ import NotificationService from "@/services/notification";
 import SignupService from "@/services/signup";
 import type { EventDetail, EventWithShifts, Paginated } from "@/types/api";
 import type { Actor } from "@/types/auth";
-import type { Event, ProgramArea, Shift } from "@/types/event";
+import {
+  WEEKDAYS,
+  type Event,
+  type ProgramArea,
+  type Shift,
+  type Weekday,
+} from "@/types/event";
 import type { Region, SafeUser } from "@/types/user";
 import {
   ConflictError,
@@ -43,6 +56,7 @@ import {
   eventFiltersSchema,
   eventInputSchema,
   reassignEventSchema,
+  seriesUpdateInputSchema,
   shiftInputSchema,
 } from "@/utils/validation/event";
 
@@ -177,7 +191,10 @@ export default class EventService {
   }
 
   private static validateInput(
-    data: ReturnType<typeof eventInputSchema.parse>
+    data: Pick<
+      ReturnType<typeof eventInputSchema.parse>,
+      "isVirtual" | "virtualLink" | "locationName" | "address"
+    >
   ) {
     if (data.isVirtual && !data.virtualLink)
       throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
@@ -222,7 +239,12 @@ export default class EventService {
 
   /** Admins pick the organizer; organizers own what they create. */
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
-    const { organizerId, ...data } = createEventSchema.parse(input);
+    const parsed = createEventSchema.parse(input);
+    if (parsed.commitment === "long_term") {
+      return EventService.createLongTerm(actor, parsed);
+    }
+
+    const { organizerId, ...data } = parsed;
     EventService.validateInput(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
@@ -243,6 +265,63 @@ export default class EventService {
     return withShifts;
   }
 
+  private static async createLongTerm(
+    actor: Actor,
+    input: Extract<
+      ReturnType<typeof createEventSchema.parse>,
+      {
+        commitment: "long_term";
+      }
+    >
+  ): Promise<EventWithShifts> {
+    const { organizerId, schedule, shift, ...eventData } = input;
+    EventService.validateInput(eventData);
+    const organizer = isAdmin(actor)
+      ? await EventService.assignableOrganizer(organizerId)
+      : null;
+    const sessions = generateWeeklySessionDates(
+      schedule.firstDate,
+      schedule.lastDate,
+      schedule.weekdays,
+      schedule.startTime,
+      schedule.endTime
+    );
+    EventService.validateShift({ ...shift, ...sessions[0] });
+
+    const seriesId = new Types.ObjectId();
+    const events = await EventDAO.createMany(
+      sessions.map((session) => ({
+        ...eventData,
+        seriesId,
+        seriesWeekdays: schedule.weekdays,
+        seriesStartDate: schedule.firstDate,
+        seriesEndDate: schedule.lastDate,
+        eventDate: session.eventDate,
+        requiresClearance: true,
+        minAge: ADULT_AGE,
+        organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
+      }))
+    );
+    await ShiftDAO.createMany(
+      events.map((event, index) => ({
+        ...shift,
+        eventId: event._id,
+        startsAt: sessions[index].startsAt,
+        endsAt: sessions[index].endsAt,
+      }))
+    );
+
+    if (organizer && !sameId(organizer._id, actor.id)) {
+      await EventService.notifyAssigned(
+        organizer,
+        events[0],
+        `${actor.name} created the ${events[0].title} long-term program and made you its organizer. Its sessions stay as drafts until they are published.`
+      );
+    }
+    const [firstSession] = await EventService.attachShifts([events[0]]);
+    return firstSession;
+  }
+
   private static async editable(
     actor: Actor,
     eventId: string
@@ -261,8 +340,15 @@ export default class EventService {
     eventId: string,
     input: unknown
   ): Promise<EventWithShifts> {
-    await EventService.editable(actor, eventId);
-    const data = eventInputSchema.parse(input);
+    const event = await EventService.editable(actor, eventId);
+    const parsed = eventInputSchema.parse(input);
+    const data = {
+      ...parsed,
+      commitment: event.commitment,
+      ...(event.commitment === "long_term"
+        ? { requiresClearance: true, minAge: ADULT_AGE }
+        : {}),
+    };
     EventService.validateInput(data);
     const updated = (await EventDAO.updateById(eventId, {
       ...data,
@@ -270,6 +356,227 @@ export default class EventService {
     })) as Doc<Event>;
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
+  }
+
+  private static async series(
+    actor: Actor,
+    eventId: string
+  ): Promise<{ anchor: Doc<Event>; events: Doc<Event>[] }> {
+    const anchor = await EventDAO.findById(eventId);
+    if (!anchor) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+    assertCanManageEvent(actor, anchor);
+    if (anchor.commitment !== "long_term" || !anchor.seriesId) {
+      throw new IllegalOperationError(ERRORS.EVENT.SERIES_REQUIRED);
+    }
+    return {
+      anchor,
+      events: await EventDAO.findAll({ seriesId: anchor.seriesId }),
+    };
+  }
+
+  private static seriesWeekdays(events: Doc<Event>[]): Weekday[] {
+    const stored = events.find(
+      (event) => event.seriesWeekdays?.length
+    )?.seriesWeekdays;
+    if (stored?.length) return stored;
+
+    // Compatibility for series created before recurrence metadata existed.
+    return [
+      ...new Set(
+        events.map((event) => {
+          const date = toDateInput(event.eventDate);
+          const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+          return WEEKDAYS[day];
+        })
+      ),
+    ];
+  }
+
+  private static isUpcoming(
+    event: Doc<Event>,
+    shift: Doc<Shift> | undefined,
+    now: Date
+  ): boolean {
+    return shift ? shift.startsAt > now : event.eventDate >= startOfDay(now);
+  }
+
+  static async updateSeries(
+    actor: Actor,
+    eventId: string,
+    input: unknown
+  ): Promise<EventWithShifts> {
+    const data = seriesUpdateInputSchema.parse(input);
+    EventService.validateInput(data);
+    const { anchor, events } = await EventService.series(actor, eventId);
+    const shifts = await ShiftDAO.findByEvents(
+      events.map((event) => event._id)
+    );
+    const shiftByEvent = new Map(
+      shifts.map((shift) => [shift.eventId.toString(), shift])
+    );
+    const now = new Date();
+    const newEnd = toDateInput(data.schedule.lastDate);
+    const active = events.filter(
+      (event) => event.status !== "cancelled" && event.status !== "completed"
+    );
+    const upcoming = active.filter((event) =>
+      EventService.isUpcoming(
+        event,
+        shiftByEvent.get(event._id.toString()),
+        now
+      )
+    );
+    const toCancel = upcoming.filter(
+      (event) => toDateInput(event.eventDate) > newEnd
+    );
+    const toUpdate = upcoming.filter(
+      (event) => toDateInput(event.eventDate) <= newEnd
+    );
+    const { schedule, shift, ...eventData } = data;
+
+    for (const event of toUpdate) {
+      const existingShift = shiftByEvent.get(event._id.toString());
+      if (!existingShift) {
+        throw new IllegalOperationError(ERRORS.EVENT.NO_SHIFTS);
+      }
+      const date = toDateInput(event.eventDate);
+      EventService.validateShift(
+        {
+          ...shift,
+          startsAt: fromDateTimeLocal(`${date}T${schedule.startTime}`),
+          endsAt: fromDateTimeLocal(`${date}T${schedule.endTime}`),
+        },
+        existingShift.filledCount
+      );
+    }
+
+    const weekdays = EventService.seriesWeekdays(events);
+    const recordedEnd = events
+      .map((event) => event.seriesEndDate)
+      .filter((date): date is Date => !!date)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    const currentEnd = toDateInput(
+      recordedEnd ?? events[events.length - 1].eventDate
+    );
+    const existingDates = new Set(
+      active.map((event) => toDateInput(event.eventDate))
+    );
+    const additions =
+      newEnd > currentEnd
+        ? generateWeeklySessionDates(
+            currentEnd,
+            data.schedule.lastDate,
+            weekdays,
+            schedule.startTime,
+            schedule.endTime
+          ).filter((session) => {
+            const date = toDateInput(session.eventDate);
+            return (
+              session.startsAt > now &&
+              date > currentEnd &&
+              !existingDates.has(date)
+            );
+          })
+        : [];
+
+    for (const session of additions) {
+      EventService.validateShift({ ...shift, ...session });
+    }
+
+    await Promise.all(
+      toUpdate.flatMap((event) => {
+        const existingShift = shiftByEvent.get(
+          event._id.toString()
+        ) as Doc<Shift>;
+        const date = toDateInput(event.eventDate);
+        return [
+          EventDAO.updateById(event._id, {
+            ...eventData,
+            commitment: "long_term",
+            requiresClearance: true,
+            minAge: ADULT_AGE,
+          }),
+          ShiftDAO.updateById(existingShift._id, {
+            ...shift,
+            startsAt: fromDateTimeLocal(`${date}T${schedule.startTime}`),
+            endsAt: fromDateTimeLocal(`${date}T${schedule.endTime}`),
+          }),
+        ];
+      })
+    );
+
+    for (const event of toCancel) {
+      await EventService.cancel(actor, event._id.toString(), {
+        reason: "This session was removed when the program end date changed.",
+      });
+    }
+
+    if (additions.length) {
+      const addedEvents = await EventDAO.createMany(
+        additions.map((session) => ({
+          ...eventData,
+          commitment: "long_term" as const,
+          seriesId: anchor.seriesId,
+          seriesWeekdays: weekdays,
+          seriesStartDate: anchor.seriesStartDate ?? events[0].eventDate,
+          seriesEndDate: data.schedule.lastDate,
+          eventDate: session.eventDate,
+          requiresClearance: true,
+          minAge: ADULT_AGE,
+          organizerId: anchor.organizerId,
+        }))
+      );
+      await ShiftDAO.createMany(
+        addedEvents.map((event, index) => ({
+          ...shift,
+          eventId: event._id,
+          startsAt: additions[index].startsAt,
+          endsAt: additions[index].endsAt,
+        }))
+      );
+    }
+
+    await EventDAO.updateMany(
+      { seriesId: anchor.seriesId },
+      {
+        seriesWeekdays: weekdays,
+        seriesStartDate: anchor.seriesStartDate ?? events[0].eventDate,
+        seriesEndDate: data.schedule.lastDate,
+      }
+    );
+    const updatedAnchor = (await EventDAO.findById(anchor._id)) as Doc<Event>;
+    const [withShifts] = await EventService.attachShifts([updatedAnchor]);
+    return withShifts;
+  }
+
+  static async cancelSeries(
+    actor: Actor,
+    eventId: string,
+    input: unknown
+  ): Promise<{ cancelled: number }> {
+    const data = cancelEventSchema.parse(input);
+    const { events } = await EventService.series(actor, eventId);
+    const shifts = await ShiftDAO.findByEvents(
+      events.map((event) => event._id)
+    );
+    const shiftByEvent = new Map(
+      shifts.map((shift) => [shift.eventId.toString(), shift])
+    );
+    const now = new Date();
+    const remaining = events.filter(
+      (event) =>
+        event.status !== "cancelled" &&
+        event.status !== "completed" &&
+        EventService.isUpcoming(
+          event,
+          shiftByEvent.get(event._id.toString()),
+          now
+        )
+    );
+    for (const event of remaining) {
+      await EventService.cancel(actor, event._id.toString(), data);
+    }
+    return { cancelled: remaining.length };
   }
 
   static async publish(
@@ -352,6 +659,7 @@ export default class EventService {
       description: source.description,
       programArea: source.programArea,
       visibility: source.visibility,
+      commitment: source.commitment,
       eventDate: source.eventDate,
       region: source.region,
       isVirtual: source.isVirtual,
@@ -447,6 +755,9 @@ export default class EventService {
     input: unknown
   ): Promise<Doc<Shift>> {
     const event = await EventService.editable(actor, eventId);
+    if (event.commitment === "long_term" && event.seriesId) {
+      throw new IllegalOperationError(ERRORS.SHIFT.LONG_TERM_MANAGED);
+    }
     const data = shiftInputSchema.parse(input);
     EventService.validateShift(data);
     const existing = await ShiftDAO.findByEvent(event._id);
@@ -463,6 +774,9 @@ export default class EventService {
     const shift = await ShiftDAO.findById(shiftId);
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
     const event = await EventService.editable(actor, shift.eventId.toString());
+    if (event.commitment === "long_term" && event.seriesId) {
+      throw new IllegalOperationError(ERRORS.SHIFT.LONG_TERM_MANAGED);
+    }
     const data = shiftInputSchema.parse(input);
     EventService.validateShift(data, shift.filledCount);
     const updated = (await ShiftDAO.updateById(shift._id, data)) as Doc<Shift>;
@@ -479,7 +793,10 @@ export default class EventService {
   static async deleteShift(actor: Actor, shiftId: string): Promise<void> {
     const shift = await ShiftDAO.findById(shiftId);
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
-    await EventService.editable(actor, shift.eventId.toString());
+    const event = await EventService.editable(actor, shift.eventId.toString());
+    if (event.commitment === "long_term" && event.seriesId) {
+      throw new IllegalOperationError(ERRORS.SHIFT.LONG_TERM_MANAGED);
+    }
     const live = await SignupDAO.count({
       shiftId: shift._id,
       status: { $in: LIVE_SIGNUP_STATUSES },

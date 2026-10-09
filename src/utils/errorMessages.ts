@@ -39,6 +39,7 @@ const ERRORS = Object.freeze({
     NO_SHIFTS: "Add at least one shift before publishing.",
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
+    SERIES_REQUIRED: "That event is not part of a long-term program.",
     VIRTUAL_LINK: "Virtual events need a join link.",
     LOCATION_REQUIRED: "In-person events need a location.",
   },
@@ -50,6 +51,8 @@ const ERRORS = Object.freeze({
       "Capacity cannot be reduced below the number of volunteers already holding a spot.",
     MIN_STAFFING: "Minimum staffing cannot exceed capacity.",
     TOO_MANY: "An event cannot have more than twenty shifts.",
+    LONG_TERM_MANAGED:
+      "Long-term program shifts must be changed through Edit program.",
     HAS_SIGNUPS:
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
     IN_PAST: "This shift has already started.",
