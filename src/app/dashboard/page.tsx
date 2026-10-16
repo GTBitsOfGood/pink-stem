@@ -81,6 +81,9 @@ function ShiftActions({ item }: { item: ClientSignupWithContext }) {
   const { signup, shift, event } = item;
   const { reportAbsence } = useSignupActions();
   const toast = useToast();
+  const now = useNow();
+
+  const shiftStarted = new Date(shift.startsAt).getTime() <= now;
 
   const [open, setOpen] = useState(false);
   const [absenceReason, setAbsenceReason] = useState<AbsenceReason | "">("");
@@ -128,14 +131,16 @@ function ShiftActions({ item }: { item: ClientSignupWithContext }) {
             <CalendarPlus className="h-3.5 w-3.5" /> Calendar
           </a>
         ) : null}
-        <Button
-          size="sm"
-          variant="danger"
-          loading={submitting}
-          onClick={() => setOpen(true)}
-        >
-          Can&apos;t make it
-        </Button>
+        {!shiftStarted && (
+          <Button
+            size="sm"
+            variant="danger"
+            loading={submitting}
+            onClick={() => setOpen(true)}
+          >
+            Can&apos;t make it
+          </Button>
+        )}
       </div>
 
       <Dialog

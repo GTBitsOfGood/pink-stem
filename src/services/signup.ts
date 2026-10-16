@@ -187,7 +187,12 @@ export default class SignupService {
       signup = existing
         ? await SignupDAO.updateByIdIfStatus(existing._id, "cancelled", {
             ...fields,
-            $unset: { cancellationReason: 1 },
+            $unset: {
+              cancellationReason: 1,
+              reportedAbsence: 1,
+              absenceReason: 1,
+              absenceNote: 1,
+            },
           })
         : await SignupDAO.create({
             shiftId: shift._id,
@@ -345,8 +350,19 @@ export default class SignupService {
     const updated = (await SignupDAO.updateById(released._id, {
       reportedAbsence: true,
       absenceReason,
-      ...(absenceNote ? { absenceNote } : {}),
+      ...(absenceNote ? { absenceNote } : { $unset: { absenceNote: 1 } }),
     })) as Doc<Signup>;
+
+    await AuditService.record(
+      actor,
+      "signup.absence_reported",
+      "signup",
+      signup._id,
+      {
+        before: { status: signup.status },
+        after: { status: "cancelled", absenceReason },
+      }
+    );
 
     const [volunteer, organizer] = await Promise.all([
       UserDAO.findById(signup.volunteerId),
@@ -364,19 +380,10 @@ export default class SignupService {
           body: `${volunteer ? `${volunteer.firstName} ${volunteer.lastName}` : "A volunteer"} (${shift.roleName}) reported they cannot make it.\n\nReason: ${reasonLabel}${absenceNote ? `\n\nNote: ${absenceNote}` : ""}`,
           url: appUrl(`/organizer/events/${event._id}`),
         })
+      ).catch((err) =>
+        console.error("[reportAbsence] notification email failed", err)
       );
     }
-
-    await AuditService.record(
-      actor,
-      "signup.absence_reported",
-      "signup",
-      signup._id,
-      {
-        before: { status: signup.status },
-        after: { status: "cancelled", absenceReason },
-      }
-    );
 
     return updated;
   }
