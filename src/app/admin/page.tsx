@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { screeningLine } from "@/components/admin/ScreeningResults";
 import { useAdminApprovals } from "@/components/hooks/useAdmin";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { formatDate } from "@/lib/dates";
@@ -84,6 +85,15 @@ export default function ApprovalsPage() {
         action="Review"
         empty="No clearances are waiting."
         rows={a.clearances.map(person)}
+      />
+      <Queue
+        title="Waiting on clearance"
+        action="Review"
+        empty="No sign-ups are waiting on clearance."
+        rows={a.awaitingClearance.map(({ volunteer, screening }) => ({
+          ...person(volunteer),
+          detail: `Waiting on: clearance · ${screeningLine(screening)}`,
+        }))}
       />
       <Queue
         title="Rosters past their date"

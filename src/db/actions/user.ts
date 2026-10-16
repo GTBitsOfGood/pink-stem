@@ -118,6 +118,20 @@ export default class UserDAO {
       .lean<UserSummary[]>();
   }
 
+  /** Just what the screening pre-check needs to look someone up. */
+  static async findScreeningSubjects(
+    ids: (string | Types.ObjectId)[]
+  ): Promise<
+    Pick<Doc<User>, "_id" | "firstName" | "lastName" | "dateOfBirth">[]
+  > {
+    await dbConnect();
+    return UserModel.find({ _id: { $in: ids } })
+      .select("firstName lastName dateOfBirth")
+      .lean<
+        Pick<Doc<User>, "_id" | "firstName" | "lastName" | "dateOfBirth">[]
+      >();
+  }
+
   static async listByRole(role: Role): Promise<Doc<SafeUser>[]> {
     await dbConnect();
     return UserModel.find({ role, status: "active" }).lean<Doc<SafeUser>[]>();

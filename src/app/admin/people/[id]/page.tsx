@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import AdjustHoursDialog from "@/components/admin/AdjustHoursDialog";
 import ClearanceForm from "@/components/admin/ClearanceForm";
+import ScreeningResults from "@/components/admin/ScreeningResults";
 import CertificateList from "@/components/hours/CertificateList";
 import { useAdminActions, usePerson } from "@/components/hooks/useAdmin";
 import { useSession } from "@/components/hooks/useSession";
@@ -310,6 +311,44 @@ export default function PersonPage() {
                 </p>
               ) : null}
               <ClearanceForm person={p} />
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader
+              title="Registry pre-check"
+              description="Automated name search of public registries. It never changes clearance; you decide."
+              action={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!!p.screening?.rerunRequestedAt}
+                  loading={actions.requestScreeningRerun.isPending}
+                  onClick={() =>
+                    run(
+                      () => actions.requestScreeningRerun.mutateAsync(),
+                      "Rerun queued for the next hourly run."
+                    )
+                  }
+                >
+                  {p.screening?.rerunRequestedAt ? "Queued" : "Rerun"}
+                </Button>
+              }
+            />
+            <CardBody>
+              {p.screening?.rerunRequestedAt ? (
+                <p className="mb-3 text-[13px] text-ink-500">
+                  Rerun queued {formatDateTime(p.screening.rerunRequestedAt)}.
+                  It runs with the next hourly job.
+                </p>
+              ) : null}
+              {p.screening?.results.length ? (
+                <ScreeningResults results={p.screening.results} />
+              ) : (
+                <p className="text-sm text-ink-500">
+                  Not run yet. It runs when this volunteer has a sign-up waiting
+                  on clearance.
+                </p>
+              )}
             </CardBody>
           </Card>
           <Card>

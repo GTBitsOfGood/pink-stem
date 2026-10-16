@@ -1,6 +1,11 @@
 import type { AuditAction } from "@/types/audit";
 import type { CertificateType } from "@/types/certificate";
 import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
+import type {
+  RegistryOutcome,
+  RegistrySource,
+  RegistryUnavailableReason,
+} from "@/types/screening";
 import type { PendingReason, SignupStatus } from "@/types/signup";
 import type {
   ClearanceStatus,
@@ -116,6 +121,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "user.force_signout": "Forced sign-out",
   "user.flagged_for_review": "Flagged for review",
   "clearance.recorded": "Clearance recorded",
+  "screening.rerun_requested": "Registry pre-check rerun requested",
   "hours.approved": "Hours approved",
   "hours.adjusted": "Hours adjusted",
   "certificate.issued": "Certificate issued",
@@ -129,4 +135,25 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "signup.cancelled_by_staff": "Sign-up cancelled by staff",
   "shift.counters_reconciled": "Shift counters reconciled",
   "auth.rate_limited": "Rate limit triggered",
+};
+
+/** Short source names for tight spaces like the Approvals queue. */
+export const REGISTRY_SOURCE_SHORT_LABELS: Record<RegistrySource, string> = {
+  gbi_ga: "GBI",
+  nsopw: "NSOPW",
+};
+
+export const REGISTRY_OUTCOME_LABELS: Record<RegistryOutcome, string> = {
+  no_match: "No match",
+  possible_match: "Possible match",
+  unavailable: "Couldn't check",
+};
+
+export const REGISTRY_UNAVAILABLE_LABELS: Record<
+  RegistryUnavailableReason,
+  string
+> = {
+  manual_only: "Search by hand",
+  missing_dob: "No date of birth",
+  source_error: "Source error, retrying hourly",
 };

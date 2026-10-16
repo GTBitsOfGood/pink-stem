@@ -19,6 +19,7 @@ import ClearanceService from "@/services/clearance";
 import EventUpdateService from "@/services/eventUpdate";
 import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
+import ScreeningService from "@/services/screening";
 import SignupService from "@/services/signup";
 import { sameId } from "@/utils/authorization";
 
@@ -56,6 +57,7 @@ export default class JobService {
       rosterNudges: JobService.rosterNudges,
       clearanceWarnings: ClearanceService.warnExpiring,
       clearanceExpiry: ClearanceService.expireLapsed,
+      screening: ScreeningService.runDue,
       holdExpiry: SignupService.expireHolds,
       noteDigest: EventUpdateService.sendNoteDigest,
       messageDigest: MessageService.sendDigests,

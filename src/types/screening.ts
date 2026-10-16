@@ -1,3 +1,5 @@
+import type { Types } from "mongoose";
+
 /**
  * The screening pre-check result, shared between the lookups
  * (src/lib/screening) and whatever stores and shows them. A vendor API that
@@ -56,4 +58,16 @@ export interface RegistrySubject {
   firstName: string;
   lastName: string;
   dateOfBirth?: Date | null;
+}
+
+/**
+ * The saved pre-check for one volunteer: the latest result from each source.
+ * Admin-only, like the clearance record, and kept in its own collection.
+ */
+export interface ScreeningCheck {
+  userId: Types.ObjectId;
+  results: RegistryCheckResult[];
+  /** Set when an admin asks for a rerun; the next hourly job clears it. */
+  rerunRequestedAt: Date | null;
+  rerunRequestedBy: Types.ObjectId | null;
 }
