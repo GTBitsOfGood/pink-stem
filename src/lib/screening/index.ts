@@ -1,4 +1,8 @@
-import { unavailable, type ScreeningSource } from "@/lib/screening/source";
+import {
+  ScreeningSourceError,
+  unavailable,
+  type ScreeningSource,
+} from "@/lib/screening/source";
 import { gbiSource } from "@/lib/screening/sources/gbi";
 import { nsopwSource } from "@/lib/screening/sources/nsopw";
 import type { RegistryCheckResult, RegistrySubject } from "@/types/screening";
@@ -18,6 +22,9 @@ export async function checkRegistries(
   subjects: RegistrySubject[],
   sources: ScreeningSource[] = SCREENING_SOURCES
 ): Promise<Map<string, RegistryCheckResult[]>> {
+  // One subject per userId (the first), so each gets one result per source.
+  const seen = new Set<string>();
+  subjects = subjects.filter((s) => !seen.has(s.userId) && seen.add(s.userId));
   const results = new Map<string, RegistryCheckResult[]>(
     subjects.map((s) => [s.userId, []])
   );
@@ -35,7 +42,9 @@ export async function checkRegistries(
       } catch (error) {
         console.error(
           `[screening] ${source.id} failed:`,
-          error instanceof Error ? error.message : "unknown error"
+          error instanceof ScreeningSourceError
+            ? error.message
+            : "unexpected error"
         );
         return { source, checkedAt, found: null };
       }

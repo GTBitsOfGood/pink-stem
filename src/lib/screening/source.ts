@@ -21,6 +21,12 @@ export interface ScreeningSource {
   ): Promise<Map<string, RegistryCheckResult>>;
 }
 
+/**
+ * A failure whose message is safe to log: it names no subject and no result.
+ * Any other error a source throws is logged without its message.
+ */
+export class ScreeningSourceError extends Error {}
+
 export const unavailable = (
   source: ScreeningSource,
   reason: RegistryUnavailableReason,

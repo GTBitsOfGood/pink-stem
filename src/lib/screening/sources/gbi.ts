@@ -8,7 +8,11 @@ import {
   parseRegistryName,
   type RegistryName,
 } from "@/lib/screening/match";
-import { unavailable, type ScreeningSource } from "@/lib/screening/source";
+import {
+  ScreeningSourceError,
+  unavailable,
+  type ScreeningSource,
+} from "@/lib/screening/source";
 import type {
   RegistryCheckResult,
   RegistryHit,
@@ -43,8 +47,23 @@ const downloadCsv = async (): Promise<string> => {
     signal: AbortSignal.timeout(SCREENING_FETCH_TIMEOUT_MS),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`download failed: ${response.status}`);
-  return response.text();
+  if (!response.ok) {
+    throw new ScreeningSourceError(`download failed: ${response.status}`);
+  }
+  const body = await response.arrayBuffer();
+  // Content-Length is the encoded size, so it only proves completeness when
+  // the body wasn't compressed in transit.
+  const expected = Number(response.headers.get("content-length"));
+  if (
+    !response.headers.get("content-encoding") &&
+    expected &&
+    body.byteLength !== expected
+  ) {
+    throw new ScreeningSourceError(
+      `download incomplete: ${body.byteLength} of ${expected} bytes`
+    );
+  }
+  return new TextDecoder().decode(body);
 };
 
 interface Candidate {
@@ -74,7 +93,7 @@ export const createGbiSource = ({
 
       for (const subject of subjects) {
         const { dateOfBirth } = subject;
-        if (!dateOfBirth) {
+        if (!dateOfBirth || Number.isNaN(dateOfBirth.getTime())) {
           results.set(
             subject.userId,
             unavailable(source, "missing_dob", checkedAt)
@@ -95,7 +114,14 @@ export const createGbiSource = ({
       }
       if (!hits.size) return results;
 
-      const [header, ...rows] = parseCsv(await loadCsv());
+      const text = await loadCsv();
+      let parsed: string[][];
+      try {
+        parsed = parseCsv(text);
+      } catch {
+        throw new ScreeningSourceError("unreadable CSV");
+      }
+      const [header, ...rows] = parsed;
       const column = Object.fromEntries(
         Object.entries(COLUMNS).map(([field, title]) => [
           field,
@@ -103,10 +129,16 @@ export const createGbiSource = ({
         ])
       ) as Record<keyof typeof COLUMNS, number>;
       if (Object.values(column).some((index) => index === -1)) {
-        throw new Error("unexpected CSV columns");
+        throw new ScreeningSourceError("unexpected CSV columns");
       }
       if (rows.length < minEntries) {
-        throw new Error(`only ${rows.length} entries`);
+        throw new ScreeningSourceError(`only ${rows.length} entries`);
+      }
+      // A download cut off mid-row leaves a short last row; a damaged file
+      // leaves rows of the wrong width. Either way the file can't vouch for
+      // "no match".
+      if (rows.some((row) => row.length !== header.length)) {
+        throw new ScreeningSourceError("rows don't match the header");
       }
 
       for (const row of rows) {

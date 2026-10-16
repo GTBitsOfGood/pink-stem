@@ -17,7 +17,10 @@ import {
   nameWords,
   parseRegistryName,
 } from "@/lib/screening/match";
-import type { ScreeningSource } from "@/lib/screening/source";
+import {
+  ScreeningSourceError,
+  type ScreeningSource,
+} from "@/lib/screening/source";
 import { createGbiSource, gbiSource } from "@/lib/screening/sources/gbi";
 import { nsopwSource } from "@/lib/screening/sources/nsopw";
 import type { RegistryCheckResult, RegistrySubject } from "@/types/screening";
@@ -123,6 +126,9 @@ async function offline() {
       ["x, y", 'say "hi"', "two\nlines"],
       ["plain", "", "end"],
     ]);
+  });
+  await test("an unclosed quote throws instead of swallowing the rest", () => {
+    assert.throws(() => parseCsv('A,B\n"open,1\nnext,2\n'));
   });
   await test("round-trips toCsv", () => {
     const text = toCsv(
@@ -325,6 +331,39 @@ async function offline() {
     const result = only(results, "u1");
     assert.equal(result.outcome, "unavailable");
   });
+  await test("file cut off mid-row → source_error, not no match", async () => {
+    const csv = fakeCsv(FAKE_ENTRIES);
+    const results = await checkRegistries(
+      [subject("u1", "Nobody", "Qqnotreal", "1990-03-02")],
+      [fakeGbi(csv.slice(0, csv.lastIndexOf(",")))]
+    );
+    const result = only(results, "u1");
+    assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable")
+      assert.equal(result.reason, "source_error");
+  });
+  await test("unclosed quote late in the file → source_error, not no match", async () => {
+    const results = await checkRegistries(
+      [subject("u1", "Nobody", "Qqnotreal", "1990-03-02")],
+      [fakeGbi(`${fakeCsv(FAKE_ENTRIES)}\n"QQNOTREAL, NOBODY,1990`)]
+    );
+    assert.equal(only(results, "u1").outcome, "unavailable");
+  });
+  await test("invalid DOB → missing_dob, not no match", async () => {
+    const results = await checkRegistries(
+      [
+        {
+          ...subject("u1", "Alice", "Zztest", null),
+          dateOfBirth: new Date("nope"),
+        },
+      ],
+      [fakeGbi()]
+    );
+    const result = only(results, "u1");
+    assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable")
+      assert.equal(result.reason, "missing_dob");
+  });
   await test("download failure → source_error", async () => {
     const source = createGbiSource({
       loadCsv: async () => {
@@ -391,6 +430,47 @@ async function offline() {
         ]
       );
     }
+  });
+  await test("a repeated userId still gets one result per source", async () => {
+    const results = await checkRegistries(
+      [
+        subject("u1", "Alice", "Zztest", "1990-03-02"),
+        subject("u1", "Nobody", "Qqnotreal", "1990-03-02"),
+      ],
+      [fakeGbi(), nsopwSource]
+    );
+    assert.deepEqual(
+      results.get("u1")?.map((r) => [r.source, r.outcome]),
+      [
+        ["gbi_ga", "possible_match"],
+        ["nsopw", "unavailable"],
+      ]
+    );
+  });
+  await test("only ScreeningSourceError messages reach the log", async () => {
+    const realError = console.error;
+    const logged: string[] = [];
+    console.error = (...args: unknown[]) => void logged.push(args.join(" "));
+    try {
+      const throwing = (error: Error): ScreeningSource => ({
+        ...nsopwSource,
+        check: async () => {
+          throw error;
+        },
+      });
+      await checkRegistries(
+        [subject("u1", "Alice", "Zztest", "1990-03-02")],
+        [throwing(new ScreeningSourceError("download failed: 503"))]
+      );
+      await checkRegistries(
+        [subject("u1", "Alice", "Zztest", "1990-03-02")],
+        [throwing(new Error("no match for Alice Zztest"))]
+      );
+    } finally {
+      console.error = realError;
+    }
+    assert.ok(logged[0]?.includes("download failed: 503"));
+    assert.ok(!logged[1]?.includes("Zztest"));
   });
   await test("no subjects → empty map, no source called", async () => {
     let called = false;
