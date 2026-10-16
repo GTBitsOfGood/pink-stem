@@ -6,7 +6,10 @@ import AuditService from "@/services/audit";
 import type { Actor } from "@/types/auth";
 import { NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
-import type { ScreeningCheck } from "@/types/screening";
+import type {
+  RegistryUnavailableReason,
+  ScreeningCheck,
+} from "@/types/screening";
 import ERRORS from "@/utils/errorMessages";
 
 /**
@@ -18,8 +21,9 @@ export default class ScreeningService {
   /**
    * Scheduled: checks every volunteer who needs it and saves the results.
    * That is anyone with a sign-up pending on clearance who has never been
-   * checked or whose last check hit a source error, plus anyone an admin
-   * queued for a rerun. Returns how many volunteers were checked.
+   * checked, whose last check hit a source error, or who had no date of birth
+   * then and has one now, plus anyone an admin queued for a rerun. Returns
+   * how many volunteers were checked.
    */
   static async runDue(): Promise<number> {
     const startedAt = new Date();
@@ -30,29 +34,36 @@ export default class ScreeningService {
     const pendingIds = [
       ...new Set(pending.map((s) => s.volunteerId.toString())),
     ];
+    const queuedIds = new Set(queued.map((c) => c.userId.toString()));
     const saved = new Map(
       (await ScreeningCheckDAO.findByUsers(pendingIds)).map((c) => [
         c.userId.toString(),
         c,
       ])
     );
-    const due = new Set([
-      ...pendingIds.filter((id) => {
-        const check = saved.get(id);
-        return (
-          !check?.results.length ||
-          check.results.some(
-            (r) => r.outcome === "unavailable" && r.reason === "source_error"
-          )
-        );
-      }),
-      ...queued.map((c) => c.userId.toString()),
+    const users = await UserDAO.findScreeningSubjects([
+      ...new Set([...pendingIds, ...queuedIds]),
     ]);
-    if (!due.size) return 0;
 
-    const users = await UserDAO.findScreeningSubjects([...due]);
+    const failed = (id: string, reason: RegistryUnavailableReason) =>
+      saved
+        .get(id)
+        ?.results.some(
+          (r) => r.outcome === "unavailable" && r.reason === reason
+        );
+    const due = users.filter((u) => {
+      const id = u._id.toString();
+      if (queuedIds.has(id)) return true;
+      if (!saved.get(id)?.results.length) return true;
+      if (failed(id, "source_error")) return true;
+      const hasDob =
+        !!u.dateOfBirth && !Number.isNaN(new Date(u.dateOfBirth).getTime());
+      return hasDob && failed(id, "missing_dob");
+    });
+    if (!due.length) return 0;
+
     const results = await checkRegistries(
-      users.map((u) => ({
+      due.map((u) => ({
         userId: u._id.toString(),
         firstName: u.firstName,
         lastName: u.lastName,

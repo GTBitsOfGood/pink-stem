@@ -154,6 +154,6 @@ export const REGISTRY_UNAVAILABLE_LABELS: Record<
   string
 > = {
   manual_only: "Search by hand",
-  missing_dob: "No date of birth",
+  missing_dob: "No date of birth; rechecks once one is added",
   source_error: "Source error, retrying hourly",
 };
