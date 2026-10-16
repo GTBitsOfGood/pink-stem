@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/constants/queryKeys";
 import SignupHTTPClient from "@/http/signupHTTPClient";
 import UserHTTPClient from "@/http/userHTTPClient";
+import type { AbsenceReason } from "@/types/signup";
 
 export function useMySignups(enabled = true) {
   return useQuery({
@@ -52,6 +53,19 @@ export function useSignupActions(eventId?: string) {
         signupId: string;
         reason?: string;
       }) => SignupHTTPClient.cancel(signupId, reason),
+      onSuccess: invalidate,
+    }),
+    reportAbsence: useMutation({
+      mutationFn: ({
+        signupId,
+        absenceReason,
+        absenceNote,
+      }: {
+        signupId: string;
+        absenceReason: AbsenceReason;
+        absenceNote?: string;
+      }) =>
+        SignupHTTPClient.reportAbsence(signupId, absenceReason, absenceNote),
       onSuccess: invalidate,
     }),
     approve: useMutation({

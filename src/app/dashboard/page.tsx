@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { CalendarPlus, Info } from "lucide-react";
 import {
   useMyHours,
@@ -14,22 +15,24 @@ import OutstandingList from "@/components/profile/OutstandingList";
 import { SignupBadge } from "@/components/ui/Badge";
 import Button, { ButtonLink } from "@/components/ui/Button";
 import Card, { CardBody, CardHeader, Stat } from "@/components/ui/Card";
+import Dialog from "@/components/ui/Dialog";
+import { Select, Textarea } from "@/components/ui/Field";
 import { EmptyState, PageHeader, Spinner } from "@/components/ui/Primitives";
 import { errorMessage, useToast } from "@/components/ui/Toast";
-import { PENDING_REASON_LABELS } from "@/constants/labels";
+import {
+  ABSENCE_REASON_LABELS,
+  PENDING_REASON_LABELS,
+} from "@/constants/labels";
 import SignupHTTPClient from "@/http/signupHTTPClient";
 import type { ClientSignupWithContext } from "@/http/userHTTPClient";
 import { formatDate, formatHours, formatTimeRange } from "@/lib/dates";
+import type { AbsenceReason } from "@/types/signup";
 
-function ShiftRow({
-  item,
-  onCancel,
-  cancelling,
-}: {
-  item: ClientSignupWithContext;
-  onCancel?: () => void;
-  cancelling?: boolean;
-}) {
+const ABSENCE_REASON_OPTIONS = (
+  Object.entries(ABSENCE_REASON_LABELS) as [AbsenceReason, string][]
+).map(([value, label]) => ({ value, label }));
+
+function ShiftRow({ item }: { item: ClientSignupWithContext }) {
   const { signup, shift, event } = item;
   const live = ["pending", "confirmed", "waitlisted"].includes(signup.status);
   return (
@@ -69,35 +72,116 @@ function ShiftRow({
           </p>
         ) : null}
       </div>
-      {live ? (
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <Link
-            href={`/events/${event._id}`}
+      {live ? <ShiftActions item={item} /> : null}
+    </li>
+  );
+}
+
+function ShiftActions({ item }: { item: ClientSignupWithContext }) {
+  const { signup, shift, event } = item;
+  const { reportAbsence } = useSignupActions();
+  const toast = useToast();
+
+  const [open, setOpen] = useState(false);
+  const [absenceReason, setAbsenceReason] = useState<AbsenceReason | "">("");
+  const [absenceNote, setAbsenceNote] = useState("");
+
+  const submitting =
+    reportAbsence.isPending && reportAbsence.variables?.signupId === signup._id;
+
+  function handleClose() {
+    setOpen(false);
+    setAbsenceReason("");
+    setAbsenceNote("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!absenceReason) return;
+    try {
+      await reportAbsence.mutateAsync({
+        signupId: signup._id,
+        absenceReason,
+        absenceNote: absenceNote.trim() || undefined,
+      });
+      toast("Your absence has been reported. The organizer has been notified.");
+      handleClose();
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 sm:justify-end">
+        <Link
+          href={`/events/${event._id}`}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
+        >
+          <Info className="h-3.5 w-3.5" /> Details
+        </Link>
+        {signup.status === "confirmed" ? (
+          <a
+            href={SignupHTTPClient.calendarUrl(signup._id)}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
           >
-            <Info className="h-3.5 w-3.5" /> Details
-          </Link>
-          {signup.status === "confirmed" ? (
-            <a
-              href={SignupHTTPClient.calendarUrl(signup._id)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
-            >
-              <CalendarPlus className="h-3.5 w-3.5" /> Calendar
-            </a>
-          ) : null}
-          {onCancel ? (
+            <CalendarPlus className="h-3.5 w-3.5" /> Calendar
+          </a>
+        ) : null}
+        <Button
+          size="sm"
+          variant="danger"
+          loading={submitting}
+          onClick={() => setOpen(true)}
+        >
+          Can&apos;t make it
+        </Button>
+      </div>
+
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        title="Report an absence"
+        description={`${shift.roleName} · ${formatDate(shift.startsAt)} · ${formatTimeRange(shift.startsAt, shift.endsAt)}`}
+      >
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <Select
+            label="Reason"
+            required
+            placeholder="Select a reason"
+            options={ABSENCE_REASON_OPTIONS}
+            value={absenceReason}
+            onChange={(e) => setAbsenceReason(e.target.value as AbsenceReason)}
+          />
+          <Textarea
+            label="Note"
+            hint="Optional — anything the organizer should know."
+            rows={3}
+            maxLength={300}
+            value={absenceNote}
+            onChange={(e) => setAbsenceNote(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
             <Button
+              type="button"
+              variant="secondary"
               size="sm"
-              variant="danger"
-              loading={cancelling}
-              onClick={onCancel}
+              onClick={handleClose}
             >
               Cancel
             </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </li>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!absenceReason}
+              loading={submitting}
+            >
+              Submit
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
   );
 }
 
@@ -105,8 +189,6 @@ export default function DashboardPage() {
   const { user } = useSession();
   const signups = useMySignups();
   const hours = useMyHours();
-  const { cancel } = useSignupActions();
-  const toast = useToast();
 
   const now = useNow();
   const upcoming = (signups.data ?? []).filter(
@@ -142,28 +224,7 @@ export default function DashboardPage() {
             ) : upcoming.length ? (
               <ul className="divide-y divide-ink-100">
                 {upcoming.map((item) => (
-                  <ShiftRow
-                    key={item.signup._id}
-                    item={item}
-                    cancelling={
-                      cancel.isPending &&
-                      cancel.variables?.signupId === item.signup._id
-                    }
-                    onCancel={async () => {
-                      if (
-                        !window.confirm(
-                          `Cancel your ${item.shift.roleName} shift at ${item.event.title}?`
-                        )
-                      )
-                        return;
-                      try {
-                        await cancel.mutateAsync({ signupId: item.signup._id });
-                        toast("Your sign-up was cancelled.");
-                      } catch (error) {
-                        toast(errorMessage(error), "error");
-                      }
-                    }}
-                  />
+                  <ShiftRow key={item.signup._id} item={item} />
                 ))}
               </ul>
             ) : (

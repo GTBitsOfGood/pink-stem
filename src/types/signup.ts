@@ -32,6 +32,9 @@ export type PendingReason = (typeof PENDING_REASONS)[number];
 export const ATTENDANCE_STATUSES = ["attended", "no_show"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export const ABSENCE_REASONS = ["sick", "school", "other"] as const;
+export type AbsenceReason = (typeof ABSENCE_REASONS)[number];
+
 export interface Attendance {
   status: AttendanceStatus;
   hours: number;
@@ -56,6 +59,10 @@ export interface Signup {
   /** When a confirmed spot lapsed back to pending, how long it is held. */
   holdUntil?: Date | null;
   attendance?: Attendance | null;
+  /** Set when the volunteer reports they cannot attend via "Can't make it". */
+  reportedAbsence?: boolean;
+  absenceReason?: AbsenceReason;
+  absenceNote?: string;
 }
 
 export interface HoursLedgerEntry {

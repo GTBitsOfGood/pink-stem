@@ -5,7 +5,10 @@ import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
-import { PENDING_REASON_LABELS } from "@/constants/labels";
+import {
+  ABSENCE_REASON_LABELS,
+  PENDING_REASON_LABELS,
+} from "@/constants/labels";
 import {
   COUNTER_SETTLE_MINUTES,
   LAPSED_SPOT_HOLD_DAYS,
@@ -39,6 +42,7 @@ import ERRORS from "@/utils/errorMessages";
 import {
   cancelSignupSchema,
   createSignupSchema,
+  reportAbsenceSchema,
 } from "@/utils/validation/signup";
 
 const HOUR = 3_600_000;
@@ -296,6 +300,85 @@ export default class SignupService {
       }
     }
     return released;
+  }
+
+  /**
+   * Volunteer-initiated absence report. Bypasses the cancellation cutoff. Frees the spot
+   * and promotes the waitlist exactly like a normal cancel.
+   */
+  static async reportAbsence(
+    actor: Actor,
+    signupId: string,
+    input: unknown
+  ): Promise<Doc<Signup>> {
+    const { absenceReason, absenceNote } = reportAbsenceSchema.parse(input);
+    const signup = await SignupDAO.findById(signupId);
+    if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
+
+    if (!sameId(actor.id, signup.volunteerId))
+      throw new ForbiddenError(ERRORS.AUTH.FORBIDDEN);
+
+    if (!isLive(signup))
+      throw new IllegalOperationError(ERRORS.SIGNUP.ALREADY_CANCELLED);
+
+    const [shift, event, settings] = await Promise.all([
+      ShiftDAO.findById(signup.shiftId),
+      EventDAO.findById(signup.eventId),
+      OrgSettingsDAO.get(),
+    ]);
+    if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+
+    if (shift.startsAt <= new Date())
+      throw new IllegalOperationError(ERRORS.SHIFT.IN_PAST);
+
+    const released = await SignupService.release(
+      signup,
+      shift,
+      event,
+      settings,
+      {
+        by: new Types.ObjectId(actor.id),
+        reason: `Absence reported: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? ` — ${absenceNote}` : ""}`,
+      }
+    );
+
+    const updated = (await SignupDAO.updateById(released._id, {
+      reportedAbsence: true,
+      absenceReason,
+      ...(absenceNote ? { absenceNote } : {}),
+    })) as Doc<Signup>;
+
+    const [volunteer, organizer] = await Promise.all([
+      UserDAO.findById(signup.volunteerId),
+      UserDAO.findById(event.organizerId),
+    ]);
+    if (organizer) {
+      const org = await NotificationService.org();
+      const reasonLabel = ABSENCE_REASON_LABELS[absenceReason];
+      await NotificationService.send(
+        organizer,
+        NotificationService.templates.organizerNotice(org, {
+          name: organizer.firstName,
+          subject: `Absence reported: ${event.title}`,
+          title: "A volunteer reported they cannot attend",
+          body: `${volunteer ? `${volunteer.firstName} ${volunteer.lastName}` : "A volunteer"} (${shift.roleName}) reported they cannot make it.\n\nReason: ${reasonLabel}${absenceNote ? `\n\nNote: ${absenceNote}` : ""}`,
+          url: appUrl(`/organizer/events/${event._id}`),
+        })
+      );
+    }
+
+    await AuditService.record(
+      actor,
+      "signup.absence_reported",
+      "signup",
+      signup._id,
+      {
+        before: { status: signup.status },
+        after: { status: "cancelled", absenceReason },
+      }
+    );
+
+    return updated;
   }
 
   /** Cancels a live sign-up, frees its spot, and promotes the waitlist. */
