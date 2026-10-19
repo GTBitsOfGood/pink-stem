@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_SHIFT_HOURS } from "@/constants/limits";
+import { MAX_ABSENCE_NOTE_LENGTH, MAX_SHIFT_HOURS } from "@/constants/limits";
 import { ABSENCE_REASONS, ATTENDANCE_STATUSES } from "@/types/signup";
 import { objectIdSchema, optionalText } from "@/utils/validation/common";
 
@@ -11,8 +11,8 @@ export const createSignupSchema = z.object({
 export const cancelSignupSchema = z.object({ reason: optionalText(300) });
 
 export const reportAbsenceSchema = z.object({
-  absenceReason: z.enum(ABSENCE_REASONS),
-  absenceNote: optionalText(300),
+  reason: z.enum(ABSENCE_REASONS),
+  note: optionalText(MAX_ABSENCE_NOTE_LENGTH),
 });
 export type ReportAbsenceInput = z.infer<typeof reportAbsenceSchema>;
 

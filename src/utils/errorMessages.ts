@@ -57,7 +57,6 @@ const ERRORS = Object.freeze({
   SIGNUP: {
     NOT_FOUND: "That sign-up does not exist.",
     ALREADY_SIGNED_UP: "You already hold a spot on this shift.",
-    ALREADY_CANCELLED: "This sign-up has already been cancelled.",
     ABSENCE_WAITLISTED:
       "You are on the waitlist for this shift. Leave the waitlist instead.",
     OVERLAP:

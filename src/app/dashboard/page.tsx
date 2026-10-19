@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { CalendarPlus, Info } from "lucide-react";
 import {
   useMyHours,
@@ -23,16 +23,23 @@ import {
   ABSENCE_REASON_LABELS,
   PENDING_REASON_LABELS,
 } from "@/constants/labels";
+import { MAX_ABSENCE_NOTE_LENGTH } from "@/constants/limits";
 import SignupHTTPClient from "@/http/signupHTTPClient";
 import type { ClientSignupWithContext } from "@/http/userHTTPClient";
 import { formatDate, formatHours, formatTimeRange } from "@/lib/dates";
-import type { AbsenceReason } from "@/types/signup";
+import { ABSENCE_REASONS, type AbsenceReason } from "@/types/signup";
 
-const ABSENCE_REASON_OPTIONS = (
-  Object.entries(ABSENCE_REASON_LABELS) as [AbsenceReason, string][]
-).map(([value, label]) => ({ value, label }));
-
-function ShiftRow({ item }: { item: ClientSignupWithContext }) {
+function ShiftRow({
+  item,
+  onCancel,
+  cancelling,
+  onReportAbsence,
+}: {
+  item: ClientSignupWithContext;
+  onCancel?: () => void;
+  cancelling?: boolean;
+  onReportAbsence?: () => void;
+}) {
   const { signup, shift, event } = item;
   const live = ["pending", "confirmed", "waitlisted"].includes(signup.status);
   return (
@@ -72,22 +79,67 @@ function ShiftRow({ item }: { item: ClientSignupWithContext }) {
           </p>
         ) : null}
       </div>
-      {live ? <ShiftActions item={item} /> : null}
+      {live ? (
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Link
+            href={`/events/${event._id}`}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
+          >
+            <Info className="h-3.5 w-3.5" /> Details
+          </Link>
+          {signup.status === "confirmed" ? (
+            <a
+              href={SignupHTTPClient.calendarUrl(signup._id)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
+            >
+              <CalendarPlus className="h-3.5 w-3.5" /> Calendar
+            </a>
+          ) : null}
+          {onReportAbsence ? (
+            <Button size="sm" variant="danger" onClick={onReportAbsence}>
+              Can&apos;t make it
+            </Button>
+          ) : onCancel ? (
+            <Button
+              size="sm"
+              variant="danger"
+              loading={cancelling}
+              onClick={onCancel}
+            >
+              Leave waitlist
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </li>
   );
 }
 
-function ShiftActions({ item }: { item: ClientSignupWithContext }) {
-  const { signup, shift, event } = item;
-  const { cancel, reportAbsence } = useSignupActions();
+export default function DashboardPage() {
+  const { user } = useSession();
+  const signups = useMySignups();
+  const hours = useMyHours();
+  const { cancel } = useSignupActions();
   const toast = useToast();
+  const [reporting, setReporting] = useState<ClientSignupWithContext | null>(
+    null
+  );
+
   const now = useNow();
+  const upcoming = (signups.data ?? []).filter(
+    (s) =>
+      new Date(s.shift.endsAt).getTime() >= now &&
+      ["pending", "confirmed", "waitlisted"].includes(s.signup.status)
+  );
+  const past = (signups.data ?? [])
+    .filter((s) => !upcoming.includes(s))
+    .reverse();
 
-  const shiftStarted = new Date(shift.startsAt).getTime() <= now;
-  // Only a held spot can be reported absent; the waitlist is simply left.
-  const waitlisted = signup.status === "waitlisted";
-
-  async function leaveWaitlist() {
+  const leaveWaitlist = async ({
+    signup,
+    shift,
+    event,
+  }: ClientSignupWithContext) => {
     if (
       !window.confirm(
         `Leave the waitlist for the ${shift.roleName} shift at ${event.title}?`
@@ -100,136 +152,7 @@ function ShiftActions({ item }: { item: ClientSignupWithContext }) {
     } catch (error) {
       toast(errorMessage(error), "error");
     }
-  }
-
-  const [open, setOpen] = useState(false);
-  const [absenceReason, setAbsenceReason] = useState<AbsenceReason | "">("");
-  const [absenceNote, setAbsenceNote] = useState("");
-
-  const submitting =
-    reportAbsence.isPending && reportAbsence.variables?.signupId === signup._id;
-
-  function handleClose() {
-    setOpen(false);
-    setAbsenceReason("");
-    setAbsenceNote("");
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!absenceReason) return;
-    try {
-      await reportAbsence.mutateAsync({
-        signupId: signup._id,
-        absenceReason,
-        absenceNote: absenceNote.trim() || undefined,
-      });
-      toast("Your absence has been reported. The organizer has been notified.");
-      handleClose();
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
-  }
-
-  return (
-    <>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
-        <Link
-          href={`/events/${event._id}`}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
-        >
-          <Info className="h-3.5 w-3.5" /> Details
-        </Link>
-        {signup.status === "confirmed" ? (
-          <a
-            href={SignupHTTPClient.calendarUrl(signup._id)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 px-3 text-[13px] font-semibold text-ink-700 hover:bg-ink-50"
-          >
-            <CalendarPlus className="h-3.5 w-3.5" /> Calendar
-          </a>
-        ) : null}
-        {shiftStarted ? null : waitlisted ? (
-          <Button
-            size="sm"
-            variant="danger"
-            loading={cancel.isPending}
-            onClick={leaveWaitlist}
-          >
-            Leave waitlist
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="danger"
-            loading={submitting}
-            onClick={() => setOpen(true)}
-          >
-            Can&apos;t make it
-          </Button>
-        )}
-      </div>
-
-      <Dialog
-        open={open}
-        onClose={handleClose}
-        title="Report an absence"
-        description={`${shift.roleName} · ${formatDate(shift.startsAt)} · ${formatTimeRange(shift.startsAt, shift.endsAt)}`}
-      >
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <Select
-            label="Reason"
-            required
-            placeholder="Select a reason"
-            options={ABSENCE_REASON_OPTIONS}
-            value={absenceReason}
-            onChange={(e) => setAbsenceReason(e.target.value as AbsenceReason)}
-          />
-          <Textarea
-            label="Note"
-            hint="Optional — anything the organizer should know."
-            rows={3}
-            maxLength={300}
-            value={absenceNote}
-            onChange={(e) => setAbsenceNote(e.target.value)}
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!absenceReason}
-              loading={submitting}
-            >
-              Submit
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-    </>
-  );
-}
-
-export default function DashboardPage() {
-  const { user } = useSession();
-  const signups = useMySignups();
-  const hours = useMyHours();
-
-  const now = useNow();
-  const upcoming = (signups.data ?? []).filter(
-    (s) =>
-      new Date(s.shift.endsAt).getTime() >= now &&
-      ["pending", "confirmed", "waitlisted"].includes(s.signup.status)
-  );
-  const past = (signups.data ?? [])
-    .filter((s) => !upcoming.includes(s))
-    .reverse();
+  };
 
   return (
     <Container className="py-8 sm:py-10">
@@ -254,9 +177,32 @@ export default function DashboardPage() {
               <Spinner />
             ) : upcoming.length ? (
               <ul className="divide-y divide-ink-100">
-                {upcoming.map((item) => (
-                  <ShiftRow key={item.signup._id} item={item} />
-                ))}
+                {upcoming.map((item) => {
+                  // Until the shift starts, a held spot can be given up and
+                  // a waitlist place left.
+                  const open = new Date(item.shift.startsAt).getTime() > now;
+                  const waitlisted = item.signup.status === "waitlisted";
+                  return (
+                    <ShiftRow
+                      key={item.signup._id}
+                      item={item}
+                      onReportAbsence={
+                        open && !waitlisted
+                          ? () => setReporting(item)
+                          : undefined
+                      }
+                      cancelling={
+                        cancel.isPending &&
+                        cancel.variables?.signupId === item.signup._id
+                      }
+                      onCancel={
+                        open && waitlisted
+                          ? () => leaveWaitlist(item)
+                          : undefined
+                      }
+                    />
+                  );
+                })}
               </ul>
             ) : (
               <CardBody>
@@ -314,6 +260,80 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+      {reporting ? (
+        <AbsenceDialog item={reporting} onClose={() => setReporting(null)} />
+      ) : null}
     </Container>
+  );
+}
+
+function AbsenceDialog({
+  item,
+  onClose,
+}: {
+  item: ClientSignupWithContext;
+  onClose: () => void;
+}) {
+  const { reportAbsence } = useSignupActions();
+  const toast = useToast();
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const { signup, shift, event } = item;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await reportAbsence.mutateAsync({
+        signupId: signup._id,
+        body: { reason: reason as AbsenceReason, note },
+      });
+      toast("Your absence has been reported. The organizer has been notified.");
+      onClose();
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Report an absence"
+      description={`${event.title} · ${shift.roleName} · ${formatDate(shift.startsAt)} · ${formatTimeRange(shift.startsAt, shift.endsAt)}. Your spot goes to the next person and the organizer is emailed right away.`}
+    >
+      <form onSubmit={submit} className="grid gap-4">
+        <Select
+          label="Reason"
+          required
+          placeholder="Choose a reason"
+          options={ABSENCE_REASONS.map((r) => ({
+            value: r,
+            label: ABSENCE_REASON_LABELS[r],
+          }))}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <Textarea
+          label="Note for the organizer"
+          hint="Optional."
+          rows={3}
+          maxLength={MAX_ABSENCE_NOTE_LENGTH}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Back
+          </Button>
+          <Button
+            type="submit"
+            variant="danger"
+            loading={reportAbsence.isPending}
+          >
+            Report absence
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

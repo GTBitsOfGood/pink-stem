@@ -6,5 +6,6 @@ export const POST = withAuth<{ id: string }>(
   async (req: NextRequest, { params }, actor) =>
     NextResponse.json(
       await SignupService.reportAbsence(actor, params.id, await req.json())
-    )
+    ),
+  { roles: ["volunteer", "organizer"] }
 );

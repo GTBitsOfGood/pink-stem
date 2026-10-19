@@ -51,6 +51,12 @@ const isActive = (s: Pick<Signup, "status">) =>
   (ACTIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status);
 const isLive = (s: Pick<Signup, "status">) =>
   (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status);
+const insideCutoff = (
+  shift: Pick<Shift, "startsAt">,
+  settings: Pick<OrgSettings, "cancellationCutoffHours">
+) =>
+  shift.startsAt.getTime() - Date.now() <
+  settings.cancellationCutoffHours * HOUR;
 
 interface ReasonInput {
   user: Pick<
@@ -181,18 +187,14 @@ export default class SignupService {
       cancelledBy: null,
       holdUntil: null,
       attendance: null,
+      absence: null,
     } as const;
     let signup: Doc<Signup> | null = null;
     try {
       signup = existing
         ? await SignupDAO.updateByIdIfStatus(existing._id, "cancelled", {
             ...fields,
-            $unset: {
-              cancellationReason: 1,
-              reportedAbsence: 1,
-              absenceReason: 1,
-              absenceNote: 1,
-            },
+            $unset: { cancellationReason: 1 },
           })
         : await SignupDAO.create({
             shiftId: shift._id,
@@ -259,11 +261,8 @@ export default class SignupService {
     if (!self) assertCanManageEvent(actor, event);
     if (!isLive(signup))
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
-    if (
-      self &&
-      shift.startsAt.getTime() - Date.now() <
-        settings.cancellationCutoffHours * HOUR
-    ) {
+    // Leaving the waitlist frees nobody's spot, so only held spots are locked in.
+    if (self && isActive(signup) && insideCutoff(shift, settings)) {
       throw new IllegalOperationError(ERRORS.SIGNUP.INSIDE_CUTOFF);
     }
 
@@ -308,61 +307,44 @@ export default class SignupService {
   }
 
   /**
-   * Volunteer-initiated absence report. Bypasses the cancellation cutoff. Frees the spot
-   * and promotes the waitlist exactly like a normal cancel.
+   * "Can't make it": allowed until the shift starts, even inside the
+   * cancellation cutoff. The spot is freed as on a cancel, and the organizer
+   * is emailed right away instead of in the next digest.
    */
   static async reportAbsence(
     actor: Actor,
     signupId: string,
     input: unknown
   ): Promise<Doc<Signup>> {
-    const { absenceReason, absenceNote } = reportAbsenceSchema.parse(input);
+    const { reason, note } = reportAbsenceSchema.parse(input);
     const signup = await SignupDAO.findById(signupId);
-    if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
-
-    if (!sameId(actor.id, signup.volunteerId))
-      throw new ForbiddenError(ERRORS.AUTH.FORBIDDEN);
-
+    if (!signup || !sameId(signup.volunteerId, actor.id))
+      throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
+    // A waitlist place holds no spot, so it is left with a plain cancel.
     if (signup.status === "waitlisted")
       throw new IllegalOperationError(ERRORS.SIGNUP.ABSENCE_WAITLISTED);
     if (!isActive(signup))
-      throw new IllegalOperationError(ERRORS.SIGNUP.ALREADY_CANCELLED);
-
+      throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
     const [shift, event, settings] = await Promise.all([
       ShiftDAO.findById(signup.shiftId),
       EventDAO.findById(signup.eventId),
       OrgSettingsDAO.get(),
     ]);
     if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
-
     if (shift.startsAt <= new Date())
       throw new IllegalOperationError(ERRORS.SHIFT.IN_PAST);
 
-    // Claim the transition first so a double submit can't free the spot twice.
+    const late = insideCutoff(shift, settings);
+    // Claimed first, so a double submit cannot free the spot twice.
     const claimed = await SignupDAO.updateByIdIfStatus(
       signup._id,
       signup.status,
       {
         status: "cancelled",
-        reportedAbsence: true,
-        absenceReason,
-        ...(absenceNote ? { absenceNote } : { $unset: { absenceNote: 1 } }),
+        absence: { reason, note: note || undefined, late },
       }
     );
-    if (!claimed)
-      throw new IllegalOperationError(ERRORS.SIGNUP.ALREADY_CANCELLED);
-
-    const updated = await SignupService.release(
-      signup,
-      shift,
-      event,
-      settings,
-      {
-        by: new Types.ObjectId(actor.id),
-        reason: `Absence reported: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? `. ${absenceNote}` : ""}`,
-      }
-    );
-
+    if (!claimed) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
     await AuditService.record(
       actor,
       "signup.absence_reported",
@@ -370,38 +352,35 @@ export default class SignupService {
       signup._id,
       {
         before: { status: signup.status },
-        after: { status: "cancelled", absenceReason },
+        after: { status: "cancelled", reason, late },
+      }
+    );
+    const released = await SignupService.release(
+      signup,
+      shift,
+      event,
+      settings,
+      {
+        by: new Types.ObjectId(actor.id),
+        reason: `Absence reported: ${ABSENCE_REASON_LABELS[reason]}`,
       }
     );
 
-    // The absence is saved; a failed email must not turn it into an error.
-    try {
-      const [volunteer, organizer] = await Promise.all([
-        UserDAO.findById(signup.volunteerId),
-        UserDAO.findById(event.organizerId),
-      ]);
-      if (organizer) {
-        const org = await NotificationService.org();
-        const details = NotificationService.eventDetails(event, shift);
-        const who = volunteer
-          ? `${volunteer.firstName} ${volunteer.lastName}`
-          : "A volunteer";
-        await NotificationService.send(
-          organizer,
-          NotificationService.templates.organizerNotice(org, {
-            name: organizer.firstName,
-            subject: `Absence reported: ${event.title}`,
-            title: "A volunteer reported they cannot attend",
-            body: `${who} can't make their ${shift.roleName} shift on ${details.date}, ${details.time}. Their spot has been released.\n\nReason: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? `\n\nNote: ${absenceNote}` : ""}`,
-            url: appUrl(`/organizer/events/${event._id}`),
-          })
-        );
-      }
-    } catch (err) {
-      console.error("[reportAbsence] organizer notification failed", err);
-    }
-
-    return updated;
+    // Operational, so it ignores preferences, and best effort: the absence
+    // is already saved, so a failed email must not turn it into an error.
+    const details = NotificationService.eventDetails(event, shift);
+    await NotificationService.toUsers([event.organizerId], (org, organizer) =>
+      NotificationService.templates.organizerNotice(org, {
+        name: organizer.firstName,
+        subject: `Absence reported: ${event.title}`,
+        title: "A volunteer can't make their shift",
+        body: `${actor.name} can't make the ${shift.roleName} shift on ${details.date}, ${details.time}, so their spot has been released.\n\nReason: ${ABSENCE_REASON_LABELS[reason]}${note ? `\n\nNote: ${note}` : ""}`,
+        url: appUrl(`/organizer/events/${event._id}/roster`),
+      })
+    ).catch((error) =>
+      console.error("[absence] organizer email failed", error)
+    );
+    return released;
   }
 
   /** Cancels a live sign-up, frees its spot, and promotes the waitlist. */
@@ -835,13 +814,11 @@ export default class SignupService {
     assertCanManageEvent(actor, event);
     const [shifts, signups] = await Promise.all([
       ShiftDAO.findByEvent(event._id),
-      SignupDAO.findByEvent(event._id, [
-        "pending",
-        "confirmed",
-        "waitlisted",
-        "attended",
-        "no_show",
-      ]),
+      SignupDAO.find({
+        eventId: event._id,
+        // Reported absences stay listed so nobody marks them as no-shows.
+        $or: [{ status: { $ne: "cancelled" } }, { absence: { $ne: null } }],
+      }),
     ]);
     const volunteerIds = signups.map((s) => s.volunteerId);
     const [volunteers, clearances] = await Promise.all([

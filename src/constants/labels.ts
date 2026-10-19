@@ -2,9 +2,9 @@ import type { AuditAction } from "@/types/audit";
 import type { CertificateType } from "@/types/certificate";
 import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
 import type {
+  AbsenceReason,
   PendingReason,
   SignupStatus,
-  AbsenceReason,
 } from "@/types/signup";
 import type {
   ClearanceStatus,

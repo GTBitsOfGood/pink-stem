@@ -283,7 +283,7 @@ export default class JobService {
           lines: [
             ...joined.map((s) => `New sign-up for ${titleOf(s.eventId)}`),
             ...left.map((s) =>
-              s.reportedAbsence
+              s.absence
                 ? `Absence reported for ${titleOf(s.eventId)}`
                 : `Cancellation on ${titleOf(s.eventId)}`
             ),

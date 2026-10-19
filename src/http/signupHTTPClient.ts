@@ -1,6 +1,6 @@
 import fetchHTTPClient from "@/http/fetchHTTPClient";
 import type { ClientSignup } from "@/http/eventHTTPClient";
-import type { AbsenceReason } from "@/types/signup";
+import type { ReportAbsenceInput } from "@/utils/validation/signup";
 
 export default class SignupHTTPClient {
   static create(
@@ -16,13 +16,9 @@ export default class SignupHTTPClient {
 
   static reportAbsence(
     signupId: string,
-    absenceReason: AbsenceReason,
-    absenceNote?: string
+    body: ReportAbsenceInput
   ): Promise<ClientSignup> {
-    return fetchHTTPClient(`/signups/${signupId}/absence`, "POST", {
-      absenceReason,
-      absenceNote,
-    });
+    return fetchHTTPClient(`/signups/${signupId}/absence`, "POST", body);
   }
 
   static approve(signupId: string): Promise<ClientSignup> {

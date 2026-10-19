@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/Primitives";
 import { errorMessage, useToast } from "@/components/ui/Toast";
 import {
+  ABSENCE_REASON_LABELS,
   AUDIT_ACTION_LABELS,
   REGION_LABELS,
   ROLE_LABELS,
@@ -58,6 +59,7 @@ export default function PersonPage() {
   const u = p.user;
   const self = admin?._id === u._id;
   const total = p.ledger.reduce((sum, e) => sum + e.hours, 0);
+  const lateAbsences = p.signups.filter((s) => s.signup.absence?.late).length;
 
   const run = async (fn: () => Promise<unknown>, message: string) => {
     try {
@@ -103,6 +105,11 @@ export default function PersonPage() {
               label="No-shows"
               value={
                 p.signups.filter((s) => s.signup.status === "no_show").length
+              }
+              hint={
+                lateAbsences
+                  ? `Plus ${lateAbsences} late absence ${lateAbsences === 1 ? "report" : "reports"}`
+                  : undefined
               }
             />
           </div>
@@ -183,7 +190,23 @@ export default function PersonPage() {
                       </td>
                       <td className={td}>{shift.roleName}</td>
                       <td className={td}>
-                        <SignupBadge status={signup.status} />
+                        {signup.absence ? (
+                          <>
+                            <Badge
+                              tone={signup.absence.late ? "warning" : "neutral"}
+                            >
+                              {signup.absence.late ? "Late absence" : "Absence"}{" "}
+                              · {ABSENCE_REASON_LABELS[signup.absence.reason]}
+                            </Badge>
+                            {signup.absence.note ? (
+                              <div className="text-[12px] text-ink-500">
+                                {signup.absence.note}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <SignupBadge status={signup.status} />
+                        )}
                       </td>
                       <td className={td}>
                         {signup.attendance

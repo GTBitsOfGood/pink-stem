@@ -105,7 +105,7 @@ authorization is enforced server-side on every request by `withAuth`.
 | Me           | `me` (profile), `me/waiver`, `me/guardian-consent`, `me/verify-email`, `me/signups`, `me/hours`, `me/certificates`                                                 |
 | Public       | `events`, `events/:id`, `settings`, `consent/:token`, `verify-email/:token`, `verify/:code`                                                                        |
 | Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |
-| Sign-ups     | `signups`, `signups/:id/{cancel,approve,promote,attendance,calendar}`                                                                                              |
+| Sign-ups     | `signups`, `signups/:id/{cancel,absence,approve,promote,attendance,calendar}`                                                                                      |
 | Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`, `threads/:id/review`                                                                       |
 | Certificates | `certificates/:id/pdf`, `certificates/:id/revoke`                                                                                                                  |
 | Admin        | `admin/{approvals,people,people/:id,people/:id/clearance,people/:id/signout,invitations,organizers,events,hours,audit,reports/:kind,settings}`                     |

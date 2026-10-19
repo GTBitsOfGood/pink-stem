@@ -43,6 +43,14 @@ export interface Attendance {
   markedAt: Date;
 }
 
+/** What a volunteer said when they reported they can't make their shift. */
+export interface Absence {
+  reason: AbsenceReason;
+  note?: string;
+  /** Reported inside the cancellation cutoff, when a plain cancel is refused. */
+  late: boolean;
+}
+
 export interface Signup {
   shiftId: Types.ObjectId;
   eventId: Types.ObjectId;
@@ -59,10 +67,8 @@ export interface Signup {
   /** When a confirmed spot lapsed back to pending, how long it is held. */
   holdUntil?: Date | null;
   attendance?: Attendance | null;
-  /** Set when the volunteer reports they cannot attend via "Can't make it". */
-  reportedAbsence?: boolean;
-  absenceReason?: AbsenceReason;
-  absenceNote?: string;
+  /** Set by "Can't make it"; cleared if the volunteer signs up again. */
+  absence?: Absence | null;
 }
 
 export interface HoursLedgerEntry {

@@ -19,6 +19,15 @@ const attendanceSchema = new Schema(
   { _id: false }
 );
 
+const absenceSchema = new Schema(
+  {
+    reason: { type: String, enum: ABSENCE_REASONS, required: true },
+    note: String,
+    late: { type: Boolean, required: true },
+  },
+  { _id: false }
+);
+
 const signupSchema = new Schema<Signup>(
   {
     shiftId: { type: Schema.ObjectId, ref: "Shift", required: true },
@@ -36,9 +45,7 @@ const signupSchema = new Schema<Signup>(
     holdUntil: { type: Date, default: null },
     // Embedded, so "one attendance record per sign-up" holds by construction.
     attendance: { type: attendanceSchema, default: null },
-    reportedAbsence: { type: Boolean, default: false },
-    absenceReason: { type: String, enum: ABSENCE_REASONS },
-    absenceNote: String,
+    absence: { type: absenceSchema, default: null },
   },
   { timestamps: true }
 );

@@ -79,7 +79,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `clearances`       | Screening outcome per user; admins only. Organizers receive a derived boolean   |
 | `events`           | Organizer-owned events: draft → published → completed, cancelled from any state |
 | `shifts`           | The unit volunteers sign up for; `filledCount` is maintained atomically         |
-| `signups`          | One per volunteer per shift, ever; pending reasons; embedded attendance         |
+| `signups`          | One per volunteer per shift, ever; pending reasons; embedded attendance/absence |
 | `hoursledgers`     | Append-only source of truth for hour totals; corrections reference the original |
 | `eventupdates`     | Notes and important changes, soft-deleted                                       |
 | `messagethreads`   | One thread per volunteer per event, admin-readable, minors flagged              |
