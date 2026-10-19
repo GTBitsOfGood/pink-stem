@@ -323,7 +323,9 @@ export default class SignupService {
     if (!sameId(actor.id, signup.volunteerId))
       throw new ForbiddenError(ERRORS.AUTH.FORBIDDEN);
 
-    if (!isLive(signup))
+    if (signup.status === "waitlisted")
+      throw new IllegalOperationError(ERRORS.SIGNUP.ABSENCE_WAITLISTED);
+    if (!isActive(signup))
       throw new IllegalOperationError(ERRORS.SIGNUP.ALREADY_CANCELLED);
 
     const [shift, event, settings] = await Promise.all([
@@ -336,22 +338,30 @@ export default class SignupService {
     if (shift.startsAt <= new Date())
       throw new IllegalOperationError(ERRORS.SHIFT.IN_PAST);
 
-    const released = await SignupService.release(
+    // Claim the transition first so a double submit can't free the spot twice.
+    const claimed = await SignupDAO.updateByIdIfStatus(
+      signup._id,
+      signup.status,
+      {
+        status: "cancelled",
+        reportedAbsence: true,
+        absenceReason,
+        ...(absenceNote ? { absenceNote } : { $unset: { absenceNote: 1 } }),
+      }
+    );
+    if (!claimed)
+      throw new IllegalOperationError(ERRORS.SIGNUP.ALREADY_CANCELLED);
+
+    const updated = await SignupService.release(
       signup,
       shift,
       event,
       settings,
       {
         by: new Types.ObjectId(actor.id),
-        reason: `Absence reported: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? ` — ${absenceNote}` : ""}`,
+        reason: `Absence reported: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? `. ${absenceNote}` : ""}`,
       }
     );
-
-    const updated = (await SignupDAO.updateById(released._id, {
-      reportedAbsence: true,
-      absenceReason,
-      ...(absenceNote ? { absenceNote } : { $unset: { absenceNote: 1 } }),
-    })) as Doc<Signup>;
 
     await AuditService.record(
       actor,
@@ -364,25 +374,31 @@ export default class SignupService {
       }
     );
 
-    const [volunteer, organizer] = await Promise.all([
-      UserDAO.findById(signup.volunteerId),
-      UserDAO.findById(event.organizerId),
-    ]);
-    if (organizer) {
-      const org = await NotificationService.org();
-      const reasonLabel = ABSENCE_REASON_LABELS[absenceReason];
-      await NotificationService.send(
-        organizer,
-        NotificationService.templates.organizerNotice(org, {
-          name: organizer.firstName,
-          subject: `Absence reported: ${event.title}`,
-          title: "A volunteer reported they cannot attend",
-          body: `${volunteer ? `${volunteer.firstName} ${volunteer.lastName}` : "A volunteer"} (${shift.roleName}) reported they cannot make it.\n\nReason: ${reasonLabel}${absenceNote ? `\n\nNote: ${absenceNote}` : ""}`,
-          url: appUrl(`/organizer/events/${event._id}`),
-        })
-      ).catch((err) =>
-        console.error("[reportAbsence] notification email failed", err)
-      );
+    // The absence is saved; a failed email must not turn it into an error.
+    try {
+      const [volunteer, organizer] = await Promise.all([
+        UserDAO.findById(signup.volunteerId),
+        UserDAO.findById(event.organizerId),
+      ]);
+      if (organizer) {
+        const org = await NotificationService.org();
+        const details = NotificationService.eventDetails(event, shift);
+        const who = volunteer
+          ? `${volunteer.firstName} ${volunteer.lastName}`
+          : "A volunteer";
+        await NotificationService.send(
+          organizer,
+          NotificationService.templates.organizerNotice(org, {
+            name: organizer.firstName,
+            subject: `Absence reported: ${event.title}`,
+            title: "A volunteer reported they cannot attend",
+            body: `${who} can't make their ${shift.roleName} shift on ${details.date}, ${details.time}. Their spot has been released.\n\nReason: ${ABSENCE_REASON_LABELS[absenceReason]}${absenceNote ? `\n\nNote: ${absenceNote}` : ""}`,
+            url: appUrl(`/organizer/events/${event._id}`),
+          })
+        );
+      }
+    } catch (err) {
+      console.error("[reportAbsence] organizer notification failed", err);
     }
 
     return updated;

@@ -58,10 +58,12 @@ const ERRORS = Object.freeze({
     NOT_FOUND: "That sign-up does not exist.",
     ALREADY_SIGNED_UP: "You already hold a spot on this shift.",
     ALREADY_CANCELLED: "This sign-up has already been cancelled.",
+    ABSENCE_WAITLISTED:
+      "You are on the waitlist for this shift. Leave the waitlist instead.",
     OVERLAP:
       "This shift overlaps another one you hold. Confirm to sign up anyway.",
     INSIDE_CUTOFF:
-      "The cancellation window has closed. Message the organizer to cancel.",
+      'The cancellation window has closed. Use "Can\'t make it" on your dashboard to let the organizer know.',
     NOT_CANCELLABLE: "This sign-up can no longer be cancelled.",
     MIN_AGE: "You do not meet the minimum age for this event.",
     NOT_APPROVABLE: "Only pending sign-ups awaiting approval can be approved.",

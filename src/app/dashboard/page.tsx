@@ -79,11 +79,28 @@ function ShiftRow({ item }: { item: ClientSignupWithContext }) {
 
 function ShiftActions({ item }: { item: ClientSignupWithContext }) {
   const { signup, shift, event } = item;
-  const { reportAbsence } = useSignupActions();
+  const { cancel, reportAbsence } = useSignupActions();
   const toast = useToast();
   const now = useNow();
 
   const shiftStarted = new Date(shift.startsAt).getTime() <= now;
+  // Only a held spot can be reported absent; the waitlist is simply left.
+  const waitlisted = signup.status === "waitlisted";
+
+  async function leaveWaitlist() {
+    if (
+      !window.confirm(
+        `Leave the waitlist for the ${shift.roleName} shift at ${event.title}?`
+      )
+    )
+      return;
+    try {
+      await cancel.mutateAsync({ signupId: signup._id });
+      toast("You left the waitlist.");
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  }
 
   const [open, setOpen] = useState(false);
   const [absenceReason, setAbsenceReason] = useState<AbsenceReason | "">("");
@@ -131,7 +148,16 @@ function ShiftActions({ item }: { item: ClientSignupWithContext }) {
             <CalendarPlus className="h-3.5 w-3.5" /> Calendar
           </a>
         ) : null}
-        {!shiftStarted && (
+        {shiftStarted ? null : waitlisted ? (
+          <Button
+            size="sm"
+            variant="danger"
+            loading={cancel.isPending}
+            onClick={leaveWaitlist}
+          >
+            Leave waitlist
+          </Button>
+        ) : (
           <Button
             size="sm"
             variant="danger"
