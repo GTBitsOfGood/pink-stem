@@ -80,7 +80,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `screeningchecks`  | Latest registry pre-check per volunteer and any queued rerun; admins only       |
 | `events`           | Organizer-owned events: draft → published → completed, cancelled from any state |
 | `shifts`           | The unit volunteers sign up for; `filledCount` is maintained atomically         |
-| `signups`          | One per volunteer per shift, ever; pending reasons; embedded attendance         |
+| `signups`          | One per volunteer per shift, ever; pending reasons; embedded attendance/absence |
 | `hoursledgers`     | Append-only source of truth for hour totals; corrections reference the original |
 | `eventupdates`     | Notes and important changes, soft-deleted                                       |
 | `messagethreads`   | One thread per volunteer per event, admin-readable, minors flagged              |

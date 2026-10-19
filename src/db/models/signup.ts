@@ -1,6 +1,7 @@
 import { Schema } from "mongoose";
 import { defineModel } from "@/db/defineModel";
 import {
+  ABSENCE_REASONS,
   ATTENDANCE_STATUSES,
   PENDING_REASONS,
   Signup,
@@ -14,6 +15,15 @@ const attendanceSchema = new Schema(
     adjustmentReason: String,
     markedBy: { type: Schema.ObjectId, ref: "User", required: true },
     markedAt: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
+const absenceSchema = new Schema(
+  {
+    reason: { type: String, enum: ABSENCE_REASONS, required: true },
+    note: String,
+    late: { type: Boolean, required: true },
   },
   { _id: false }
 );
@@ -35,6 +45,7 @@ const signupSchema = new Schema<Signup>(
     holdUntil: { type: Date, default: null },
     // Embedded, so "one attendance record per sign-up" holds by construction.
     attendance: { type: attendanceSchema, default: null },
+    absence: { type: absenceSchema, default: null },
   },
   { timestamps: true }
 );

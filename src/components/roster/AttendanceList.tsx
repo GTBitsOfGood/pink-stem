@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
 import { Input, Textarea } from "@/components/ui/Field";
 import { errorMessage, useToast } from "@/components/ui/Toast";
+import { ABSENCE_REASON_LABELS } from "@/constants/labels";
 import type { ClientRoster } from "@/http/eventHTTPClient";
 import type { RosterEntry } from "@/types/api";
 import type { Serialized } from "@/types/models";
@@ -53,6 +54,9 @@ export default function AttendanceList({
           (e) =>
             e.signup.shiftId === shift._id &&
             ["confirmed", "attended", "no_show"].includes(e.signup.status)
+        );
+        const absent = roster.entries.filter(
+          (e) => e.signup.shiftId === shift._id && e.signup.absence
         );
         const scheduled = hoursBetween(shift.startsAt, shift.endsAt);
         return (
@@ -160,6 +164,25 @@ export default function AttendanceList({
                 Nobody confirmed for this shift.
               </p>
             )}
+            {absent.length ? (
+              <ul className="mt-2 grid gap-2">
+                {absent.map(({ signup, volunteer }) => (
+                  <li
+                    key={signup._id}
+                    className="rounded-2xl border border-dashed border-ink-300 p-3"
+                  >
+                    <p className="text-base font-bold text-ink-900">
+                      {volunteer.firstName} {volunteer.lastName}
+                    </p>
+                    <p className="text-[13px] text-ink-500">
+                      Can&apos;t make it ·{" "}
+                      {ABSENCE_REASON_LABELS[signup.absence!.reason]}
+                      {signup.absence!.note ? ` · ${signup.absence!.note}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </section>
         );
       })}

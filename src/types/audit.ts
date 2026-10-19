@@ -28,6 +28,7 @@ export const AUDIT_ACTIONS = [
   "thread.admin_access",
   "organizer.invited",
   "signup.cancelled_by_staff",
+  "signup.absence_reported",
   "shift.counters_reconciled",
   "auth.rate_limited",
 ] as const;

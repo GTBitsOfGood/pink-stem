@@ -29,6 +29,7 @@ export const MAX_MESSAGES_PER_HOUR = 60;
 export const MAX_MESSAGE_LENGTH = 2_000;
 export const MAX_UPDATE_LENGTH = 2_000;
 export const MAX_BIO_LENGTH = 600;
+export const MAX_ABSENCE_NOTE_LENGTH = 300;
 export const MAX_DESCRIPTION_LENGTH = 5_000;
 export const MAX_TITLE_LENGTH = 120;
 export const MAX_SHIFT_HOURS = 16;
