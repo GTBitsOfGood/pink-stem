@@ -29,6 +29,11 @@ export interface UserSearch {
   page: number;
 }
 
+type ScreeningSubject = Pick<
+  Doc<User>,
+  "_id" | "firstName" | "lastName" | "dateOfBirth" | "updatedAt"
+>;
+
 const SUMMARY_FIELDS = "firstName lastName email phone skills role status";
 
 /**
@@ -118,18 +123,14 @@ export default class UserDAO {
       .lean<UserSummary[]>();
   }
 
-  /** Just what the screening pre-check needs to look someone up. */
+  /** Just what the screening pre-check needs, plus when it last changed. */
   static async findScreeningSubjects(
     ids: (string | Types.ObjectId)[]
-  ): Promise<
-    Pick<Doc<User>, "_id" | "firstName" | "lastName" | "dateOfBirth">[]
-  > {
+  ): Promise<ScreeningSubject[]> {
     await dbConnect();
     return UserModel.find({ _id: { $in: ids } })
-      .select("firstName lastName dateOfBirth")
-      .lean<
-        Pick<Doc<User>, "_id" | "firstName" | "lastName" | "dateOfBirth">[]
-      >();
+      .select("firstName lastName dateOfBirth updatedAt")
+      .lean<ScreeningSubject[]>();
   }
 
   static async listByRole(role: Role): Promise<Doc<SafeUser>[]> {

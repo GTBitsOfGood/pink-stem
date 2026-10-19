@@ -30,16 +30,12 @@ export default class ScreeningCheckDAO {
 
   static async requestRerun(
     userId: string | Types.ObjectId,
-    adminId: string | Types.ObjectId,
     at: Date
   ): Promise<Doc<ScreeningCheck>> {
     await dbConnect();
     return ScreeningCheckModel.findOneAndUpdate(
       { userId },
-      {
-        rerunRequestedAt: at,
-        rerunRequestedBy: new Types.ObjectId(adminId),
-      },
+      { rerunRequestedAt: at },
       { upsert: true, returnDocument: "after", runValidators: true }
     ).lean<Doc<ScreeningCheck>>() as Promise<Doc<ScreeningCheck>>;
   }
@@ -61,7 +57,7 @@ export default class ScreeningCheckDAO {
     );
     await ScreeningCheckModel.updateOne(
       { userId, rerunRequestedAt: { $lte: startedAt } },
-      { rerunRequestedAt: null, rerunRequestedBy: null }
+      { rerunRequestedAt: null }
     );
   }
 }

@@ -19,6 +19,7 @@ export type RegistryOutcome = (typeof REGISTRY_OUTCOMES)[number];
 export const REGISTRY_UNAVAILABLE_REASONS = [
   "manual_only",
   "missing_dob",
+  "unmatchable_name",
   "source_error",
 ] as const;
 export type RegistryUnavailableReason =
@@ -52,7 +53,7 @@ export type RegistryCheckResult = RegistryCheckBase &
       }
   );
 
-/** Who to look up. `userId` keys the results; it is never sent to a source. */
+/** Who to look up. `userId` keys the results; it never leaves the app. */
 export interface RegistrySubject {
   userId: string;
   firstName: string;
@@ -69,5 +70,4 @@ export interface ScreeningCheck {
   results: RegistryCheckResult[];
   /** Set when an admin asks for a rerun; the next hourly job clears it. */
   rerunRequestedAt: Date | null;
-  rerunRequestedBy: Types.ObjectId | null;
 }

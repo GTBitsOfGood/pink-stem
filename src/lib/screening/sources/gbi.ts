@@ -2,6 +2,7 @@ import { SCREENING_FETCH_TIMEOUT_MS } from "@/constants/limits";
 import { parseCsv } from "@/lib/csv";
 import {
   birthYearMatches,
+  isMatchable,
   lastNameKeys,
   nameWords,
   namesMatch,
@@ -38,19 +39,34 @@ const COLUMNS = {
   county: "COUNTY",
 } as const;
 
-/** The real file has ~25,000 entries. Far fewer means a truncated or changed download, not "no match". */
-const MIN_ENTRIES = 1_000;
+/**
+ * The real file has ~25,600 entries. Fewer than this means a truncated or
+ * changed download, which can't vouch for "no match". A compressed download
+ * cut off on a row boundary passes every other check, so the floor is close.
+ */
+const MIN_ENTRIES = 20_000;
 
 const downloadCsv = async (): Promise<string> => {
-  const response = await fetch(CSV_URL, {
-    headers: { "User-Agent": "PinkStemVolunteerHub/1.0 (screening pre-check)" },
-    signal: AbortSignal.timeout(SCREENING_FETCH_TIMEOUT_MS),
-    cache: "no-store",
-  });
+  let response: Response;
+  let body: ArrayBuffer;
+  try {
+    response = await fetch(CSV_URL, {
+      headers: {
+        "User-Agent": "PinkStemVolunteerHub/1.0 (screening pre-check)",
+      },
+      signal: AbortSignal.timeout(SCREENING_FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    body = await response.arrayBuffer();
+  } catch (error) {
+    // A timeout or network error names no subject, so its type is safe to log.
+    throw new ScreeningSourceError(
+      `download failed: ${error instanceof Error ? error.name : "unknown"}`
+    );
+  }
   if (!response.ok) {
     throw new ScreeningSourceError(`download failed: ${response.status}`);
   }
-  const body = await response.arrayBuffer();
   // Content-Length is the encoded size, so it only proves completeness when
   // the body wasn't compressed in transit.
   const expected = Number(response.headers.get("content-length"));
@@ -71,7 +87,7 @@ interface Candidate {
   name: RegistryName;
 }
 
-export interface GbiSourceOptions {
+interface GbiSourceOptions {
   /** Replaces the download, for checks against a made-up file. */
   loadCsv?: () => Promise<string>;
   minEntries?: number;
@@ -107,6 +123,19 @@ export const createGbiSource = ({
             last: nameWords(subject.lastName),
           },
         };
+        // A name the matcher can't read would always come back "no match".
+        if (
+          !isMatchable(subject.firstName) ||
+          !isMatchable(subject.lastName) ||
+          !candidate.name.first.length ||
+          !lastNameKeys(candidate.name.last).length
+        ) {
+          results.set(
+            subject.userId,
+            unavailable(source, "unmatchable_name", checkedAt)
+          );
+          continue;
+        }
         hits.set(subject.userId, []);
         for (const key of lastNameKeys(candidate.name.last)) {
           byKey.set(key, [...(byKey.get(key) ?? []), candidate]);
@@ -121,7 +150,8 @@ export const createGbiSource = ({
       } catch {
         throw new ScreeningSourceError("unreadable CSV");
       }
-      const [header, ...rows] = parsed;
+      const [rawHeader, ...rows] = parsed;
+      const header = rawHeader?.map((title) => title.trim());
       const column = Object.fromEntries(
         Object.entries(COLUMNS).map(([field, title]) => [
           field,
@@ -150,8 +180,9 @@ export const createGbiSource = ({
         );
         if (!candidates.size) continue;
 
-        const year = Number.parseInt(row[column.yearOfBirth] ?? "", 10);
-        const yearOfBirth = Number.isNaN(year) ? null : year;
+        // Anything but a plain year is unknown, which can't rule a hit out.
+        const year = row[column.yearOfBirth]?.trim() ?? "";
+        const yearOfBirth = /^\d{4}$/.test(year) ? Number(year) : null;
         for (const { subject, name } of candidates) {
           if (!namesMatch(name, entry)) continue;
           if (!birthYearMatches(subject.dateOfBirth, yearOfBirth)) continue;
@@ -168,23 +199,13 @@ export const createGbiSource = ({
         }
       }
 
+      const base = { source: source.id, sourceLabel: source.label, checkedAt };
       for (const [userId, found] of hits) {
         results.set(
           userId,
           found.length
-            ? {
-                source: source.id,
-                sourceLabel: source.label,
-                checkedAt,
-                outcome: "possible_match",
-                hits: found,
-              }
-            : {
-                source: source.id,
-                sourceLabel: source.label,
-                checkedAt,
-                outcome: "no_match",
-              }
+            ? { ...base, outcome: "possible_match", hits: found }
+            : { ...base, outcome: "no_match" }
         );
       }
       return results;

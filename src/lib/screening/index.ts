@@ -7,7 +7,7 @@ import { gbiSource } from "@/lib/screening/sources/gbi";
 import { nsopwSource } from "@/lib/screening/sources/nsopw";
 import type { RegistryCheckResult, RegistrySubject } from "@/types/screening";
 
-export const SCREENING_SOURCES: ScreeningSource[] = [gbiSource, nsopwSource];
+const SCREENING_SOURCES: ScreeningSource[] = [gbiSource, nsopwSource];
 
 /**
  * The screening pre-check: every subject against every source, one result

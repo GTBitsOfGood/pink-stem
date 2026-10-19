@@ -26,7 +26,7 @@ src/app/**/page.tsx             UI. No fetch calls, no business rules.
 | `src/db/actions/`       | DAO classes with static methods                                 |
 | `src/db/models/`        | Mongoose schemas; the interfaces they implement live in `types` |
 | `src/http/`             | Typed frontend API clients                                      |
-| `src/lib/`              | Session signing, dates, tokens, email templates, PDF, CSV, ICS  |
+| `src/lib/`              | Session, dates, tokens, emails, PDF, CSV, ICS, registry lookups |
 | `src/middleware/`       | Response header helpers                                         |
 | `src/services/`         | Business logic classes with static methods                      |
 | `src/styles/`           | Global CSS and font configuration                               |
@@ -77,6 +77,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | ------------------ | ------------------------------------------------------------------------------- |
 | `users`            | Accounts, profile, waiver acceptance, notification preferences, session version |
 | `clearances`       | Screening outcome per user; admins only. Organizers receive a derived boolean   |
+| `screeningchecks`  | Latest registry pre-check per volunteer and any queued rerun; admins only       |
 | `events`           | Organizer-owned events: draft → published → completed, cancelled from any state |
 | `shifts`           | The unit volunteers sign up for; `filledCount` is maintained atomically         |
 | `signups`          | One per volunteer per shift, ever; pending reasons; embedded attendance         |
@@ -104,7 +105,8 @@ Two decisions carry most of the weight:
 
 `JobService.runAll` (`POST /api/v1/jobs/run`, through `runExclusive`) sends shift reminders, low-fill
 alerts, unapproved-roster nudges, clearance expiry warnings, note and message
-digests, and the organizer digest, and closes stale threads. Every send is
+digests, and the organizer digest, closes stale threads, and runs the registry
+pre-check for volunteers waiting on clearance. Every send is
 keyed in `notificationlogs`, so the runner is safe to fire hourly and a late
 or repeated run is harmless. `JobService.runExclusive` holds an expiring lock
 in the same collection, so a manual run never overlaps the scheduled one.

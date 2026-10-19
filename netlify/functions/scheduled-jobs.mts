@@ -1,7 +1,8 @@
 import type { Config } from "@netlify/functions";
 
 /**
- * Hourly trigger for reminders, digests, clearance expiry, and roster nudges.
+ * Hourly trigger for reminders, digests, clearance expiry, roster nudges, and
+ * the registry pre-check.
  * The work itself lives in the app (POST /api/v1/jobs/run) so it shares the
  * services and the database connection; this function only rings the bell.
  */

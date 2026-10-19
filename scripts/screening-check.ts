@@ -13,6 +13,7 @@ import { parseCsv, toCsv } from "@/lib/csv";
 import { checkRegistries } from "@/lib/screening";
 import {
   birthYearMatches,
+  isMatchable,
   namesMatch,
   nameWords,
   parseRegistryName,
@@ -104,6 +105,8 @@ const FAKE_ENTRIES: Entry[] = [
   { name: "QXOBRIEN-ZZ, BOBBI", year: "1985" },
   { name: "O'ZZTEST, CARLA", year: "" },
   { name: "ZZTEST, DANA", year: "1970" },
+  { name: "ZZLOWSKI, MICHAL", year: "1990" },
+  { name: "ZZDATE, ERIN", year: "03/02/1990" },
 ];
 const fakeGbi = (csv = fakeCsv(FAKE_ENTRIES)) =>
   createGbiSource({ loadCsv: async () => csv, minEntries: 1 });
@@ -130,6 +133,13 @@ async function offline() {
   await test("an unclosed quote throws instead of swallowing the rest", () => {
     assert.throws(() => parseCsv('A,B\n"open,1\nnext,2\n'));
   });
+  await test("a quote inside a value is text, not the start of a field", () => {
+    assert.deepEqual(parseCsv(`A,B\n5'10",x\nnext,y\n`), [
+      ["A", "B"],
+      [`5'10"`, "x"],
+      ["next", "y"],
+    ]);
+  });
   await test("round-trips toCsv", () => {
     const text = toCsv(
       [{ a: 'q"uote', b: "c,omma" }],
@@ -151,6 +161,17 @@ async function offline() {
     assert.deepEqual(nameWords("Qxobrien-Zz"), ["QXOBRIEN", "ZZ"]);
     assert.deepEqual(nameWords("Alice Q Jr."), ["ALICE", "Q"]);
     assert.deepEqual(nameWords("V"), ["V"]);
+  });
+  await test("folds Latin letters that have no accent to strip", () => {
+    assert.deepEqual(nameWords("Đặng"), ["DANG"]);
+    assert.deepEqual(nameWords("Michał"), ["MICHAL"]);
+    assert.deepEqual(nameWords("Søren Æsa"), ["SOREN", "AESA"]);
+    assert.deepEqual(nameWords("Þóra Straße"), ["THORA", "STRASSE"]);
+  });
+  await test("a name in another script can't be matched", () => {
+    assert.ok(isMatchable("Zoë O'Zztest-Đặng"));
+    assert.ok(!isMatchable("李"));
+    assert.ok(!isMatchable("Иван"));
   });
   await test("parses LAST, FIRST MIDDLE SUFFIX", () => {
     assert.deepEqual(parseRegistryName("ZZTEST, ALICE Q JR"), {
@@ -216,6 +237,16 @@ async function offline() {
   await test("unknown registry year counts as a match", () => {
     assert.ok(birthYearMatches(dob("1990-06-15"), null));
   });
+  await test("a registry year that isn't a plain year counts as unknown", async () => {
+    const results = await checkRegistries(
+      [subject("u1", "Erin", "Zzdate", "1970-01-01")],
+      [fakeGbi()]
+    );
+    const result = only(results, "u1");
+    assert.equal(result.outcome, "possible_match");
+    if (result.outcome === "possible_match")
+      assert.equal(result.hits[0].yearOfBirth, null);
+  });
 
   console.log("GBI source (made-up file)");
   await test("possible match lists every hit within a year, with location and link", async () => {
@@ -263,6 +294,23 @@ async function offline() {
     if (result.outcome === "possible_match") {
       assert.equal(result.hits[0].yearOfBirth, null);
     }
+  });
+  await test("an accented name matches its plain registry spelling", async () => {
+    const results = await checkRegistries(
+      [subject("u1", "Michał", "Zzłowski", "1990-03-02")],
+      [fakeGbi()]
+    );
+    assert.equal(only(results, "u1").outcome, "possible_match");
+  });
+  await test("a name that can't be matched → couldn't check, never no match", async () => {
+    const results = await checkRegistries(
+      [subject("u1", "李", "Zztest", "1990-03-02")],
+      [fakeGbi()]
+    );
+    const result = only(results, "u1");
+    assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable")
+      assert.equal(result.reason, "unmatchable_name");
   });
   await test("missing DOB → couldn't check, with manual link, never a name-only flag", async () => {
     const results = await checkRegistries(
@@ -330,6 +378,8 @@ async function offline() {
     );
     const result = only(results, "u1");
     assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable")
+      assert.equal(result.reason, "source_error");
   });
   await test("file cut off mid-row → source_error, not no match", async () => {
     const csv = fakeCsv(FAKE_ENTRIES);
@@ -347,7 +397,10 @@ async function offline() {
       [subject("u1", "Nobody", "Qqnotreal", "1990-03-02")],
       [fakeGbi(`${fakeCsv(FAKE_ENTRIES)}\n"QQNOTREAL, NOBODY,1990`)]
     );
-    assert.equal(only(results, "u1").outcome, "unavailable");
+    const result = only(results, "u1");
+    assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable")
+      assert.equal(result.reason, "source_error");
   });
   await test("invalid DOB → missing_dob, not no match", async () => {
     const results = await checkRegistries(
@@ -469,8 +522,35 @@ async function offline() {
     } finally {
       console.error = realError;
     }
-    assert.ok(logged[0]?.includes("download failed: 503"));
-    assert.ok(!logged[1]?.includes("Zztest"));
+    assert.equal(logged.length, 2);
+    assert.ok(logged[0].includes("download failed: 503"));
+    assert.ok(logged[1].includes("unexpected error"));
+    assert.ok(!logged[1].includes("Zztest"));
+  });
+  await test("a failed download is logged by its error type, never its details", async () => {
+    const realFetch = globalThis.fetch;
+    const realError = console.error;
+    const logged: string[] = [];
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed for Alice Zztest");
+    }) as typeof fetch;
+    console.error = (...args: unknown[]) => void logged.push(args.join(" "));
+    try {
+      const results = await checkRegistries(
+        [subject("u1", "Alice", "Zztest", "1990-03-02")],
+        [gbiSource]
+      );
+      const result = only(results, "u1");
+      assert.equal(result.outcome, "unavailable");
+      if (result.outcome === "unavailable")
+        assert.equal(result.reason, "source_error");
+    } finally {
+      globalThis.fetch = realFetch;
+      console.error = realError;
+    }
+    assert.deepEqual(logged, [
+      "[screening] gbi_ga failed: download failed: TypeError",
+    ]);
   });
   await test("no subjects → empty map, no source called", async () => {
     let called = false;

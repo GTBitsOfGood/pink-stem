@@ -21,8 +21,9 @@ export function toCsv<T>(rows: T[], columns: CsvColumn<T>[]): string {
 /**
  * Parses RFC 4180 CSV into rows of fields, header included. Handles quoted
  * fields, doubled quotes, and line breaks inside quotes; blank lines are skipped.
- * Throws on a quote that is never closed, since everything after it would
- * otherwise be swallowed into one field.
+ * A quote only opens a field at its start, so one inside a value (5'10") is
+ * kept as text. Throws on a quote that is never closed, since everything
+ * after it would otherwise be swallowed into one field.
  */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -45,7 +46,7 @@ export function parseCsv(text: string): string[][] {
         field += '"';
         i += 1;
       } else quoted = false;
-    } else if (char === '"') quoted = true;
+    } else if (char === '"' && field === "") quoted = true;
     else if (char === ",") {
       row.push(field);
       field = "";

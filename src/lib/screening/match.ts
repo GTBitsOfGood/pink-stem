@@ -5,17 +5,40 @@ const SUFFIXES = new Set(["JR", "SR", "II", "III", "IV", "V"]);
 /** Particles like DE or LA are too short to match a compound last name on their own. */
 const MIN_PART_LENGTH = 3;
 
+/** Latin letters that NFD does not split into a base letter and an accent. */
+const LETTERS: Record<string, string> = {
+  Æ: "AE",
+  Ð: "D",
+  Đ: "D",
+  Ł: "L",
+  Ø: "O",
+  Œ: "OE",
+  Þ: "TH",
+};
+
+/** Uppercased A–Z where possible: accents folded, apostrophes and periods dropped. */
+const fold = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[ÆÐĐŁØŒÞ]/g, (letter) => LETTERS[letter])
+    .replace(/['’.]/g, "");
+
 /**
- * A name as comparable words: accents folded, uppercased, apostrophes and
- * periods dropped (O'Brien → OBRIEN), split on anything else (hyphens,
- * spaces), and generational suffixes removed unless they're the only word.
+ * Whether a name folds entirely to A–Z. Letters that do not (another script,
+ * say) would be dropped, so a "no match" for that name would mean nothing.
+ */
+export const isMatchable = (value: string) =>
+  !/[\u0080-\uffff]/.test(fold(value));
+
+/**
+ * A name as comparable words: folded (O'Brien → OBRIEN), split on anything
+ * else (hyphens, spaces), and generational suffixes removed unless they're
+ * the only word.
  */
 export const nameWords = (value: string): string[] => {
-  const words = value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/['’.]/g, "")
+  const words = fold(value)
     .split(/[^A-Z]+/)
     .filter(Boolean);
   const kept = words.filter((word) => !SUFFIXES.has(word));

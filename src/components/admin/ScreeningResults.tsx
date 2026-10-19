@@ -18,9 +18,10 @@ const TONE = {
   unavailable: "info",
 } as const;
 
-const outcomeLabel = (r: Result) =>
+/** The outcome, or for "couldn't check" the reason why. */
+const resultLabel = (r: Result) =>
   r.outcome === "unavailable"
-    ? `${REGISTRY_OUTCOME_LABELS.unavailable}: ${REGISTRY_UNAVAILABLE_LABELS[r.reason].toLowerCase()}`
+    ? REGISTRY_UNAVAILABLE_LABELS[r.reason]
     : REGISTRY_OUTCOME_LABELS[r.outcome];
 
 /** One line for the Approvals queue, e.g. "GBI: No match · NSOPW: Search by hand". */
@@ -28,14 +29,7 @@ export function screeningLine(check: ClientScreeningCheck | null): string {
   if (check?.rerunRequestedAt) return "Pre-check rerun queued";
   if (!check?.results.length) return "Pre-check not run yet";
   return check.results
-    .map(
-      (r) =>
-        `${REGISTRY_SOURCE_SHORT_LABELS[r.source]}: ${
-          r.outcome === "unavailable"
-            ? REGISTRY_UNAVAILABLE_LABELS[r.reason]
-            : REGISTRY_OUTCOME_LABELS[r.outcome]
-        }`
-    )
+    .map((r) => `${REGISTRY_SOURCE_SHORT_LABELS[r.source]}: ${resultLabel(r)}`)
     .join(" · ");
 }
 
@@ -58,7 +52,11 @@ export default function ScreeningResults({ results }: { results: Result[] }) {
         <li key={r.source} className="text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-ink-900">{r.sourceLabel}</span>
-            <Badge tone={TONE[r.outcome]}>{outcomeLabel(r)}</Badge>
+            <Badge tone={TONE[r.outcome]}>
+              {r.outcome === "unavailable"
+                ? `${REGISTRY_OUTCOME_LABELS.unavailable}: ${resultLabel(r).toLowerCase()}`
+                : resultLabel(r)}
+            </Badge>
           </div>
           <div className="text-[12px] text-ink-500">
             Checked {formatDateTime(r.checkedAt)}
@@ -67,9 +65,10 @@ export default function ScreeningResults({ results }: { results: Result[] }) {
             <ul className="mt-1 grid gap-1">
               {r.hits.map((hit, i) => (
                 <li key={i} className="text-[13px] text-ink-700">
-                  {link(hit.url, hit.name)}
+                  {hit.name}
                   {hit.yearOfBirth ? ` · born ${hit.yearOfBirth}` : ""}
-                  {hit.location ? ` · ${hit.location}` : ""}
+                  {hit.location ? ` · ${hit.location}` : ""} ·{" "}
+                  {link(hit.url, "Verify")}
                 </li>
               ))}
             </ul>

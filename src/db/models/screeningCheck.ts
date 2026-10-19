@@ -46,7 +46,6 @@ const screeningCheckSchema = new Schema<ScreeningCheck>(
     },
     results: { type: [resultSchema], default: [] },
     rerunRequestedAt: { type: Date, default: null },
-    rerunRequestedBy: { type: Schema.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

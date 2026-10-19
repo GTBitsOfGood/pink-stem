@@ -6,10 +6,7 @@ import AuditService from "@/services/audit";
 import type { Actor } from "@/types/auth";
 import { NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
-import type {
-  RegistryUnavailableReason,
-  ScreeningCheck,
-} from "@/types/screening";
+import type { ScreeningCheck } from "@/types/screening";
 import ERRORS from "@/utils/errorMessages";
 
 /**
@@ -20,10 +17,10 @@ import ERRORS from "@/utils/errorMessages";
 export default class ScreeningService {
   /**
    * Scheduled: checks every volunteer who needs it and saves the results.
-   * That is anyone with a sign-up pending on clearance who has never been
-   * checked, whose last check hit a source error, or who had no date of birth
-   * then and has one now, plus anyone an admin queued for a rerun. Returns
-   * how many volunteers were checked.
+   * That is anyone with a sign-up pending on clearance who has not been
+   * checked since that sign-up or their profile last changed, or whose last
+   * check hit a source error, plus anyone an admin queued for a rerun.
+   * Returns how many volunteers were checked.
    */
   static async runDue(): Promise<number> {
     const startedAt = new Date();
@@ -31,34 +28,36 @@ export default class ScreeningService {
       SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
       ScreeningCheckDAO.findRerunRequested(),
     ]);
-    const pendingIds = [
-      ...new Set(pending.map((s) => s.volunteerId.toString())),
-    ];
+    // When each volunteer's pending sign-ups last changed.
+    const signupsChanged = new Map<string, number>();
+    for (const signup of pending) {
+      const id = signup.volunteerId.toString();
+      signupsChanged.set(
+        id,
+        Math.max(signupsChanged.get(id) ?? 0, +signup.updatedAt)
+      );
+    }
     const queuedIds = new Set(queued.map((c) => c.userId.toString()));
-    const saved = new Map(
-      (await ScreeningCheckDAO.findByUsers(pendingIds)).map((c) => [
-        c.userId.toString(),
-        c,
-      ])
-    );
-    const users = await UserDAO.findScreeningSubjects([
-      ...new Set([...pendingIds, ...queuedIds]),
+    const ids = [...new Set([...signupsChanged.keys(), ...queuedIds])];
+    const [users, checks] = await Promise.all([
+      UserDAO.findScreeningSubjects(ids),
+      ScreeningCheckDAO.findByUsers(ids),
     ]);
+    const saved = new Map(checks.map((c) => [c.userId.toString(), c.results]));
 
-    const failed = (id: string, reason: RegistryUnavailableReason) =>
-      saved
-        .get(id)
-        ?.results.some(
-          (r) => r.outcome === "unavailable" && r.reason === reason
-        );
     const due = users.filter((u) => {
       const id = u._id.toString();
-      if (queuedIds.has(id)) return true;
-      if (!saved.get(id)?.results.length) return true;
-      if (failed(id, "source_error")) return true;
-      const hasDob =
-        !!u.dateOfBirth && !Number.isNaN(new Date(u.dateOfBirth).getTime());
-      return hasDob && failed(id, "missing_dob");
+      const results = saved.get(id) ?? [];
+      if (queuedIds.has(id) || !results.length) return true;
+      if (
+        results.some(
+          (r) => r.outcome === "unavailable" && r.reason === "source_error"
+        )
+      )
+        return true;
+      // A new sign-up, or a changed name or date of birth, needs a fresh look.
+      const checkedAt = Math.min(...results.map((r) => +r.checkedAt));
+      return Math.max(+u.updatedAt, signupsChanged.get(id) ?? 0) > checkedAt;
     });
     if (!due.length) return 0;
 
@@ -70,9 +69,11 @@ export default class ScreeningService {
         dateOfBirth: u.dateOfBirth ?? null,
       }))
     );
-    for (const [userId, found] of results) {
-      await ScreeningCheckDAO.saveResults(userId, found, startedAt);
-    }
+    await Promise.all(
+      [...results].map(([userId, found]) =>
+        ScreeningCheckDAO.saveResults(userId, found, startedAt)
+      )
+    );
     return results.size;
   }
 
@@ -83,11 +84,7 @@ export default class ScreeningService {
   ): Promise<Doc<ScreeningCheck>> {
     const user = await UserDAO.findById(userId);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    const check = await ScreeningCheckDAO.requestRerun(
-      user._id,
-      admin.id,
-      new Date()
-    );
+    const check = await ScreeningCheckDAO.requestRerun(user._id, new Date());
     await AuditService.record(
       admin,
       "screening.rerun_requested",

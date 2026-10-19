@@ -57,12 +57,13 @@ export default class JobService {
       rosterNudges: JobService.rosterNudges,
       clearanceWarnings: ClearanceService.warnExpiring,
       clearanceExpiry: ClearanceService.expireLapsed,
-      screening: ScreeningService.runDue,
       holdExpiry: SignupService.expireHolds,
       noteDigest: EventUpdateService.sendNoteDigest,
       messageDigest: MessageService.sendDigests,
       staleThreads: MessageService.closeStale,
       organizerDigest: JobService.organizerDigest,
+      // Last, so a slow registry download never holds up the emails.
+      screening: ScreeningService.runDue,
     };
     const results: Record<string, JobResult> = {};
     for (const [name, job] of Object.entries(jobs)) {

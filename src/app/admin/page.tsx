@@ -92,7 +92,7 @@ export default function ApprovalsPage() {
         empty="No sign-ups are waiting on clearance."
         rows={a.awaitingClearance.map(({ volunteer, screening }) => ({
           ...person(volunteer),
-          detail: `Waiting on: clearance · ${screeningLine(screening)}`,
+          detail: `${volunteer.email} · ${screeningLine(screening)}`,
         }))}
       />
       <Queue
