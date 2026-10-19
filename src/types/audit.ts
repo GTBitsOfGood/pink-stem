@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = [
   "user.force_signout",
   "user.flagged_for_review",
   "clearance.recorded",
+  "screening.rerun_requested",
   "hours.approved",
   "hours.adjusted",
   "certificate.issued",

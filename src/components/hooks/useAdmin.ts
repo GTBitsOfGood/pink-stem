@@ -112,6 +112,10 @@ export function useAdminActions(userId?: string) {
         AdminHTTPClient.recordClearance(id(), body),
       onSuccess: invalidate,
     }),
+    requestScreeningRerun: useMutation({
+      mutationFn: () => AdminHTTPClient.requestScreeningRerun(id()),
+      onSuccess: invalidate,
+    }),
     forceSignout: useMutation({
       mutationFn: () => AdminHTTPClient.forceSignout(id()),
       onSuccess: invalidate,

@@ -6,6 +6,7 @@ import ClearanceDAO from "@/db/actions/clearance";
 import EventDAO from "@/db/actions/event";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
 import MessageThreadDAO from "@/db/actions/messageThread";
+import ScreeningCheckDAO from "@/db/actions/screeningCheck";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import { ORGANIZER_INVITE_DAYS, PAGE_SIZE } from "@/constants/limits";
@@ -54,21 +55,38 @@ const RESERVED_ACTOR_NAMES: Record<string, string> = {
 export default class AdminService {
   /** What is waiting on a decision: one list per kind of approval. */
   static async approvals(admin: Actor): Promise<AdminApprovals> {
-    const [submitted, rosters, consentSignups, reported] = await Promise.all([
-      ClearanceDAO.findUserIdsByStatus("submitted"),
-      EventDAO.findAll({ status: "published", eventDate: { $lt: new Date() } }),
-      SignupDAO.find({ status: "pending", pendingReasons: "guardian_consent" }),
-      MessageService.reportedThreads(admin),
-    ]);
-    const [clearances, guardianConsent] = await Promise.all([
-      UserDAO.findSummaries(submitted),
-      UserDAO.findSummaries(
-        consentSignups.map((s) => s.volunteerId),
-        { guardianConsentAt: null }
-      ),
-    ]);
+    const [submitted, rosters, consentSignups, clearanceSignups, reported] =
+      await Promise.all([
+        ClearanceDAO.findUserIdsByStatus("submitted"),
+        EventDAO.findAll({
+          status: "published",
+          eventDate: { $lt: new Date() },
+        }),
+        SignupDAO.find({
+          status: "pending",
+          pendingReasons: "guardian_consent",
+        }),
+        SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
+        MessageService.reportedThreads(admin),
+      ]);
+    const awaitingIds = clearanceSignups.map((s) => s.volunteerId);
+    const [clearances, guardianConsent, awaiting, screenings] =
+      await Promise.all([
+        UserDAO.findSummaries(submitted),
+        UserDAO.findSummaries(
+          consentSignups.map((s) => s.volunteerId),
+          { guardianConsentAt: null }
+        ),
+        UserDAO.findSummaries(awaitingIds),
+        ScreeningCheckDAO.findByUsers(awaitingIds),
+      ]);
     return {
       clearances,
+      awaitingClearance: awaiting.map((volunteer) => ({
+        volunteer,
+        screening:
+          screenings.find((c) => sameId(c.userId, volunteer._id)) ?? null,
+      })),
       rosters,
       guardianConsent,
       reportedThreads: reported,
@@ -115,20 +133,29 @@ export default class AdminService {
   static async getPerson(userId: string): Promise<PersonDetail> {
     const user = await UserDAO.findById(userId);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    const [clearance, signups, ledger, certificates, audit, threadCount] =
-      await Promise.all([
-        ClearanceDAO.findByUser(user._id),
-        SignupDAO.findByVolunteer(user._id),
-        HoursLedgerDAO.findByVolunteer(user._id),
-        CertificateDAO.findByVolunteer(user._id),
-        AuditLogDAO.findForUser(user._id),
-        MessageThreadDAO.count({
-          $or: [{ volunteerId: user._id }, { organizerId: user._id }],
-        }),
-      ]);
+    const [
+      clearance,
+      screening,
+      signups,
+      ledger,
+      certificates,
+      audit,
+      threadCount,
+    ] = await Promise.all([
+      ClearanceDAO.findByUser(user._id),
+      ScreeningCheckDAO.findByUser(user._id),
+      SignupDAO.findByVolunteer(user._id),
+      HoursLedgerDAO.findByVolunteer(user._id),
+      CertificateDAO.findByVolunteer(user._id),
+      AuditLogDAO.findForUser(user._id),
+      MessageThreadDAO.count({
+        $or: [{ volunteerId: user._id }, { organizerId: user._id }],
+      }),
+    ]);
     return {
       user,
       clearance,
+      screening,
       signups: await SignupService.withContext(signups),
       ledger: await HoursService.withEvents(ledger),
       certificates,

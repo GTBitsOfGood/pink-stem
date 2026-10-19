@@ -10,6 +10,7 @@ import type {
   Report,
 } from "@/types/api";
 import type { Doc, Serialized } from "@/types/models";
+import type { ScreeningCheck } from "@/types/screening";
 import type { OrgSettings } from "@/types/settings";
 import type { Clearance, Role } from "@/types/user";
 import type {
@@ -27,6 +28,7 @@ export type ClientPersonDetail = Serialized<PersonDetail>;
 export type ClientAuditRow = Serialized<AuditRow>;
 export type ClientReport = Serialized<Report>;
 export type ClientClearance = Serialized<Doc<Clearance>>;
+export type ClientScreeningCheck = Serialized<Doc<ScreeningCheck>>;
 export type ClearanceBody = Omit<ClearanceInput, "clearedOn" | "expiresOn"> & {
   clearedOn?: string | null;
   expiresOn?: string | null;
@@ -74,6 +76,10 @@ export default class AdminHTTPClient {
     body: ClearanceBody
   ): Promise<ClientClearance> {
     return fetchHTTPClient(`/admin/people/${userId}/clearance`, "PUT", body);
+  }
+
+  static requestScreeningRerun(userId: string): Promise<ClientScreeningCheck> {
+    return fetchHTTPClient(`/admin/people/${userId}/screening`, "POST");
   }
 
   static forceSignout(userId: string): Promise<void> {

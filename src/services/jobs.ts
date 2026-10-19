@@ -19,6 +19,7 @@ import ClearanceService from "@/services/clearance";
 import EventUpdateService from "@/services/eventUpdate";
 import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
+import ScreeningService from "@/services/screening";
 import SignupService from "@/services/signup";
 import { sameId } from "@/utils/authorization";
 
@@ -61,6 +62,8 @@ export default class JobService {
       messageDigest: MessageService.sendDigests,
       staleThreads: MessageService.closeStale,
       organizerDigest: JobService.organizerDigest,
+      // Last, so a slow registry download never holds up the emails.
+      screening: ScreeningService.runDue,
     };
     const results: Record<string, JobResult> = {};
     for (const [name, job] of Object.entries(jobs)) {
