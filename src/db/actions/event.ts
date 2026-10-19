@@ -1,11 +1,11 @@
 import { QueryFilter, Types, UpdateQuery } from "mongoose";
 import dbConnect from "@/db/dbConnect";
-import { toDoc } from "@/db/defineModel";
+import { ensureIndexes, toDoc } from "@/db/defineModel";
 import EventModel from "@/db/models/event";
 import type { Event } from "@/types/event";
 import type { Doc } from "@/types/models";
 
-/** Lean queries do not apply Mongoose defaults, so legacy events are normalized here. */
+/** Lean reads skip schema defaults, so events from before programs read as short-term. */
 const withCommitment = <T extends Doc<Event> | null>(event: T): T =>
   event && !event.commitment
     ? ({ ...event, commitment: "short_term" } as T)
@@ -15,22 +15,27 @@ const withCommitments = (events: Doc<Event>[]) => events.map(withCommitment);
 
 export type NewEvent = Omit<
   Event,
-  "status" | "publishedAt" | "completedAt" | "cancelledAt" | "cancelledBy"
+  | "status"
+  | "commitment"
+  | "publishedAt"
+  | "completedAt"
+  | "cancelledAt"
+  | "cancelledBy"
 > &
   Partial<Event>;
 
 export default class EventDAO {
   static async create(data: NewEvent): Promise<Doc<Event>> {
     await dbConnect();
-    return withCommitment(toDoc<Event>(await EventModel.create(data)));
+    return toDoc<Event>(await EventModel.create(data));
   }
 
   static async createMany(data: NewEvent[]): Promise<Doc<Event>[]> {
     await dbConnect();
+    // A fresh database lacks the unique session index this relies on.
+    await ensureIndexes(EventModel);
     const created = await EventModel.insertMany(data);
-    return withCommitments(
-      created.map((doc) => doc.toObject() as unknown as Doc<Event>)
-    );
+    return created.map((doc) => doc.toObject() as unknown as Doc<Event>);
   }
 
   static async findById(
@@ -97,6 +102,11 @@ export default class EventDAO {
     return withCommitments(
       await EventModel.find(filter).sort({ eventDate: 1 }).lean<Doc<Event>[]>()
     );
+  }
+
+  static async deleteByIds(ids: Types.ObjectId[]): Promise<void> {
+    await dbConnect();
+    await EventModel.deleteMany({ _id: { $in: ids } });
   }
 
   static async count(filter: QueryFilter<Event>): Promise<number> {

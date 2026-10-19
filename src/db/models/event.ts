@@ -24,7 +24,7 @@ const eventSchema = new Schema<Event>(
       default: "short_term",
     },
     seriesId: { type: Schema.ObjectId },
-    seriesWeekdays: { type: [String], enum: WEEKDAYS },
+    seriesWeekdays: { type: [String], enum: WEEKDAYS, default: undefined },
     seriesStartDate: Date,
     seriesEndDate: Date,
     eventDate: { type: Date, required: true },
@@ -52,6 +52,17 @@ const eventSchema = new Schema<Event>(
 
 eventSchema.index({ status: 1, eventDate: 1 });
 eventSchema.index({ organizerId: 1, eventDate: -1 });
-eventSchema.index({ seriesId: 1, eventDate: 1 });
+// One live session per program date. Cancelled sessions keep their date, so
+// they drop out and a program cut short can later be extended over them.
+eventSchema.index(
+  { seriesId: 1, eventDate: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      seriesId: { $exists: true },
+      cancelledAt: { $type: "null" },
+    },
+  }
+);
 
 export default defineModel<Event>("Event", eventSchema);

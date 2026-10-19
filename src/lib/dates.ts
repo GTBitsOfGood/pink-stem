@@ -2,9 +2,6 @@ import { ORG_TIMEZONE } from "@/constants/org";
 import { ADULT_AGE } from "@/constants/limits";
 import { WEEKDAYS, type Weekday } from "@/types/event";
 
-export { WEEKDAYS };
-export type { Weekday };
-
 /**
  * Every date the product shows is rendered in Pink STEM's time zone, on the
  * server and in the browser alike. Volunteers and events are in Georgia, and
@@ -161,42 +158,41 @@ export interface WeeklySessionDate {
   endsAt: Date;
 }
 
-/** Builds inclusive weekly sessions using calendar days in the org time zone. */
+/** A session on a `YYYY-MM-DD` day, its times read as wall-clock in the org zone. */
+export const sessionOn = (
+  date: string,
+  startTime: string,
+  endTime: string
+): WeeklySessionDate => ({
+  eventDate: fromDateTimeLocal(date),
+  startsAt: fromDateTimeLocal(`${date}T${startTime}`),
+  endsAt: fromDateTimeLocal(`${date}T${endTime}`),
+});
+
+/**
+ * A session on each chosen weekday from `first` through `last` (`YYYY-MM-DD`).
+ * Days are stepped in UTC only to walk the calendar; each session is then built
+ * in the org zone, so a 4 PM class stays at 4 PM when daylight saving ends.
+ */
 export const generateWeeklySessionDates = (
-  firstDate: DateLike,
-  lastDate: DateLike,
+  first: string,
+  last: string,
   weekdays: readonly Weekday[],
   startTime: string,
   endTime: string
 ): WeeklySessionDate[] => {
-  const calendarDate = (value: DateLike) =>
-    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
-      ? value
-      : toDateInput(value);
-  const first = calendarDate(firstDate);
-  const last = calendarDate(lastDate);
-  if (first > last) return [];
-
-  const selectedDays = new Set(weekdays.map((day) => WEEKDAYS.indexOf(day)));
-  const [year, month, day] = first.split("-").map(Number);
-  const [lastYear, lastMonth, lastDay] = last.split("-").map(Number);
-  const cursor = new Date(Date.UTC(year, month - 1, day));
-  const end = Date.UTC(lastYear, lastMonth - 1, lastDay);
+  const days = new Set(weekdays.map((day) => WEEKDAYS.indexOf(day)));
+  const end = new Date(`${last}T00:00:00Z`);
   const sessions: WeeklySessionDate[] = [];
-
-  // UTC is used only to advance calendar labels; each timestamp is then built
-  // in the org zone so its wall-clock time survives daylight-saving changes.
-  while (cursor.getTime() <= end) {
-    if (selectedDays.has(cursor.getUTCDay())) {
-      const date = cursor.toISOString().slice(0, 10);
-      sessions.push({
-        eventDate: fromDateTimeLocal(date),
-        startsAt: fromDateTimeLocal(`${date}T${startTime}`),
-        endsAt: fromDateTimeLocal(`${date}T${endTime}`),
-      });
-    }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  for (
+    const cursor = new Date(`${first}T00:00:00Z`);
+    cursor <= end;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    if (days.has(cursor.getUTCDay()))
+      sessions.push(
+        sessionOn(cursor.toISOString().slice(0, 10), startTime, endTime)
+      );
   }
-
   return sessions;
 };

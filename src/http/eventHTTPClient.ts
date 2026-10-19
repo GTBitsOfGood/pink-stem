@@ -34,8 +34,6 @@ export type LongTermEventBody = Omit<LongTermEventInput, "schedule"> & {
     firstDate: string;
     lastDate: string;
   };
-  /** Only sent by admins creating an event. */
-  organizerId?: string;
 };
 export type CreateEventBody = EventBody | LongTermEventBody;
 export type SeriesUpdateBody = Omit<SeriesUpdateInput, "schedule"> & {

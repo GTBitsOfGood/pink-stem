@@ -46,10 +46,11 @@ export interface Event {
   programArea: ProgramArea;
   status: EventStatus;
   visibility: EventVisibility;
+  /** Events from before programs existed have none; EventDAO reads them as short-term. */
   commitment: EventCommitment;
-  /** Sessions in one long-term program share this identifier. */
+  /** Shared by every session of a long-term program; each session is its own event. */
   seriesId?: Types.ObjectId;
-  /** Recurrence facts retained so changing the end date remains deterministic. */
+  /** The program's schedule, kept on each session so it can be shown and extended. */
   seriesWeekdays?: Weekday[];
   seriesStartDate?: Date;
   seriesEndDate?: Date;

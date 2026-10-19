@@ -10,9 +10,9 @@ import {
   EVENT_VISIBILITIES,
   PROGRAM_AREAS,
   UPDATE_KINDS,
+  WEEKDAYS,
 } from "@/types/event";
 import { REGIONS, SKILLS } from "@/types/user";
-import { generateWeeklySessionDates, WEEKDAYS } from "@/lib/dates";
 import {
   dateInputSchema,
   dateRangeSchema,
@@ -30,7 +30,6 @@ export const eventInputSchema = z.object({
   description: text(MAX_DESCRIPTION_LENGTH),
   programArea: z.enum(PROGRAM_AREAS),
   visibility: z.enum(EVENT_VISIBILITIES).default("public"),
-  commitment: z.enum(EVENT_COMMITMENTS).default("short_term"),
   eventDate: dateSchema,
   region: z.enum(REGIONS),
   isVirtual: z.boolean().default(false),
@@ -48,6 +47,16 @@ export const eventInputSchema = z.object({
 });
 export type EventInput = z.infer<typeof eventInputSchema>;
 
+/** Only admins pick the organizer; for everyone else it is ignored. */
+export const createEventSchema = eventInputSchema.extend({
+  organizerId: objectIdSchema.optional(),
+});
+
+/** Which create schema applies. A body that names none is a short-term event. */
+export const commitmentSchema = z.object({
+  commitment: z.enum(EVENT_COMMITMENTS).default("short_term"),
+});
+
 export const shiftInputSchema = z.object({
   roleName: text(80),
   description: optionalText(500),
@@ -63,97 +72,46 @@ const timeInputSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "must be a time (HH:mm)");
 
-export const longTermScheduleInputSchema = z
-  .object({
-    weekdays: z
-      .array(z.enum(WEEKDAYS))
-      .min(1, "Select at least one weekday")
-      .refine((days) => new Set(days).size === days.length, {
-        message: "Weekdays must be unique",
-      }),
-    startTime: timeInputSchema,
-    endTime: timeInputSchema,
-    firstDate: dateInputSchema,
-    lastDate: dateInputSchema,
-  })
-  .superRefine((schedule, context) => {
-    if (schedule.lastDate < schedule.firstDate) {
-      context.addIssue({
-        code: "custom",
-        path: ["lastDate"],
-        message: "Last date must be on or after first date",
-      });
-    }
-    if (schedule.endTime <= schedule.startTime) {
-      context.addIssue({
-        code: "custom",
-        path: ["endTime"],
-        message: "End time must be after start time",
-      });
-    }
-    if (
-      schedule.lastDate >= schedule.firstDate &&
-      !generateWeeklySessionDates(
-        schedule.firstDate,
-        schedule.lastDate,
-        schedule.weekdays,
-        schedule.startTime,
-        schedule.endTime
-      ).length
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["weekdays"],
-        message: "Select a weekday within the program date range",
-      });
-    }
-  });
-export type LongTermScheduleInput = z.infer<typeof longTermScheduleInputSchema>;
-
-const longTermShiftInputSchema = shiftInputSchema.omit({
-  startsAt: true,
-  endsAt: true,
-});
-
-const longTermEventDetailsSchema = eventInputSchema.omit({
-  commitment: true,
+/** What every session of a program shares. Long-term rules fix clearance and age. */
+const longTermDetailsSchema = eventInputSchema.omit({
   eventDate: true,
   requiresClearance: true,
   minAge: true,
 });
 
-export const longTermEventInputSchema = longTermEventDetailsSchema.extend({
+/** The one shift each session gets; its times come from the schedule. */
+const longTermShiftInputSchema = shiftInputSchema.omit({
+  startsAt: true,
+  endsAt: true,
+});
+
+export const longTermEventInputSchema = longTermDetailsSchema.extend({
   commitment: z.literal("long_term"),
-  schedule: longTermScheduleInputSchema,
+  organizerId: objectIdSchema.optional(),
+  schedule: z.object({
+    weekdays: z
+      .array(z.enum(WEEKDAYS))
+      .min(1)
+      .transform((days) => [...new Set(days)]),
+    startTime: timeInputSchema,
+    endTime: timeInputSchema,
+    firstDate: dateInputSchema,
+    lastDate: dateInputSchema,
+  }),
   shift: longTermShiftInputSchema,
 });
 export type LongTermEventInput = z.infer<typeof longTermEventInputSchema>;
 
-export const seriesUpdateInputSchema = longTermEventDetailsSchema.extend({
-  schedule: z
-    .object({
-      startTime: timeInputSchema,
-      endTime: timeInputSchema,
-      lastDate: dateInputSchema,
-    })
-    .refine((schedule) => schedule.endTime > schedule.startTime, {
-      path: ["endTime"],
-      message: "End time must be after start time",
-    }),
+/** A program keeps its first date and weekdays; its last date can move. */
+export const seriesUpdateInputSchema = longTermDetailsSchema.extend({
+  schedule: z.object({
+    startTime: timeInputSchema,
+    endTime: timeInputSchema,
+    lastDate: dateInputSchema,
+  }),
   shift: longTermShiftInputSchema,
 });
 export type SeriesUpdateInput = z.infer<typeof seriesUpdateInputSchema>;
-
-/** Only admins pick the organizer; for everyone else it is ignored. */
-export const createEventSchema = z.union([
-  eventInputSchema.extend({
-    commitment: z.literal("short_term").default("short_term"),
-    organizerId: objectIdSchema.optional(),
-  }),
-  longTermEventInputSchema.extend({
-    organizerId: objectIdSchema.optional(),
-  }),
-]);
 
 export const cancelEventSchema = z.object({ reason: text(500) });
 

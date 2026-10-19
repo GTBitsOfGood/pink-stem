@@ -23,6 +23,7 @@ import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import UserDAO from "@/db/actions/user";
 import HashingService from "@/services/hashing";
+import { ADULT_AGE } from "@/constants/limits";
 import {
   addDays,
   fromDateTimeLocal,
@@ -288,7 +289,6 @@ async function main() {
       organizerId: organizer._id as Types.ObjectId,
       status: "published",
       visibility: "public",
-      commitment: "short_term",
       isVirtual: event.isVirtual ?? false,
       requiresClearance: event.requiresClearance ?? false,
       requiresApproval: false,
@@ -313,8 +313,12 @@ async function main() {
   if (!existingTitles.has(longTermTitle)) {
     const seriesId = new Types.ObjectId();
     const weekdays = ["tuesday", "thursday"] as const;
-    const firstDate = "2026-10-27";
-    const lastDate = "2026-11-12";
+    // Late October to mid November always spans the end of daylight saving.
+    const today = toDateInput(new Date());
+    const year =
+      Number(today.slice(0, 4)) + (today.slice(5) >= "10-27" ? 1 : 0);
+    const firstDate = `${year}-10-27`;
+    const lastDate = `${year}-11-12`;
     const sessions = generateWeeklySessionDates(
       firstDate,
       lastDate,
@@ -343,7 +347,7 @@ async function main() {
         city: "Atlanta",
         requiresClearance: true,
         requiresApproval: false,
-        minAge: 18,
+        minAge: ADULT_AGE,
         siteContactName: "Jordan Reyes",
         siteContactPhone: "(404) 555-0142",
         publishedAt: new Date(),

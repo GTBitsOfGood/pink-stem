@@ -40,6 +40,14 @@ const ERRORS = Object.freeze({
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
     SERIES_REQUIRED: "That event is not part of a long-term program.",
+    SERIES_NO_SESSIONS:
+      "No upcoming session falls on the chosen weekdays between the first and last date.",
+    SERIES_TOO_LONG: "A long-term program can run for at most a year.",
+    SERIES_END_PAST: "The program's last date cannot be in the past.",
+    SERIES_STARTED:
+      "This session has started. Edit the program from an upcoming session.",
+    SERIES_CHANGED:
+      "The program changed while you were saving. Reload and try again.",
     VIRTUAL_LINK: "Virtual events need a join link.",
     LOCATION_REQUIRED: "In-person events need a location.",
   },

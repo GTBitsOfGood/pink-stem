@@ -1,8 +1,9 @@
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Checkbox, Input, Textarea } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Primitives";
-import { SKILL_LABELS } from "@/constants/labels";
-import { WEEKDAYS, type Weekday } from "@/lib/dates";
+import { SKILL_LABELS, WEEKDAY_LABELS } from "@/constants/labels";
+import { toDateInput } from "@/lib/dates";
+import { WEEKDAYS, type Weekday } from "@/types/event";
 import { SKILLS, type Skill } from "@/types/user";
 
 export interface LongTermFormValues {
@@ -58,7 +59,7 @@ export default function LongTermProgramFields({
               {WEEKDAYS.map((day) => (
                 <Checkbox
                   key={day}
-                  label={`${day[0].toUpperCase()}${day.slice(1)}`}
+                  label={WEEKDAY_LABELS[day]}
                   className="py-2"
                   checked={values.weekdays.includes(day)}
                   disabled={editing}
@@ -87,7 +88,11 @@ export default function LongTermProgramFields({
               label="Last date"
               type="date"
               required
-              min={values.firstDate || undefined}
+              min={
+                editing
+                  ? toDateInput(new Date())
+                  : values.firstDate || undefined
+              }
               value={values.lastDate}
               hint={
                 editing
@@ -151,6 +156,11 @@ export default function LongTermProgramFields({
               required
               value={values.capacity}
               onChange={(e) => onChange("capacity", e.target.value)}
+              hint={
+                editing
+                  ? "Cannot drop below the number already holding a spot."
+                  : undefined
+              }
             />
             <Input
               label="Minimum staffing"

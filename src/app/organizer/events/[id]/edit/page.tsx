@@ -14,8 +14,7 @@ export default function EditEventPage() {
   const toast = useToast();
   const event = useEvent(id);
   const { update, updateSeries } = useEventActions(id);
-  const editingSeries =
-    event.data?.commitment === "long_term" && !!event.data.seriesId;
+  const editingSeries = !!event.data?.seriesId;
 
   return (
     <Container className="max-w-3xl py-8 sm:py-10">
@@ -27,7 +26,9 @@ export default function EditEventPage() {
       {editingSeries ? (
         <Alert tone="info" className="mb-6">
           Changes apply to sessions that have not started. Moving the last date
-          earlier cancels later sessions and emails anyone signed up.
+          earlier cancels later sessions and emails anyone signed up. Other
+          changes are not emailed, so post an important update on the sessions
+          they affect.
         </Alert>
       ) : event.data?.status === "published" ? (
         <Alert tone="info" className="mb-6">

@@ -17,7 +17,6 @@ import type {
   ClientEvent,
   CreateEventBody,
   EventBody,
-  LongTermEventBody,
   SeriesUpdateBody,
 } from "@/http/eventHTTPClient";
 import { fromDateTimeLocal, toDateInput, toDateTimeLocal } from "@/lib/dates";
@@ -25,6 +24,7 @@ import {
   EVENT_COMMITMENTS,
   EVENT_VISIBILITIES,
   PROGRAM_AREAS,
+  type EventCommitment,
 } from "@/types/event";
 import { REGIONS } from "@/types/user";
 
@@ -49,6 +49,7 @@ type EventFormProps = CommonEventFormProps &
       }
     | {
         initial?: undefined;
+        editSeries?: undefined;
         onSubmit: (body: CreateEventBody) => Promise<unknown>;
       }
   );
@@ -78,7 +79,7 @@ function OrganizerSelect({
 
 export default function EventForm(props: EventFormProps) {
   const { initial, chooseOrganizer, submitLabel, pending } = props;
-  const editSeries = !!initial && props.editSeries === true;
+  const editSeries = props.editSeries === true;
   const initialShift = initial?.shifts[0];
   const [v, setV] = useState({
     title: initial?.title ?? "",
@@ -148,28 +149,25 @@ export default function EventForm(props: EventFormProps) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (initial && props.editSeries) {
-      const body: SeriesUpdateBody = {
+    const shift = {
+      roleName: series.roleName,
+      description: series.description || undefined,
+      capacity: Number(series.capacity),
+      minStaffing: Number(series.minStaffing),
+      requiredSkills: series.requiredSkills,
+    };
+    if (props.editSeries) {
+      props.onSubmit({
         ...sharedBody(),
         schedule: {
           startTime: series.startTime,
           endTime: series.endTime,
           lastDate: series.lastDate,
         },
-        shift: {
-          roleName: series.roleName,
-          description: series.description || undefined,
-          capacity: Number(series.capacity),
-          minStaffing: Number(series.minStaffing),
-          requiredSkills: series.requiredSkills,
-        },
-      };
-      props.onSubmit(body);
-      return;
-    }
-
-    if (!initial && v.commitment === "long_term") {
-      const body: LongTermEventBody = {
+        shift,
+      });
+    } else if (!props.initial && v.commitment === "long_term") {
+      props.onSubmit({
         ...sharedBody(),
         commitment: "long_term",
         schedule: {
@@ -179,31 +177,22 @@ export default function EventForm(props: EventFormProps) {
           firstDate: series.firstDate,
           lastDate: series.lastDate,
         },
-        shift: {
-          roleName: series.roleName,
-          description: series.description || undefined,
-          capacity: Number(series.capacity),
-          minStaffing: Number(series.minStaffing),
-          requiredSkills: series.requiredSkills,
-        },
-      };
-      props.onSubmit(body);
-      return;
+        shift,
+      });
+    } else {
+      props.onSubmit({
+        ...sharedBody(),
+        eventDate: fromDateTimeLocal(v.eventDate).toISOString(),
+        requiresClearance: v.requiresClearance,
+        minAge: v.minAge ? Number(v.minAge) : null,
+      });
     }
-
-    const body: EventBody = {
-      ...sharedBody(),
-      commitment: initial?.commitment ?? "short_term",
-      eventDate: fromDateTimeLocal(v.eventDate).toISOString(),
-      requiresClearance: v.requiresClearance,
-      minAge: v.minAge ? Number(v.minAge) : null,
-    };
-    if (initial) props.onSubmit(body);
-    else props.onSubmit(body);
   };
 
   const creatingLongTerm = !initial && v.commitment === "long_term";
   const showLongTermFields = creatingLongTerm || editSeries;
+  // Program area and visibility, plus commitment on create and a single date.
+  const basicsFields = 2 + Number(!initial) + Number(!showLongTermFields);
 
   return (
     <form onSubmit={submit} className="grid gap-6">
@@ -229,7 +218,9 @@ export default function EventForm(props: EventFormProps) {
           {chooseOrganizer ? (
             <OrganizerSelect value={organizerId} onChange={setOrganizerId} />
           ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div
+            className={`grid gap-4 ${basicsFields === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+          >
             <Select
               label="Program area"
               required
@@ -250,10 +241,7 @@ export default function EventForm(props: EventFormProps) {
                 }))}
                 value={v.commitment}
                 onChange={(e) =>
-                  set(
-                    "commitment",
-                    e.target.value as (typeof EVENT_COMMITMENTS)[number]
-                  )
+                  set("commitment", e.target.value as EventCommitment)
                 }
               />
             ) : null}
