@@ -104,7 +104,7 @@ authorization is enforced server-side on every request by `withAuth`.
 | Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/me`, `auth/forgot-password`, `auth/reset-password`, `auth/change-password`, `auth/invite/:token`               |
 | Me           | `me` (profile), `me/waiver`, `me/guardian-consent`, `me/verify-email`, `me/signups`, `me/hours`, `me/certificates`                                                 |
 | Public       | `events`, `events/:id`, `settings`, `consent/:token`, `verify-email/:token`, `verify/:code`                                                                        |
-| Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |
+| Organizer    | `events` (create), `events/:id` (edit), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast,series}`, `{shifts,updates}/:id`, `organizer/events` |
 | Sign-ups     | `signups`, `signups/:id/{cancel,absence,approve,promote,attendance,calendar}`                                                                                      |
 | Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`, `threads/:id/review`                                                                       |
 | Certificates | `certificates/:id/pdf`, `certificates/:id/revoke`                                                                                                                  |

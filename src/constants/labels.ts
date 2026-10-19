@@ -1,6 +1,12 @@
 import type { AuditAction } from "@/types/audit";
 import type { CertificateType } from "@/types/certificate";
-import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
+import type {
+  EventCommitment,
+  EventStatus,
+  ProgramArea,
+  UpdateKind,
+  Weekday,
+} from "@/types/event";
 import type {
   AbsenceReason,
   PendingReason,
@@ -62,6 +68,21 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   published: "Published",
   completed: "Completed",
   cancelled: "Cancelled",
+};
+
+export const EVENT_COMMITMENT_LABELS: Record<EventCommitment, string> = {
+  short_term: "Short-term",
+  long_term: "Long-term",
+};
+
+export const WEEKDAY_LABELS: Record<Weekday, string> = {
+  sunday: "Sunday",
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
 };
 
 export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {
