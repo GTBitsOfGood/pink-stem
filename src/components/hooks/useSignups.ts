@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/constants/queryKeys";
 import SignupHTTPClient from "@/http/signupHTTPClient";
 import UserHTTPClient from "@/http/userHTTPClient";
+import type { ReportAbsenceInput } from "@/utils/validation/signup";
 
 export function useMySignups(enabled = true) {
   return useQuery({
@@ -21,7 +22,10 @@ export function useMyHours(enabled = true) {
   });
 }
 
-/** Sign up, cancel, approve, promote. All of them touch the same three caches. */
+/**
+ * Sign up, cancel, report an absence, approve, promote. All of them touch the
+ * same three caches.
+ */
 export function useSignupActions(eventId?: string) {
   const queryClient = useQueryClient();
   const invalidate = () => {
@@ -52,6 +56,16 @@ export function useSignupActions(eventId?: string) {
         signupId: string;
         reason?: string;
       }) => SignupHTTPClient.cancel(signupId, reason),
+      onSuccess: invalidate,
+    }),
+    reportAbsence: useMutation({
+      mutationFn: ({
+        signupId,
+        body,
+      }: {
+        signupId: string;
+        body: ReportAbsenceInput;
+      }) => SignupHTTPClient.reportAbsence(signupId, body),
       onSuccess: invalidate,
     }),
     approve: useMutation({

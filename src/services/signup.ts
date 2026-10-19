@@ -5,7 +5,10 @@ import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
-import { PENDING_REASON_LABELS } from "@/constants/labels";
+import {
+  ABSENCE_REASON_LABELS,
+  PENDING_REASON_LABELS,
+} from "@/constants/labels";
 import {
   COUNTER_SETTLE_MINUTES,
   LAPSED_SPOT_HOLD_DAYS,
@@ -39,6 +42,7 @@ import ERRORS from "@/utils/errorMessages";
 import {
   cancelSignupSchema,
   createSignupSchema,
+  reportAbsenceSchema,
 } from "@/utils/validation/signup";
 
 const HOUR = 3_600_000;
@@ -47,6 +51,12 @@ const isActive = (s: Pick<Signup, "status">) =>
   (ACTIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status);
 const isLive = (s: Pick<Signup, "status">) =>
   (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status);
+const insideCutoff = (
+  shift: Pick<Shift, "startsAt">,
+  settings: Pick<OrgSettings, "cancellationCutoffHours">
+) =>
+  shift.startsAt.getTime() - Date.now() <
+  settings.cancellationCutoffHours * HOUR;
 
 interface ReasonInput {
   user: Pick<
@@ -177,6 +187,7 @@ export default class SignupService {
       cancelledBy: null,
       holdUntil: null,
       attendance: null,
+      absence: null,
     } as const;
     let signup: Doc<Signup> | null = null;
     try {
@@ -250,11 +261,8 @@ export default class SignupService {
     if (!self) assertCanManageEvent(actor, event);
     if (!isLive(signup))
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
-    if (
-      self &&
-      shift.startsAt.getTime() - Date.now() <
-        settings.cancellationCutoffHours * HOUR
-    ) {
+    // Leaving the waitlist frees nobody's spot, so only held spots are locked in.
+    if (self && isActive(signup) && insideCutoff(shift, settings)) {
       throw new IllegalOperationError(ERRORS.SIGNUP.INSIDE_CUTOFF);
     }
 
@@ -295,6 +303,83 @@ export default class SignupService {
         );
       }
     }
+    return released;
+  }
+
+  /**
+   * "Can't make it": allowed until the shift starts, even inside the
+   * cancellation cutoff. The spot is freed as on a cancel, and the organizer
+   * is emailed right away instead of in the next digest.
+   */
+  static async reportAbsence(
+    actor: Actor,
+    signupId: string,
+    input: unknown
+  ): Promise<Doc<Signup>> {
+    const { reason, note } = reportAbsenceSchema.parse(input);
+    const signup = await SignupDAO.findById(signupId);
+    if (!signup || !sameId(signup.volunteerId, actor.id))
+      throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
+    // A waitlist place holds no spot, so it is left with a plain cancel.
+    if (signup.status === "waitlisted")
+      throw new IllegalOperationError(ERRORS.SIGNUP.ABSENCE_WAITLISTED);
+    if (!isActive(signup))
+      throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
+    const [shift, event, settings] = await Promise.all([
+      ShiftDAO.findById(signup.shiftId),
+      EventDAO.findById(signup.eventId),
+      OrgSettingsDAO.get(),
+    ]);
+    if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+    if (shift.startsAt <= new Date())
+      throw new IllegalOperationError(ERRORS.SHIFT.IN_PAST);
+
+    const late = insideCutoff(shift, settings);
+    // Claimed first, so a double submit cannot free the spot twice.
+    const claimed = await SignupDAO.updateByIdIfStatus(
+      signup._id,
+      signup.status,
+      {
+        status: "cancelled",
+        absence: { reason, note: note || undefined, late },
+      }
+    );
+    if (!claimed) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
+    await AuditService.record(
+      actor,
+      "signup.absence_reported",
+      "signup",
+      signup._id,
+      {
+        before: { status: signup.status },
+        after: { status: "cancelled", reason, late },
+      }
+    );
+    const released = await SignupService.release(
+      signup,
+      shift,
+      event,
+      settings,
+      {
+        by: new Types.ObjectId(actor.id),
+        reason: `Absence reported: ${ABSENCE_REASON_LABELS[reason]}`,
+      }
+    );
+
+    // Operational, so it ignores preferences, and best effort: the absence
+    // is already saved, so a failed email must not turn it into an error.
+    const details = NotificationService.eventDetails(event, shift);
+    await NotificationService.toUsers([event.organizerId], (org, organizer) =>
+      NotificationService.templates.organizerNotice(org, {
+        name: organizer.firstName,
+        subject: `Absence reported: ${event.title}`,
+        title: "A volunteer can't make their shift",
+        body: `${actor.name} can't make the ${shift.roleName} shift on ${details.date}, ${details.time}, so their spot has been released.\n\nReason: ${ABSENCE_REASON_LABELS[reason]}${note ? `\n\nNote: ${note}` : ""}`,
+        url: appUrl(`/organizer/events/${event._id}/roster`),
+      })
+    ).catch((error) =>
+      console.error("[absence] organizer email failed", error)
+    );
     return released;
   }
 
@@ -729,13 +814,11 @@ export default class SignupService {
     assertCanManageEvent(actor, event);
     const [shifts, signups] = await Promise.all([
       ShiftDAO.findByEvent(event._id),
-      SignupDAO.findByEvent(event._id, [
-        "pending",
-        "confirmed",
-        "waitlisted",
-        "attended",
-        "no_show",
-      ]),
+      SignupDAO.find({
+        eventId: event._id,
+        // Reported absences stay listed so nobody marks them as no-shows.
+        $or: [{ status: { $ne: "cancelled" } }, { absence: { $ne: null } }],
+      }),
     ]);
     const volunteerIds = signups.map((s) => s.volunteerId);
     const [volunteers, clearances] = await Promise.all([
