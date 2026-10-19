@@ -195,14 +195,14 @@ export default function PersonPage() {
                             <Badge
                               tone={signup.absence.late ? "warning" : "neutral"}
                             >
-                              {signup.absence.late ? "Late absence" : "Absence"}{" "}
-                              · {ABSENCE_REASON_LABELS[signup.absence.reason]}
+                              {signup.absence.late ? "Late absence" : "Absence"}
                             </Badge>
-                            {signup.absence.note ? (
-                              <div className="text-[12px] text-ink-500">
-                                {signup.absence.note}
-                              </div>
-                            ) : null}
+                            <div className="text-[12px] text-ink-500">
+                              {ABSENCE_REASON_LABELS[signup.absence.reason]}
+                              {signup.absence.note
+                                ? ` · ${signup.absence.note}`
+                                : ""}
+                            </div>
                           </>
                         ) : (
                           <SignupBadge status={signup.status} />
