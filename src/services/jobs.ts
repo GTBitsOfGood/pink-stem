@@ -282,7 +282,11 @@ export default class JobService {
           heading: "Roster changes in the last 24 hours",
           lines: [
             ...joined.map((s) => `New sign-up for ${titleOf(s.eventId)}`),
-            ...left.map((s) => `Cancellation on ${titleOf(s.eventId)}`),
+            ...left.map((s) =>
+              s.absence
+                ? `Absence reported for ${titleOf(s.eventId)}`
+                : `Cancellation on ${titleOf(s.eventId)}`
+            ),
           ],
         });
       }

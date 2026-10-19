@@ -7,7 +7,11 @@ import type {
   UpdateKind,
   Weekday,
 } from "@/types/event";
-import type { PendingReason, SignupStatus } from "@/types/signup";
+import type {
+  AbsenceReason,
+  PendingReason,
+  SignupStatus,
+} from "@/types/signup";
 import type {
   ClearanceStatus,
   NotificationCategory,
@@ -98,6 +102,12 @@ export const PENDING_REASON_LABELS: Record<PendingReason, string> = {
   approval: "The organizer reviews and approves sign-ups for this event",
 };
 
+export const ABSENCE_REASON_LABELS: Record<AbsenceReason, string> = {
+  sick: "Sick",
+  school: "School conflict",
+  other: "Other",
+};
+
 export const UPDATE_KIND_LABELS: Record<UpdateKind, string> = {
   note: "Note",
   important: "Important change",
@@ -148,6 +158,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "thread.admin_access": "Admin read a thread",
   "organizer.invited": "Organizer invited",
   "signup.cancelled_by_staff": "Sign-up cancelled by staff",
+  "signup.absence_reported": "Absence reported",
   "shift.counters_reconciled": "Shift counters reconciled",
   "auth.rate_limited": "Rate limit triggered",
 };
