@@ -76,6 +76,7 @@ export default class AuthService {
     return { token, user: UserDAO.toSafe(user) };
   }
 
+  /** The password has already changed, so a failed audit write is only logged. */
   private static async auditPasswordChange(
     actor: Pick<Actor, "id" | "ip">,
     via: "change" | "reset"
@@ -245,9 +246,10 @@ export default class AuthService {
     actor: Actor,
     input: unknown
   ): Promise<SessionResult> {
-    await assertRateLimit(
+    await AuthService.assertLimitAudited(
       `password-change:${actor.id}`,
-      RATE_LIMITS.passwordChange
+      RATE_LIMITS.passwordChange,
+      actor.ip ?? "unknown"
     );
     const { currentPassword, newPassword } = changePasswordSchema.parse(input);
     const passwordHash = await UserDAO.findPasswordHash(actor.id);
@@ -301,10 +303,12 @@ export default class AuthService {
         // The invite link was delivered to this address.
         emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
       });
-      await UserDAO.setPassword(existing._id, passwordHash);
+      user = (await UserDAO.setPassword(
+        existing._id,
+        passwordHash
+      )) as Doc<User>;
       // Sign-ups held only on email verification can confirm now.
       await SignupService.reevaluateForVolunteer(existing._id);
-      user = (await UserDAO.findAuthById(existing._id)) as Doc<User>;
       if (invite.invitedBy) {
         await AuditService.record(
           { id: invite.invitedBy.toString() },

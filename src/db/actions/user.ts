@@ -100,7 +100,11 @@ export default class UserDAO {
     }).lean<Doc<SafeUser>>();
   }
 
-  /** Changing the password signs every other session out. */
+  /**
+   * Changing the password signs every other session out. With `currentHash`,
+   * it only replaces a password that is still that one, so two concurrent
+   * changes cannot both land. Returns the updated user, or null if none matched.
+   */
   static async setPassword(
     id: string | Types.ObjectId,
     passwordHash: string,

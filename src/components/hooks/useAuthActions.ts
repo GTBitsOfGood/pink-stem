@@ -10,7 +10,7 @@ import type {
   ResetPasswordInput,
 } from "@/utils/validation/auth";
 
-/** Sign-in flows. Each lands the user on `next` and reloads the session. */
+/** Sign-in and password flows. Sign-ins land the user on `next` and reload the session. */
 export function useAuthActions(next = "/dashboard") {
   const queryClient = useQueryClient();
   const router = useRouter();
