@@ -307,8 +307,10 @@ export default function ManageEventPage() {
 
       {e.status === "draft" ? (
         <Alert tone="info" className="mb-6">
-          Drafts are invisible to volunteers and send no notifications. Add at
-          least one shift, then publish.
+          Drafts are invisible to volunteers and send no notifications.{" "}
+          {longTerm
+            ? "Publishing the program opens this session and every later one to sign-ups."
+            : "Add at least one shift, then publish."}
         </Alert>
       ) : null}
       {e.status === "published" && past ? (

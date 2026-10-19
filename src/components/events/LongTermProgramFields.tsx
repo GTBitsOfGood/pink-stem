@@ -156,11 +156,7 @@ export default function LongTermProgramFields({
               required
               value={values.capacity}
               onChange={(e) => onChange("capacity", e.target.value)}
-              hint={
-                editing
-                  ? "Cannot drop below the number already holding a spot."
-                  : undefined
-              }
+              hint="Cannot drop below the number already holding a spot."
             />
             <Input
               label="Minimum staffing"
