@@ -32,12 +32,23 @@ export type PendingReason = (typeof PENDING_REASONS)[number];
 export const ATTENDANCE_STATUSES = ["attended", "no_show"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export const ABSENCE_REASONS = ["sick", "school", "other"] as const;
+export type AbsenceReason = (typeof ABSENCE_REASONS)[number];
+
 export interface Attendance {
   status: AttendanceStatus;
   hours: number;
   adjustmentReason?: string;
   markedBy: Types.ObjectId;
   markedAt: Date;
+}
+
+/** What a volunteer said when they reported they can't make their shift. */
+export interface Absence {
+  reason: AbsenceReason;
+  note?: string;
+  /** Reported inside the cancellation cutoff, when a plain cancel is refused. */
+  late: boolean;
 }
 
 export interface Signup {
@@ -56,6 +67,8 @@ export interface Signup {
   /** When a confirmed spot lapsed back to pending, how long it is held. */
   holdUntil?: Date | null;
   attendance?: Attendance | null;
+  /** Set by "Can't make it"; cleared if the volunteer signs up again. */
+  absence?: Absence | null;
 }
 
 export interface HoursLedgerEntry {

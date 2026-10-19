@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FormEvent, useState } from "react";
 import { CalendarPlus, Info } from "lucide-react";
 import {
   useMyHours,
@@ -14,21 +15,30 @@ import OutstandingList from "@/components/profile/OutstandingList";
 import { SignupBadge } from "@/components/ui/Badge";
 import Button, { ButtonLink } from "@/components/ui/Button";
 import Card, { CardBody, CardHeader, Stat } from "@/components/ui/Card";
+import Dialog from "@/components/ui/Dialog";
+import { Select, Textarea } from "@/components/ui/Field";
 import { EmptyState, PageHeader, Spinner } from "@/components/ui/Primitives";
 import { errorMessage, useToast } from "@/components/ui/Toast";
-import { PENDING_REASON_LABELS } from "@/constants/labels";
+import {
+  ABSENCE_REASON_LABELS,
+  PENDING_REASON_LABELS,
+} from "@/constants/labels";
+import { MAX_ABSENCE_NOTE_LENGTH } from "@/constants/limits";
 import SignupHTTPClient from "@/http/signupHTTPClient";
 import type { ClientSignupWithContext } from "@/http/userHTTPClient";
 import { formatDate, formatHours, formatTimeRange } from "@/lib/dates";
+import { ABSENCE_REASONS, type AbsenceReason } from "@/types/signup";
 
 function ShiftRow({
   item,
   onCancel,
   cancelling,
+  onReportAbsence,
 }: {
   item: ClientSignupWithContext;
   onCancel?: () => void;
   cancelling?: boolean;
+  onReportAbsence?: () => void;
 }) {
   const { signup, shift, event } = item;
   const live = ["pending", "confirmed", "waitlisted"].includes(signup.status);
@@ -85,14 +95,18 @@ function ShiftRow({
               <CalendarPlus className="h-3.5 w-3.5" /> Calendar
             </a>
           ) : null}
-          {onCancel ? (
+          {onReportAbsence ? (
+            <Button size="sm" variant="danger" onClick={onReportAbsence}>
+              Can&apos;t make it
+            </Button>
+          ) : onCancel ? (
             <Button
               size="sm"
               variant="danger"
               loading={cancelling}
               onClick={onCancel}
             >
-              Cancel
+              Leave waitlist
             </Button>
           ) : null}
         </div>
@@ -107,6 +121,9 @@ export default function DashboardPage() {
   const hours = useMyHours();
   const { cancel } = useSignupActions();
   const toast = useToast();
+  const [reporting, setReporting] = useState<ClientSignupWithContext | null>(
+    null
+  );
 
   const now = useNow();
   const upcoming = (signups.data ?? []).filter(
@@ -117,6 +134,25 @@ export default function DashboardPage() {
   const past = (signups.data ?? [])
     .filter((s) => !upcoming.includes(s))
     .reverse();
+
+  const leaveWaitlist = async ({
+    signup,
+    shift,
+    event,
+  }: ClientSignupWithContext) => {
+    if (
+      !window.confirm(
+        `Leave the waitlist for the ${shift.roleName} shift at ${event.title}?`
+      )
+    )
+      return;
+    try {
+      await cancel.mutateAsync({ signupId: signup._id });
+      toast("You left the waitlist.");
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  };
 
   return (
     <Container className="py-8 sm:py-10">
@@ -141,30 +177,32 @@ export default function DashboardPage() {
               <Spinner />
             ) : upcoming.length ? (
               <ul className="divide-y divide-ink-100">
-                {upcoming.map((item) => (
-                  <ShiftRow
-                    key={item.signup._id}
-                    item={item}
-                    cancelling={
-                      cancel.isPending &&
-                      cancel.variables?.signupId === item.signup._id
-                    }
-                    onCancel={async () => {
-                      if (
-                        !window.confirm(
-                          `Cancel your ${item.shift.roleName} shift at ${item.event.title}?`
-                        )
-                      )
-                        return;
-                      try {
-                        await cancel.mutateAsync({ signupId: item.signup._id });
-                        toast("Your sign-up was cancelled.");
-                      } catch (error) {
-                        toast(errorMessage(error), "error");
+                {upcoming.map((item) => {
+                  // Until the shift starts, a held spot can be given up and
+                  // a waitlist place left.
+                  const open = new Date(item.shift.startsAt).getTime() > now;
+                  const waitlisted = item.signup.status === "waitlisted";
+                  return (
+                    <ShiftRow
+                      key={item.signup._id}
+                      item={item}
+                      onReportAbsence={
+                        open && !waitlisted
+                          ? () => setReporting(item)
+                          : undefined
                       }
-                    }}
-                  />
-                ))}
+                      cancelling={
+                        cancel.isPending &&
+                        cancel.variables?.signupId === item.signup._id
+                      }
+                      onCancel={
+                        open && waitlisted
+                          ? () => leaveWaitlist(item)
+                          : undefined
+                      }
+                    />
+                  );
+                })}
               </ul>
             ) : (
               <CardBody>
@@ -222,6 +260,80 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+      {reporting ? (
+        <AbsenceDialog item={reporting} onClose={() => setReporting(null)} />
+      ) : null}
     </Container>
+  );
+}
+
+function AbsenceDialog({
+  item,
+  onClose,
+}: {
+  item: ClientSignupWithContext;
+  onClose: () => void;
+}) {
+  const { reportAbsence } = useSignupActions();
+  const toast = useToast();
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const { signup, shift, event } = item;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await reportAbsence.mutateAsync({
+        signupId: signup._id,
+        body: { reason: reason as AbsenceReason, note },
+      });
+      toast("Your absence has been reported. The organizer has been notified.");
+      onClose();
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Report an absence"
+      description={`${event.title} · ${shift.roleName} · ${formatDate(shift.startsAt)} · ${formatTimeRange(shift.startsAt, shift.endsAt)}. Your spot goes to the next person and the organizer is emailed right away.`}
+    >
+      <form onSubmit={submit} className="grid gap-4">
+        <Select
+          label="Reason"
+          required
+          placeholder="Choose a reason"
+          options={ABSENCE_REASONS.map((r) => ({
+            value: r,
+            label: ABSENCE_REASON_LABELS[r],
+          }))}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <Textarea
+          label="Note for the organizer"
+          hint="Optional."
+          rows={3}
+          maxLength={MAX_ABSENCE_NOTE_LENGTH}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Back
+          </Button>
+          <Button
+            type="submit"
+            variant="danger"
+            loading={reportAbsence.isPending}
+          >
+            Report absence
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
