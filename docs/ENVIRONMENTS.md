@@ -86,15 +86,14 @@ staging site. Use _Same value for all deploy contexts_ and _All scopes_:
 production (`main`) and deploy previews share them by design. `proxy.ts` runs
 as an edge function and reads `JWT_SECRET`, so do not narrow the scopes.
 
-| Variable                       | Required | Staging value                           | Purpose                                                        |
-| ------------------------------ | -------- | --------------------------------------- | -------------------------------------------------------------- |
-| `MONGODB_URI`                  | Yes      | Staging connection string above         | Connection string; one database per site                       |
-| `JWT_SECRET`                   | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out             |
-| `APP_URL`                      | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files    |
-| `CRON_SECRET`                  | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                      |
-| `RESEND_API_KEY`               | Prod     | **Unset**; see [Email](#email)          | Sends email through Resend; unset, emails go to the server log |
-| `EMAIL_FROM`                   | Prod     | Unset                                   | Sender shown on every email                                    |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | No       | Unset                                   | Enables the Google sign-in button                              |
+| Variable         | Required | Staging value                           | Purpose                                                        |
+| ---------------- | -------- | --------------------------------------- | -------------------------------------------------------------- |
+| `MONGODB_URI`    | Yes      | Staging connection string above         | Connection string; one database per site                       |
+| `JWT_SECRET`     | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out             |
+| `APP_URL`        | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files    |
+| `CRON_SECRET`    | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                      |
+| `RESEND_API_KEY` | Prod     | **Unset**; see [Email](#email)          | Sends email through Resend; unset, emails go to the server log |
+| `EMAIL_FROM`     | Prod     | Unset                                   | Sender shown on every email                                    |
 
 Deploy previews link to the staging URL in emails, not to the preview URL.
 Both read the same database, so those links still work.

@@ -4,6 +4,7 @@ import type { Doc, Serialized } from "@/types/models";
 import type { Role, SafeUser } from "@/types/user";
 import type {
   AcceptInviteInput,
+  ChangePasswordInput,
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
@@ -30,10 +31,6 @@ export default class AuthHTTPClient {
     return fetchHTTPClient("/auth/login", "POST", body);
   }
 
-  static loginWithGoogle(credential: string): Promise<ClientUser> {
-    return fetchHTTPClient("/auth/google", "POST", { credential });
-  }
-
   static logout(): Promise<void> {
     return fetchHTTPClient("/auth/logout", "POST");
   }
@@ -44,6 +41,10 @@ export default class AuthHTTPClient {
 
   static resetPassword(body: ResetPasswordInput): Promise<ClientUser> {
     return fetchHTTPClient("/auth/reset-password", "POST", body);
+  }
+
+  static changePassword(body: ChangePasswordInput): Promise<void> {
+    return fetchHTTPClient("/auth/change-password", "POST", body);
   }
 
   static getInvite(

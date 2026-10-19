@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useProfile } from "@/components/hooks/useProfile";
 import { useSession } from "@/components/hooks/useSession";
 import Container from "@/components/layout/Container";
+import PasswordForm from "@/components/profile/PasswordForm";
 import ProfileForm from "@/components/profile/ProfileForm";
 import WaiverDialog from "@/components/profile/WaiverDialog";
 import Badge, { ClearanceBadge } from "@/components/ui/Badge";
@@ -102,6 +103,7 @@ export default function ProfilePage() {
               </CardBody>
             </Card>
           ) : null}
+          <PasswordForm />
         </div>
       </div>
       <WaiverDialog

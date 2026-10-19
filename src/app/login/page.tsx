@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
-import GoogleButton from "@/components/auth/GoogleButton";
 import { useAuthActions } from "@/components/hooks/useAuthActions";
 import { useFormValues } from "@/components/hooks/useFormValues";
 import Button from "@/components/ui/Button";
@@ -14,9 +13,8 @@ import { errorMessage } from "@/components/ui/Toast";
 
 function LoginForm() {
   const next = useSearchParams().get("next") ?? "/dashboard";
-  const { login, google } = useAuthActions(next);
+  const { login } = useAuthActions(next);
   const { values, set } = useFormValues({ email: "", password: "" });
-  const error = login.error ?? google.error;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -40,7 +38,9 @@ function LoginForm() {
       }
     >
       <form onSubmit={submit} className="grid gap-4">
-        {error ? <Alert tone="danger">{errorMessage(error)}</Alert> : null}
+        {login.error ? (
+          <Alert tone="danger">{errorMessage(login.error)}</Alert>
+        ) : null}
         <Input
           label="Email"
           type="email"
@@ -69,7 +69,6 @@ function LoginForm() {
           Sign in
         </Button>
       </form>
-      <GoogleButton onCredential={(credential) => google.mutate(credential)} />
     </AuthCard>
   );
 }
