@@ -1,5 +1,6 @@
 import { ORG_TIMEZONE } from "@/constants/org";
 import { ADULT_AGE } from "@/constants/limits";
+import { WEEKDAYS, type Weekday } from "@/types/event";
 
 /**
  * Every date the product shows is rendered in Pink STEM's time zone, on the
@@ -150,3 +151,48 @@ export const fromDateTimeLocal = (value: string): Date => {
 /** Start of the org-zone day containing the instant. */
 export const startOfDay = (value: DateLike) =>
   fromDateTimeLocal(toDateInput(value));
+
+export interface WeeklySessionDate {
+  eventDate: Date;
+  startsAt: Date;
+  endsAt: Date;
+}
+
+/** A session on a `YYYY-MM-DD` day, its times read as wall-clock in the org zone. */
+export const sessionOn = (
+  date: string,
+  startTime: string,
+  endTime: string
+): WeeklySessionDate => ({
+  eventDate: fromDateTimeLocal(date),
+  startsAt: fromDateTimeLocal(`${date}T${startTime}`),
+  endsAt: fromDateTimeLocal(`${date}T${endTime}`),
+});
+
+/**
+ * A session on each chosen weekday from `first` through `last` (`YYYY-MM-DD`).
+ * Days are stepped in UTC only to walk the calendar; each session is then built
+ * in the org zone, so a 4 PM class stays at 4 PM when daylight saving ends.
+ */
+export const generateWeeklySessionDates = (
+  first: string,
+  last: string,
+  weekdays: readonly Weekday[],
+  startTime: string,
+  endTime: string
+): WeeklySessionDate[] => {
+  const days = new Set(weekdays.map((day) => WEEKDAYS.indexOf(day)));
+  const end = new Date(`${last}T00:00:00Z`);
+  const sessions: WeeklySessionDate[] = [];
+  for (
+    const cursor = new Date(`${first}T00:00:00Z`);
+    cursor <= end;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    if (days.has(cursor.getUTCDay()))
+      sessions.push(
+        sessionOn(cursor.toISOString().slice(0, 10), startTime, endTime)
+      );
+  }
+  return sessions;
+};

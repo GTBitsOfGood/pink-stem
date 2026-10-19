@@ -34,6 +34,8 @@ export const MAX_DESCRIPTION_LENGTH = 5_000;
 export const MAX_TITLE_LENGTH = 120;
 export const MAX_SHIFT_HOURS = 16;
 export const MAX_SHIFTS_PER_EVENT = 20;
+/** A long-term program runs for at most a year, so one save cannot create years of sessions. */
+export const MAX_PROGRAM_DAYS = 366;
 
 export const VERIFICATION_CODE_LENGTH = 16;
 

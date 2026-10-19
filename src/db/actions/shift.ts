@@ -81,6 +81,11 @@ export default class ShiftDAO {
     await ShiftModel.deleteOne({ _id: id });
   }
 
+  static async deleteByEvents(eventIds: Types.ObjectId[]): Promise<void> {
+    await dbConnect();
+    await ShiftModel.deleteMany({ eventId: { $in: eventIds } });
+  }
+
   /**
    * Atomically takes one spot. The filter and increment run as a single
    * document operation, so two volunteers racing for the last spot cannot
