@@ -82,17 +82,18 @@ in VSCode. A pre-commit hook formats and lints staged files automatically.
 
 ## Scripts
 
-| Command                | Does                                        |
-| ---------------------- | ------------------------------------------- |
-| `npm run dev`          | Start the dev server                        |
-| `npm run build`        | Production build                            |
-| `npm run lint`         | ESLint                                      |
-| `npm run typecheck`    | `tsc --noEmit`                              |
-| `npm run format`       | Prettier write                              |
-| `npm run format:check` | Prettier check (runs in CI)                 |
-| `npm run seed`         | Create settings and the first admin account |
-| `npm run seed:staging` | Seed the staging database with demo data    |
-| `npm run jobs`         | Run the scheduled jobs against a dev server |
+| Command                   | Does                                        |
+| ------------------------- | ------------------------------------------- |
+| `npm run dev`             | Start the dev server                        |
+| `npm run build`           | Production build                            |
+| `npm run lint`            | ESLint                                      |
+| `npm run typecheck`       | `tsc --noEmit`                              |
+| `npm run format`          | Prettier write                              |
+| `npm run format:check`    | Prettier check (runs in CI)                 |
+| `npm run seed`            | Create settings and the first admin account |
+| `npm run seed:staging`    | Seed the staging database with demo data    |
+| `npm run jobs`            | Run the scheduled jobs against a dev server |
+| `npm run screening:check` | Offline checks for the registry pre-check   |
 
 ## API
 
@@ -108,7 +109,7 @@ authorization is enforced server-side on every request by `withAuth`.
 | Sign-ups     | `signups`, `signups/:id/{cancel,absence,approve,promote,attendance,calendar}`                                                                                      |
 | Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`, `threads/:id/review`                                                                       |
 | Certificates | `certificates/:id/pdf`, `certificates/:id/revoke`                                                                                                                  |
-| Admin        | `admin/{approvals,people,people/:id,people/:id/clearance,people/:id/signout,invitations,organizers,events,hours,audit,reports/:kind,settings}`                     |
+| Admin        | `admin/{approvals,people,people/:id,people/:id/{clearance,screening,signout},invitations,organizers,events,hours,audit,reports/:kind,settings}`                    |
 | Jobs         | `jobs/run` (bearer `CRON_SECRET`)                                                                                                                                  |
 
 ## Structure

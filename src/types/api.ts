@@ -10,6 +10,7 @@ import type {
   UserSummary,
 } from "@/types/user";
 import type { AuditLog } from "@/types/audit";
+import type { ScreeningCheck } from "@/types/screening";
 
 /**
  * Composite shapes the API returns. Client code reads them through
@@ -109,6 +110,7 @@ export type PersonRow = Doc<SafeUser> & {
 export interface PersonDetail {
   user: Doc<SafeUser>;
   clearance: Doc<Clearance> | null;
+  screening: Doc<ScreeningCheck> | null;
   signups: SignupWithContext[];
   ledger: LedgerEntryWithEvent[];
   certificates: Doc<Certificate>[];
@@ -132,8 +134,15 @@ export interface Report {
   summary: { label: string; value: string }[];
 }
 
+/** A volunteer with a sign-up pending on clearance, and their pre-check. */
+export interface AwaitingClearance {
+  volunteer: UserSummary;
+  screening: Doc<ScreeningCheck> | null;
+}
+
 export interface AdminApprovals {
   clearances: UserSummary[];
+  awaitingClearance: AwaitingClearance[];
   rosters: Doc<Event>[];
   guardianConsent: UserSummary[];
   reportedThreads: ThreadSummary[];
