@@ -59,8 +59,7 @@ so we don't need our own guardian step. It replaces both the click-through
 waiver we wrote and the guardian consent email.
 
 We can't see JotForm submissions without access to Pink STEM's account, so
-volunteers confirm they've signed it. Doing that automatically with a webhook is
-in the backlog as #46.
+volunteers confirm they've signed it.
 
 ## One kind of volunteer
 
