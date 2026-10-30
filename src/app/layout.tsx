@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     template: "%s · Pink STEM Volunteer Hub",
   },
   description:
-    "Find a shift, get cleared, show up, and earn verified service hours with Pink STEM, Inc. — breaking barriers for girls in STEM across Georgia.",
+    "Browse event shifts, get cleared, show up, and earn verified service hours with Pink STEM, Inc. Breaking barriers for girls in STEM across Georgia.",
 };
 
 export default function RootLayout({
