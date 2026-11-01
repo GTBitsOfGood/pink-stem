@@ -12,12 +12,7 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   website: "https://pinkstem.org",
   signatoryName: "Dr. Tamika Head-Ray",
   signatoryTitle: "Founder & Executive Director",
-  waiverVersion: 1,
-  waiverText: `I understand that volunteering with Pink STEM, Inc. involves working with students, and I agree to follow the direction of Pink STEM staff and site organizers at all times.
-
-I release Pink STEM, Inc., its staff, partners, and host sites from liability for injury or loss arising from my participation, except where caused by gross negligence.
-
-I consent to Pink STEM recording my attendance and service hours and issuing certificates that describe them.`,
+  waiverFormUrl: "https://form.jotform.com/250444878160460",
   codeOfConductText: `Volunteers are never alone with a student out of sight of staff or another adult.
 
 Volunteers do not exchange personal contact information with students, and do not contact students outside Pink STEM programs.

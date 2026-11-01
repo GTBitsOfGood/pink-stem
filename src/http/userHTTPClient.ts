@@ -13,15 +13,6 @@ export type ClientSignupWithContext = Serialized<SignupWithContext>;
 export type ClientHoursSummary = Serialized<HoursSummary>;
 export type ClientCertificate = Serialized<Doc<Certificate>>;
 
-export interface ConsentInfo {
-  volunteerName: string;
-  guardianEmail: string;
-  alreadyConsented: boolean;
-  orgName: string;
-  waiverText: string;
-  codeOfConductText: string;
-}
-
 interface VerifyEmailInfo {
   firstName: string;
   alreadyVerified: boolean;
@@ -30,14 +21,6 @@ interface VerifyEmailInfo {
 export default class UserHTTPClient {
   static updateProfile(body: ProfileBody): Promise<Me> {
     return fetchHTTPClient("/me", "PATCH", body);
-  }
-
-  static acceptWaiver(): Promise<Me> {
-    return fetchHTTPClient("/me/waiver", "POST");
-  }
-
-  static resendGuardianConsent(): Promise<void> {
-    return fetchHTTPClient("/me/guardian-consent", "POST");
   }
 
   static resendEmailVerification(): Promise<void> {
@@ -60,14 +43,6 @@ export default class UserHTTPClient {
       periodStart,
       periodEnd,
     });
-  }
-
-  static consentInfo(token: string): Promise<ConsentInfo> {
-    return fetchHTTPClient(`/consent/${token}`);
-  }
-
-  static giveConsent(token: string): Promise<{ volunteerName: string }> {
-    return fetchHTTPClient(`/consent/${token}`, "POST");
   }
 
   static verifyEmailInfo(token: string): Promise<VerifyEmailInfo> {

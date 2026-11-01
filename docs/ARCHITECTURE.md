@@ -75,7 +75,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 
 | Collection         | Purpose                                                                         |
 | ------------------ | ------------------------------------------------------------------------------- |
-| `users`            | Accounts, profile, waiver acceptance, notification preferences, session version |
+| `users`            | Accounts, profile, notification preferences, session version                    |
 | `clearances`       | Screening outcome per user; admins only. Organizers receive a derived boolean   |
 | `screeningchecks`  | Latest registry pre-check per volunteer and any queued rerun; admins only       |
 | `events`           | Organizer-owned events: draft → published → completed, cancelled from any state |
@@ -87,7 +87,7 @@ through a hook in `src/components/hooks/`, so no screen fetches from
 | `messages`         | Text only, with per-message report fields                                       |
 | `certificates`     | Immutable snapshots with a random verification code                             |
 | `auditlogs`        | Append-only record of every consequential action                                |
-| `actiontokens`     | Hashed one-time links: password reset, invites, consent, email verification     |
+| `actiontokens`     | Hashed one-time links: password reset, invites, email verification              |
 | `orgsettings`      | Singleton organization configuration                                            |
 | `notificationlogs` | Idempotency keys so scheduled emails send exactly once; the job runner's lock   |
 | `ratelimitwindows` | Fixed-window rate-limit counters, shared by every server instance               |

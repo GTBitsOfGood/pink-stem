@@ -2,11 +2,9 @@ import ActionTokenDAO from "@/db/actions/actionToken";
 import UserDAO from "@/db/actions/user";
 import {
   EMAIL_VERIFICATION_DAYS,
-  GUARDIAN_CONSENT_DAYS,
   RATE_LIMITS,
   RESET_PASSWORD_TOKEN_MINUTES,
 } from "@/constants/limits";
-import { isMinor } from "@/lib/dates";
 import { assertRateLimit } from "@/lib/rateLimit";
 import { signSession } from "@/lib/session";
 import { appUrl } from "@/lib/urls";
@@ -99,14 +97,6 @@ export default class AuthService {
     const existing = await UserDAO.findByEmail(data.email);
     if (existing) throw new ConflictError(ERRORS.AUTH.EMAIL_TAKEN);
 
-    const minor = isMinor(data.dateOfBirth);
-    if (minor && !data.guardianEmail) {
-      throw new InvalidArgumentsError(ERRORS.USER.GUARDIAN_EMAIL_REQUIRED);
-    }
-    if (data.guardianEmail && data.guardianEmail === data.email) {
-      throw new InvalidArgumentsError(ERRORS.USER.GUARDIAN_EMAIL_SAME);
-    }
-
     const created = await UserDAO.create({
       email: data.email,
       provider: "password",
@@ -115,11 +105,9 @@ export default class AuthService {
       lastName: data.lastName,
       phone: data.phone,
       dateOfBirth: data.dateOfBirth,
-      guardianEmail: minor ? data.guardianEmail : undefined,
       passwordHash: await HashingService.hash(data.password),
     });
 
-    if (minor) await AuthService.sendGuardianConsent(created);
     await AuthService.sendEmailVerification(created);
 
     return AuthService.session({ ...created, sessionVersion: 0 });
@@ -152,29 +140,6 @@ export default class AuthService {
       throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
     }
     return AuthService.session(user);
-  }
-
-  static async sendGuardianConsent(
-    user: Pick<
-      Doc<SafeUser>,
-      "_id" | "email" | "firstName" | "lastName" | "guardianEmail"
-    >
-  ): Promise<void> {
-    if (!user.guardianEmail) return;
-    const { secret } = await ActionTokenDAO.issue({
-      purpose: "guardian_consent",
-      email: user.guardianEmail,
-      userId: user._id,
-      ttlMs: GUARDIAN_CONSENT_DAYS * DAY,
-    });
-    const org = await NotificationService.org();
-    await NotificationService.sendRaw(
-      user.guardianEmail,
-      NotificationService.templates.guardianConsent(org, {
-        volunteerName: `${user.firstName} ${user.lastName}`,
-        url: appUrl(`/consent/${secret}`),
-      })
-    );
   }
 
   static async sendEmailVerification(

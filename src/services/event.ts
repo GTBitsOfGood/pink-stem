@@ -160,16 +160,23 @@ export default class EventService {
       throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
 
     const [withShifts] = await EventService.attachShifts([event]);
-    const mySignups = actor
-      ? (await SignupDAO.findByEvent(event._id)).filter(
-          (s) => sameId(s.volunteerId, actor.id) && s.status !== "cancelled"
+    const allMine = actor
+      ? (await SignupDAO.findByEvent(event._id)).filter((s) =>
+          sameId(s.volunteerId, actor.id)
         )
       : [];
+    const mySignups = allMine.filter((s) => s.status !== "cancelled");
     const onRoster = mySignups.some((s) =>
       (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
-    return { ...withShifts, mySignups, updates, canManage: manage };
+    return {
+      ...withShifts,
+      mySignups,
+      waiverSigned: allMine.some((s) => s.waiverSignedAt),
+      updates,
+      canManage: manage,
+    };
   }
 
   static async listForOrganizer(actor: Actor): Promise<EventWithShifts[]> {

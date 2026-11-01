@@ -53,15 +53,11 @@ export interface User {
   city?: string;
   region?: Region;
   dateOfBirth?: Date;
-  guardianEmail?: string;
-  guardianConsentAt?: Date | null;
   emergencyContact?: EmergencyContact;
   skills: Skill[];
   interests: Skill[];
   shirtSize?: ShirtSize;
   bio?: string;
-  waiverVersionAccepted?: number;
-  waiverAcceptedAt?: Date;
   notificationPreferences: NotificationPreferences;
   /** Bumped to invalidate every existing session for this user. */
   sessionVersion: number;

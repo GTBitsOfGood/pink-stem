@@ -5,7 +5,7 @@ import { QUERY_KEYS } from "@/constants/queryKeys";
 import UserHTTPClient, { ProfileBody } from "@/http/userHTTPClient";
 import type { Me } from "@/http/authHTTPClient";
 
-/** Profile edits, waiver acceptance, consent and verification resends, and the public org settings. */
+/** Profile edits, verification resends, and the public org settings. */
 export function useProfile() {
   const queryClient = useQueryClient();
   const setMe = (me: Me) => {
@@ -17,13 +17,6 @@ export function useProfile() {
     update: useMutation({
       mutationFn: (body: ProfileBody) => UserHTTPClient.updateProfile(body),
       onSuccess: setMe,
-    }),
-    acceptWaiver: useMutation({
-      mutationFn: () => UserHTTPClient.acceptWaiver(),
-      onSuccess: setMe,
-    }),
-    resendGuardianConsent: useMutation({
-      mutationFn: () => UserHTTPClient.resendGuardianConsent(),
     }),
     resendEmailVerification: useMutation({
       mutationFn: () => UserHTTPClient.resendEmailVerification(),

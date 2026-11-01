@@ -42,10 +42,12 @@ export function useSignupActions(eventId?: string) {
       mutationFn: ({
         shiftId,
         acknowledgeOverlap,
+        waiverSigned,
       }: {
         shiftId: string;
         acknowledgeOverlap?: boolean;
-      }) => SignupHTTPClient.create(shiftId, acknowledgeOverlap),
+        waiverSigned?: boolean;
+      }) => SignupHTTPClient.create(shiftId, acknowledgeOverlap, waiverSigned),
       onSuccess: invalidate,
     }),
     cancel: useMutation({

@@ -5,9 +5,14 @@ import type { ReportAbsenceInput } from "@/utils/validation/signup";
 export default class SignupHTTPClient {
   static create(
     shiftId: string,
-    acknowledgeOverlap = false
+    acknowledgeOverlap = false,
+    waiverSigned = false
   ): Promise<ClientSignup> {
-    return fetchHTTPClient("/signups", "POST", { shiftId, acknowledgeOverlap });
+    return fetchHTTPClient("/signups", "POST", {
+      shiftId,
+      acknowledgeOverlap,
+      waiverSigned,
+    });
   }
 
   static cancel(signupId: string, reason?: string): Promise<ClientSignup> {

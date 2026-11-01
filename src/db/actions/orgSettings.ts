@@ -12,17 +12,18 @@ export default class OrgSettingsDAO {
       { $setOnInsert: { key: ORG_SETTINGS_KEY, ...DEFAULT_ORG_SETTINGS } },
       { upsert: true, returnDocument: "after" }
     ).lean<OrgSettings>();
-    return doc as OrgSettings;
+    // Settings created before the waiver link existed do not have one yet.
+    return {
+      ...(doc as OrgSettings),
+      waiverFormUrl: doc?.waiverFormUrl ?? DEFAULT_ORG_SETTINGS.waiverFormUrl,
+    };
   }
 
-  static async update(
-    updates: Partial<OrgSettings> & { $inc?: { waiverVersion: number } }
-  ): Promise<OrgSettings> {
+  static async update(updates: Partial<OrgSettings>): Promise<OrgSettings> {
     await dbConnect();
-    const { $inc, ...set } = updates;
     const doc = await OrgSettingsModel.findOneAndUpdate(
       { key: ORG_SETTINGS_KEY },
-      { $set: set, ...($inc ? { $inc } : {}) },
+      { $set: updates },
       { returnDocument: "after", runValidators: true }
     ).lean<OrgSettings>();
     return doc as OrgSettings;

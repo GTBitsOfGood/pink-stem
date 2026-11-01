@@ -14,7 +14,7 @@ import {
   LAPSED_SPOT_HOLD_DAYS,
 } from "@/constants/limits";
 import { isCleared } from "@/lib/clearance";
-import { addDays, ageOn, isMinor } from "@/lib/dates";
+import { addDays, ageOn } from "@/lib/dates";
 import { buildIcs } from "@/lib/ics";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
@@ -59,15 +59,8 @@ const insideCutoff = (
   settings.cancellationCutoffHours * HOUR;
 
 interface ReasonInput {
-  user: Pick<
-    SafeUser,
-    | "waiverVersionAccepted"
-    | "dateOfBirth"
-    | "guardianConsentAt"
-    | "emailVerifiedAt"
-  >;
+  user: Pick<SafeUser, "emailVerifiedAt">;
   clearance: Pick<Clearance, "status" | "expiresOn"> | null;
-  settings: Pick<OrgSettings, "waiverVersion">;
   event?: Pick<Event, "requiresClearance" | "requiresApproval">;
   approved?: boolean;
 }
@@ -93,16 +86,11 @@ export default class SignupService {
   static pendingReasons({
     user,
     clearance,
-    settings,
     event,
     approved,
   }: ReasonInput): PendingReason[] {
     const reasons: PendingReason[] = [];
     if (!user.emailVerifiedAt) reasons.push("email_verification");
-    if ((user.waiverVersionAccepted ?? 0) < settings.waiverVersion)
-      reasons.push("waiver");
-    if (isMinor(user.dateOfBirth) && !user.guardianConsentAt)
-      reasons.push("guardian_consent");
     if (event?.requiresClearance && !isCleared(clearance))
       reasons.push("clearance");
     if (event?.requiresApproval && !approved) reasons.push("approval");
@@ -114,10 +102,9 @@ export default class SignupService {
     event: Doc<Event>,
     approved: boolean
   ) {
-    const [user, clearance, settings] = await Promise.all([
+    const [user, clearance] = await Promise.all([
       UserDAO.findById(volunteerId),
       ClearanceDAO.findByUser(volunteerId),
-      OrgSettingsDAO.get(),
     ]);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
     return {
@@ -125,7 +112,6 @@ export default class SignupService {
       reasons: SignupService.pendingReasons({
         user,
         clearance,
-        settings,
         event,
         approved,
       }),
@@ -133,7 +119,8 @@ export default class SignupService {
   }
 
   static async create(actor: Actor, input: unknown): Promise<Doc<Signup>> {
-    const { shiftId, acknowledgeOverlap } = createSignupSchema.parse(input);
+    const { shiftId, acknowledgeOverlap, waiverSigned } =
+      createSignupSchema.parse(input);
     const shift = await ShiftDAO.findById(shiftId);
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
     const event = await EventDAO.findById(shift.eventId);
@@ -160,6 +147,14 @@ export default class SignupService {
     if (existing && existing.status !== "cancelled") {
       throw new ConflictError(ERRORS.SIGNUP.ALREADY_SIGNED_UP);
     }
+    // Once per event: any earlier sign-up for it, even a cancelled one, counts.
+    const waiverSignedAt =
+      (
+        await SignupDAO.find({ eventId: event._id, volunteerId: actor.id })
+      ).find((s) => s.waiverSignedAt)?.waiverSignedAt ??
+      (waiverSigned ? new Date() : null);
+    if (!waiverSignedAt)
+      throw new ConflictError(ERRORS.SIGNUP.WAIVER, "waiver");
     if (
       !acknowledgeOverlap &&
       (await SignupService.hasOverlap(actor.id, shift))
@@ -180,6 +175,7 @@ export default class SignupService {
       status,
       pendingReasons: claimed ? reasons : [],
       signedUpAt: now,
+      waiverSignedAt,
       confirmedAt: status === "confirmed" ? now : null,
       approvedAt: null,
       approvedBy: null,

@@ -13,7 +13,6 @@ export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   dateOfBirth: dateInputSchema,
-  guardianEmail: emailSchema.optional(),
   phone: phoneSchema.optional(),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
