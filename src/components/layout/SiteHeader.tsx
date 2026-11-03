@@ -51,8 +51,20 @@ export default function SiteHeader() {
   const isActive = (href: string) =>
     pathname === href || (href !== "/admin" && pathname.startsWith(`${href}/`));
   const unread = me?.unreadMessages ?? 0;
-  const unreadLabel = unread > 9 ? "9+" : String(unread);
   const messagesLabel = unread ? `Messages, ${unread} unread` : "Messages";
+  // The link's label carries the real count, so the badge is not announced.
+  const badge = (className?: string) =>
+    unread ? (
+      <span
+        aria-hidden
+        className={cn(
+          "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white",
+          className
+        )}
+      >
+        {unread > 9 ? "9+" : unread}
+      </span>
+    ) : null;
   const hasInbox = user?.role === "volunteer" || user?.role === "organizer";
 
   const links = (
@@ -114,14 +126,7 @@ export default function SiteHeader() {
                   )}
                 >
                   <MessageSquare className="h-4 w-4" aria-hidden />
-                  {unread > 0 ? (
-                    <span
-                      aria-hidden
-                      className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
-                    >
-                      {unreadLabel}
-                    </span>
-                  ) : null}
+                  {badge("absolute -right-1.5 -top-1.5")}
                 </Link>
               ) : null}
               <Link
@@ -173,14 +178,7 @@ export default function SiteHeader() {
                   >
                     <MessageSquare className="h-4 w-4" aria-hidden />
                     <span>Messages</span>
-                    {unread > 0 ? (
-                      <span
-                        aria-hidden
-                        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
-                      >
-                        {unreadLabel}
-                      </span>
-                    ) : null}
+                    {badge()}
                   </Link>
                 ) : null}
                 <Link

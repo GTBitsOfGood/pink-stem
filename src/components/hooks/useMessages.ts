@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
 import { QUERY_KEYS } from "@/constants/queryKeys";
 import { compactFilters } from "@/http/fetchHTTPClient";
 import MessageHTTPClient from "@/http/messageHTTPClient";
@@ -17,30 +16,12 @@ export function useThreads(filters: Record<string, string | undefined>) {
 }
 
 export function useThread(threadId: string) {
-  const queryClient = useQueryClient();
-  const invalidatedFor = useRef<string | null>(null);
-  const query = useQuery({
+  return useQuery({
     queryKey: QUERY_KEYS.thread(threadId),
     queryFn: () => MessageHTTPClient.get(threadId),
     enabled: !!threadId,
     refetchInterval: 30_000,
   });
-
-  // The GET marks the thread read on the server. Refresh the session only
-  // after that fresh request finishes so its unread count cannot lag behind.
-  useEffect(() => {
-    if (
-      threadId &&
-      query.isSuccess &&
-      query.fetchStatus === "idle" &&
-      invalidatedFor.current !== threadId
-    ) {
-      invalidatedFor.current = threadId;
-      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session });
-    }
-  }, [query.fetchStatus, query.isSuccess, queryClient, threadId]);
-
-  return query;
 }
 
 export function useMessageActions(threadId?: string) {
