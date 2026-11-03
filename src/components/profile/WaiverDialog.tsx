@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePublicSettings } from "@/components/hooks/useProfile";
-import Button from "@/components/ui/Button";
+import Button, { buttonClasses } from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
 import { Checkbox } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/Primitives";
@@ -13,7 +13,7 @@ interface WaiverDialogProps {
   onConfirm: () => void;
 }
 
-/** Sends the volunteer to Pink STEM's waiver form, then takes their word that they signed it. */
+/** Shows the code of conduct, sends the volunteer to Pink STEM's waiver form, then takes their word that they signed it. */
 export default function WaiverDialog({
   open,
   onClose,
@@ -37,11 +37,17 @@ export default function WaiverDialog({
         <Spinner />
       ) : (
         <div className="grid gap-4">
+          <section className="max-h-56 overflow-y-auto rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm leading-6 text-ink-700">
+            <p className="eyebrow mb-2">Code of conduct</p>
+            <p className="whitespace-pre-wrap">
+              {settings.data.codeOfConductText}
+            </p>
+          </section>
           <a
             href={settings.data.waiverFormUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-ink-200 bg-white px-4 text-sm font-semibold text-ink-800 hover:bg-ink-50"
+            className={buttonClasses("secondary")}
           >
             Open the waiver form
           </a>
