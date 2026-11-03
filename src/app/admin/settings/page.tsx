@@ -4,14 +4,13 @@ import { FormEvent, useState } from "react";
 import { useAdminActions, useOrgSettings } from "@/components/hooks/useAdmin";
 import Button, { ButtonLink } from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
-import { Checkbox, Input, Textarea } from "@/components/ui/Field";
+import { Input, Textarea } from "@/components/ui/Field";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { errorMessage, useToast } from "@/components/ui/Toast";
 import type { OrgSettings } from "@/types/settings";
 
 type Form = Omit<
   OrgSettings,
-  | "waiverVersion"
   | "cancellationCutoffHours"
   | "autoPromoteCutoffHours"
   | "noShowThreshold"
@@ -21,15 +20,12 @@ type Form = Omit<
   autoPromoteCutoffHours: string;
   noShowThreshold: string;
   noShowWindowDays: string;
-  bumpWaiverVersion: boolean;
 };
 
 export default function SettingsPage() {
   const settings = useOrgSettings();
   if (!settings.data) return <Spinner />;
-  return (
-    <SettingsForm key={settings.data.waiverVersion} initial={settings.data} />
-  );
+  return <SettingsForm initial={settings.data} />;
 }
 
 function SettingsForm({ initial }: { initial: OrgSettings }) {
@@ -41,7 +37,6 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
     autoPromoteCutoffHours: String(initial.autoPromoteCutoffHours),
     noShowThreshold: String(initial.noShowThreshold),
     noShowWindowDays: String(initial.noShowWindowDays),
-    bumpWaiverVersion: false,
   });
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
     setV({ ...v, [key]: value });
@@ -56,7 +51,6 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
         noShowThreshold: Number(v.noShowThreshold),
         noShowWindowDays: Number(v.noShowWindowDays),
       });
-      setV({ ...v, bumpWaiverVersion: false });
       toast("Settings saved.");
     } catch (error) {
       toast(errorMessage(error), "error");
@@ -137,17 +131,14 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
         </CardBody>
       </Card>
       <Card>
-        <CardHeader
-          title="Waiver and code of conduct"
-          description={`Currently version ${initial.waiverVersion}. Publishing a new version makes every volunteer re-accept at their next sign-up.`}
-        />
+        <CardHeader title="Waiver and code of conduct" />
         <CardBody className="grid gap-4">
-          <Textarea
-            label="Waiver text"
-            rows={8}
+          <Input
+            label="Waiver form link"
+            type="url"
             required
-            value={v.waiverText}
-            onChange={(e) => set("waiverText", e.target.value)}
+            value={v.waiverFormUrl}
+            onChange={(e) => set("waiverFormUrl", e.target.value)}
           />
           <Textarea
             label="Code of conduct"
@@ -155,12 +146,6 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             required
             value={v.codeOfConductText}
             onChange={(e) => set("codeOfConductText", e.target.value)}
-          />
-          <Checkbox
-            label="Publish as a new version"
-            description="Volunteers will be asked to accept the updated text before their next sign-up."
-            checked={v.bumpWaiverVersion}
-            onChange={(e) => set("bumpWaiverVersion", e.target.checked)}
           />
         </CardBody>
       </Card>

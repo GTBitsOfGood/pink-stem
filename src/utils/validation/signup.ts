@@ -6,6 +6,7 @@ import { objectIdSchema, optionalText } from "@/utils/validation/common";
 export const createSignupSchema = z.object({
   shiftId: objectIdSchema,
   acknowledgeOverlap: z.boolean().default(false),
+  waiverSigned: z.boolean().default(false),
 });
 
 export const cancelSignupSchema = z.object({ reason: optionalText(300) });

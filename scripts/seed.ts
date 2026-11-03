@@ -79,8 +79,6 @@ async function ensureUser(
     ...rest,
     provider: "password",
     passwordHash: await HashingService.hash(password),
-    waiverVersionAccepted: 1,
-    waiverAcceptedAt: new Date(),
     emailVerifiedAt: new Date(),
   });
   console.log(`  created ${data.role}: ${data.email}`);
@@ -151,7 +149,6 @@ async function main() {
       lastName: "Hernandez",
       password: DEMO_PASSWORD,
       dateOfBirth: fromDateTimeLocal("2009-06-21"),
-      guardianEmail: "guardian@example.com",
       skills: ["event_support"],
       interests: ["aviation"],
       region: "middle_georgia",

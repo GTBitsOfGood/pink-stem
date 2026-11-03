@@ -55,31 +55,21 @@ const RESERVED_ACTOR_NAMES: Record<string, string> = {
 export default class AdminService {
   /** What is waiting on a decision: one list per kind of approval. */
   static async approvals(admin: Actor): Promise<AdminApprovals> {
-    const [submitted, rosters, consentSignups, clearanceSignups, reported] =
-      await Promise.all([
-        ClearanceDAO.findUserIdsByStatus("submitted"),
-        EventDAO.findAll({
-          status: "published",
-          eventDate: { $lt: new Date() },
-        }),
-        SignupDAO.find({
-          status: "pending",
-          pendingReasons: "guardian_consent",
-        }),
-        SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
-        MessageService.reportedThreads(admin),
-      ]);
+    const [submitted, rosters, clearanceSignups, reported] = await Promise.all([
+      ClearanceDAO.findUserIdsByStatus("submitted"),
+      EventDAO.findAll({
+        status: "published",
+        eventDate: { $lt: new Date() },
+      }),
+      SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
+      MessageService.reportedThreads(admin),
+    ]);
     const awaitingIds = clearanceSignups.map((s) => s.volunteerId);
-    const [clearances, guardianConsent, awaiting, screenings] =
-      await Promise.all([
-        UserDAO.findSummaries(submitted),
-        UserDAO.findSummaries(
-          consentSignups.map((s) => s.volunteerId),
-          { guardianConsentAt: null }
-        ),
-        UserDAO.findSummaries(awaitingIds),
-        ScreeningCheckDAO.findByUsers(awaitingIds),
-      ]);
+    const [clearances, awaiting, screenings] = await Promise.all([
+      UserDAO.findSummaries(submitted),
+      UserDAO.findSummaries(awaitingIds),
+      ScreeningCheckDAO.findByUsers(awaitingIds),
+    ]);
     return {
       clearances,
       awaitingClearance: awaiting.map((volunteer) => ({
@@ -88,7 +78,6 @@ export default class AdminService {
           screenings.find((c) => sameId(c.userId, volunteer._id)) ?? null,
       })),
       rosters,
-      guardianConsent,
       reportedThreads: reported,
     };
   }

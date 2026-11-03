@@ -13,7 +13,7 @@ import {
 } from "@/constants/labels";
 import { MAX_BIO_LENGTH } from "@/constants/limits";
 import type { ClientUser } from "@/http/authHTTPClient";
-import { isMinor, toDateInput } from "@/lib/dates";
+import { toDateInput } from "@/lib/dates";
 import {
   NOTIFICATION_CATEGORIES,
   REGIONS,
@@ -34,7 +34,6 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
     city: user.city ?? "",
     region: user.region ?? "",
     dateOfBirth: user.dateOfBirth ? toDateInput(user.dateOfBirth) : "",
-    guardianEmail: user.guardianEmail ?? "",
     emergencyName: user.emergencyContact?.name ?? "",
     emergencyPhone: user.emergencyContact?.phone ?? "",
     skills: user.skills,
@@ -54,7 +53,6 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
         ? values[key].filter((s) => s !== skill)
         : [...values[key], skill]
     );
-  const minor = values.dateOfBirth ? isMinor(values.dateOfBirth) : false;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -67,7 +65,6 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
         region: (values.region || undefined) as
           (typeof REGIONS)[number] | undefined,
         dateOfBirth: values.dateOfBirth || undefined,
-        guardianEmail: values.guardianEmail,
         emergencyContact: {
           name: values.emergencyName,
           phone: values.emergencyPhone,
@@ -165,16 +162,6 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
               onChange={(e) => set("dateOfBirth", e.target.value)}
               hint="Used for age requirements only."
             />
-            {minor ? (
-              <Input
-                label="Parent or guardian email"
-                type="email"
-                required
-                value={values.guardianEmail}
-                onChange={(e) => set("guardianEmail", e.target.value)}
-                hint="Changing this address restarts consent."
-              />
-            ) : null}
           </div>
           <Textarea
             label="Short bio"

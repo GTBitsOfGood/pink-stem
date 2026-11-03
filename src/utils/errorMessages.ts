@@ -13,10 +13,6 @@ const ERRORS = Object.freeze({
   },
   USER: {
     NOT_FOUND: "That account does not exist.",
-    GUARDIAN_EMAIL_REQUIRED:
-      "Volunteers under 18 must provide a parent or guardian email.",
-    GUARDIAN_EMAIL_SAME:
-      "The guardian email must be different from your own email.",
     CANNOT_CHANGE_OWN_ROLE: "You cannot change your own role.",
     CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account.",
   },
@@ -54,6 +50,8 @@ const ERRORS = Object.freeze({
       "You are on the waitlist for this shift. Leave the waitlist instead.",
     OVERLAP:
       "This shift overlaps another one you hold. Confirm to sign up anyway.",
+    WAIVER:
+      "Confirm that you signed Pink STEM's waiver for this event to sign up.",
     INSIDE_CUTOFF:
       'The cancellation window has closed. Use "Can\'t make it" on your dashboard to let the organizer know.',
     NOT_CANCELLABLE: "This sign-up can no longer be cancelled.",

@@ -107,12 +107,6 @@ export default function ApprovalsPage() {
         }))}
       />
       <Queue
-        title="Minors awaiting guardian consent"
-        action="Open profile"
-        empty="No minors are waiting on a guardian."
-        rows={a.guardianConsent.map(person)}
-      />
-      <Queue
         title="Reported threads"
         action="Read thread"
         empty="No reported threads are waiting on review."

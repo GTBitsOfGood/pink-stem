@@ -107,7 +107,7 @@ Staging uses the **console transport**: `RESEND_API_KEY` is unset, so every
 email is written to the function log instead of being sent and staging cannot
 email anyone. To read one, open **Logs & metrics → Functions →
 `___netlify-server-handler`** and search for `[mail]`. That is also where
-verification and consent links land when you register a new account on
+verification links land when you register a new account on
 staging.
 
 ## Seeding staging

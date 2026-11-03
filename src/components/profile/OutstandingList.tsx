@@ -4,7 +4,6 @@ import Link from "next/link";
 import { CircleAlert, Send } from "lucide-react";
 import { useProfile } from "@/components/hooks/useProfile";
 import { useSession } from "@/components/hooks/useSession";
-import WaiverDialog from "@/components/profile/WaiverDialog";
 import { ClearanceBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -15,10 +14,8 @@ import { useState } from "react";
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
 export default function OutstandingList() {
   const { me } = useSession();
-  const { acceptWaiver, resendGuardianConsent, resendEmailVerification } =
-    useProfile();
+  const { resendEmailVerification } = useProfile();
   const toast = useToast();
-  const [waiverOpen, setWaiverOpen] = useState(false);
   const [verifyResendBlocked, setVerifyResendBlocked] = useState(false);
 
   if (!me) return null;
@@ -76,29 +73,6 @@ export default function OutstandingList() {
                   Resend verification link
                 </Button>
               )
-            ) : reason === "waiver" ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setWaiverOpen(true)}
-              >
-                Review and accept
-              </Button>
-            ) : reason === "guardian_consent" ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Send className="h-3.5 w-3.5" />}
-                loading={resendGuardianConsent.isPending}
-                onClick={() =>
-                  resendGuardianConsent.mutate(undefined, {
-                    onSuccess: () =>
-                      toast("Consent link re-sent to your guardian."),
-                  })
-                }
-              >
-                Resend consent link
-              </Button>
             ) : null}
           </div>
         ))}
@@ -123,11 +97,6 @@ export default function OutstandingList() {
           </span>
         </div>
       </CardBody>
-      <WaiverDialog
-        open={waiverOpen}
-        onClose={() => setWaiverOpen(false)}
-        onAccept={() => acceptWaiver.mutateAsync()}
-      />
     </Card>
   );
 }

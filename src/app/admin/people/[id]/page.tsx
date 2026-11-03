@@ -133,12 +133,6 @@ export default function PersonPage() {
                       : null,
                   },
                   {
-                    label: "Guardian",
-                    value: u.guardianEmail
-                      ? `${u.guardianEmail}${u.guardianConsentAt ? ` · consented ${formatShortDate(u.guardianConsentAt)}` : " · consent pending"}`
-                      : null,
-                  },
-                  {
                     label: "Emergency contact",
                     value: u.emergencyContact?.name
                       ? `${u.emergencyContact.name} · ${u.emergencyContact.phone}`
@@ -148,12 +142,6 @@ export default function PersonPage() {
                     label: "Skills",
                     value:
                       u.skills.map((s) => SKILL_LABELS[s]).join(", ") || null,
-                  },
-                  {
-                    label: "Waiver",
-                    value: u.waiverVersionAccepted
-                      ? `v${u.waiverVersionAccepted} on ${formatShortDate(u.waiverAcceptedAt!)}`
-                      : "Not accepted",
                   },
                   { label: "Joined", value: formatShortDate(u.createdAt) },
                 ]}

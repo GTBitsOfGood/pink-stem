@@ -156,15 +156,6 @@ export const emailTemplates = {
       { cta: { label: "Accept invitation", url: p.url } }
     ),
 
-  guardianConsent: (org: Org, p: { volunteerName: string; url: string }) =>
-    build(
-      org,
-      `Consent needed for ${p.volunteerName} to volunteer with Pink STEM`,
-      "A parent or guardian's consent is needed",
-      `${p.volunteerName} has signed up to volunteer with ${org.name} and listed you as their parent or guardian. Because they are under 18, we need your consent before they can be confirmed for any shift.\n\nPlease review and give consent using the link below. It expires in 14 days.`,
-      { cta: { label: "Review and give consent", url: p.url } }
-    ),
-
   signupConfirmed: (
     org: Org,
     p: { name: string; event: EventDetails; role: string; calendarUrl: string }

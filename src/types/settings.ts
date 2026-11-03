@@ -8,8 +8,7 @@ export interface OrgSettings {
   website: string;
   signatoryName: string;
   signatoryTitle: string;
-  waiverVersion: number;
-  waiverText: string;
+  waiverFormUrl: string;
   codeOfConductText: string;
   cancellationCutoffHours: number;
   autoPromoteCutoffHours: number;

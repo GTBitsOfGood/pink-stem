@@ -12,7 +12,12 @@ import { ABSENCE_REASON_LABELS } from "@/constants/labels";
 import type { ClientRoster } from "@/http/eventHTTPClient";
 import type { RosterEntry } from "@/types/api";
 import type { Serialized } from "@/types/models";
-import { formatHours, formatTimeRange, hoursBetween } from "@/lib/dates";
+import {
+  formatDateTime,
+  formatHours,
+  formatTimeRange,
+  hoursBetween,
+} from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 type Entry = Serialized<RosterEntry>;
@@ -106,6 +111,9 @@ export default function AttendanceList({
                             : status === "no_show"
                               ? "No-show · 0 hr"
                               : "Not marked yet"}
+                          {entry.signup.waiverSignedAt
+                            ? ` · Waiver confirmed ${formatDateTime(entry.signup.waiverSignedAt)}`
+                            : ""}
                         </p>
                       </div>
                       {!locked ? (
