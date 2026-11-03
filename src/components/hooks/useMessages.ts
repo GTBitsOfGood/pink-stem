@@ -12,6 +12,7 @@ export function useThreads(filters: Record<string, string | undefined>) {
     queryKey: QUERY_KEYS.threads(clean),
     queryFn: () => MessageHTTPClient.list(clean),
     placeholderData: (previous) => previous,
+    refetchInterval: 30_000,
   });
 }
 
