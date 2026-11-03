@@ -39,8 +39,6 @@ const userSchema = new Schema<User>(
     city: { type: String, trim: true },
     region: { type: String, enum: REGIONS },
     dateOfBirth: Date,
-    guardianEmail: { type: String, lowercase: true, trim: true },
-    guardianConsentAt: { type: Date, default: null },
     emergencyContact: {
       type: new Schema(
         {
@@ -54,8 +52,6 @@ const userSchema = new Schema<User>(
     interests: { type: [String], enum: SKILLS, default: [] },
     shirtSize: { type: String, enum: SHIRT_SIZES },
     bio: { type: String, maxlength: MAX_BIO_LENGTH, trim: true },
-    waiverVersionAccepted: Number,
-    waiverAcceptedAt: Date,
     notificationPreferences: {
       type: new Schema(notificationPreferences, { _id: false }),
       default: () => ({}),

@@ -1,12 +1,6 @@
 import type { AuditAction } from "@/types/audit";
 import type { CertificateType } from "@/types/certificate";
-import type {
-  EventCommitment,
-  EventStatus,
-  ProgramArea,
-  UpdateKind,
-  Weekday,
-} from "@/types/event";
+import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
 import type {
   RegistryOutcome,
   RegistrySource,
@@ -75,21 +69,6 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export const EVENT_COMMITMENT_LABELS: Record<EventCommitment, string> = {
-  short_term: "Short-term",
-  long_term: "Long-term",
-};
-
-export const WEEKDAY_LABELS: Record<Weekday, string> = {
-  sunday: "Sunday",
-  monday: "Monday",
-  tuesday: "Tuesday",
-  wednesday: "Wednesday",
-  thursday: "Thursday",
-  friday: "Friday",
-  saturday: "Saturday",
-};
-
 export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {
   pending: "Pending",
   confirmed: "Confirmed",
@@ -101,8 +80,6 @@ export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {
 
 export const PENDING_REASON_LABELS: Record<PendingReason, string> = {
   email_verification: "Email address must be confirmed",
-  waiver: "Accept the volunteer waiver and code of conduct",
-  guardian_consent: "A parent or guardian must give consent",
   clearance: "Background screening must be cleared by Pink STEM staff",
   approval: "The organizer reviews and approves sign-ups for this event",
 };

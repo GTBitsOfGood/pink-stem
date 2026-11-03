@@ -13,10 +13,6 @@ const ERRORS = Object.freeze({
   },
   USER: {
     NOT_FOUND: "That account does not exist.",
-    GUARDIAN_EMAIL_REQUIRED:
-      "Volunteers under 18 must provide a parent or guardian email.",
-    GUARDIAN_EMAIL_SAME:
-      "The guardian email must be different from your own email.",
     CANNOT_CHANGE_OWN_ROLE: "You cannot change your own role.",
     CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account.",
   },
@@ -32,15 +28,6 @@ const ERRORS = Object.freeze({
     NO_SHIFTS: "Add at least one shift before publishing.",
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
-    SERIES_REQUIRED: "That event is not part of a long-term program.",
-    SERIES_NO_SESSIONS:
-      "No upcoming session falls on the chosen weekdays between the first and last date.",
-    SERIES_TOO_LONG: "A long-term program can run for at most a year.",
-    SERIES_END_PAST: "The program's last date cannot be in the past.",
-    SERIES_STARTED:
-      "This session has started. Edit the program from an upcoming session.",
-    SERIES_CHANGED:
-      "The program changed while you were saving. Reload and try again.",
     VIRTUAL_LINK: "Virtual events need a join link.",
     LOCATION_REQUIRED: "In-person events need a location.",
   },
@@ -52,8 +39,6 @@ const ERRORS = Object.freeze({
       "Capacity cannot be reduced below the number of volunteers already holding a spot.",
     MIN_STAFFING: "Minimum staffing cannot exceed capacity.",
     TOO_MANY: "An event cannot have more than twenty shifts.",
-    LONG_TERM_MANAGED:
-      "Long-term program shifts must be changed through Edit program.",
     HAS_SIGNUPS:
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
     IN_PAST: "This shift has already started.",
@@ -65,6 +50,8 @@ const ERRORS = Object.freeze({
       "You are on the waitlist for this shift. Leave the waitlist instead.",
     OVERLAP:
       "This shift overlaps another one you hold. Confirm to sign up anyway.",
+    WAIVER:
+      "Confirm that you signed Pink STEM's waiver for this event to sign up.",
     INSIDE_CUTOFF:
       'The cancellation window has closed. Use "Can\'t make it" on your dashboard to let the organizer know.',
     NOT_CANCELLABLE: "This sign-up can no longer be cancelled.",

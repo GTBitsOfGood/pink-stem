@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CalendarPlus } from "lucide-react";
-import { useProfile } from "@/components/hooks/useProfile";
 import { useSession } from "@/components/hooks/useSession";
 import { useSignupActions } from "@/components/hooks/useSignups";
 import WaiverDialog from "@/components/profile/WaiverDialog";
@@ -21,31 +20,40 @@ import SignupHTTPClient from "@/http/signupHTTPClient";
 import { formatHours, formatTimeRange, hoursBetween } from "@/lib/dates";
 import { HTTPError } from "@/types/exceptions";
 
-/** Shifts with one-tap sign-up. Handles sign-in, the waiver, and overlap confirmation in place. */
+/** Shifts with one-tap sign-up. Handles sign-in, the waiver confirmation, and overlap confirmation in place. */
 export default function ShiftList({ event }: { event: ClientEventDetail }) {
   const router = useRouter();
   const toast = useToast();
-  const { me, user } = useSession();
-  const { acceptWaiver } = useProfile();
+  const { user } = useSession();
   const { signUp, cancel } = useSignupActions(event._id);
   const [waiverFor, setWaiverFor] = useState<string | null>(null);
   const [overlapFor, setOverlapFor] = useState<string | null>(null);
+  // Kept across the overlap prompt so the waiver is not asked for twice.
+  const [signed, setSigned] = useState(false);
   // Admins run events rather than staff them, so they are never offered a spot.
   const open = event.status === "published" && user?.role !== "admin";
   const signupFor = (shiftId: string) =>
     event.mySignups.find((s) => s.shiftId === shiftId);
 
-  const attempt = async (shiftId: string, acknowledgeOverlap = false) => {
+  const attempt = async (
+    shiftId: string,
+    acknowledgeOverlap = false,
+    waiverSigned = signed
+  ) => {
     if (!user) {
       router.push(`/login?next=/events/${event._id}`);
       return;
     }
-    if (me && me.outstanding.includes("waiver")) {
+    if (!event.waiverSigned && !waiverSigned) {
       setWaiverFor(shiftId);
       return;
     }
     try {
-      const signup = await signUp.mutateAsync({ shiftId, acknowledgeOverlap });
+      const signup = await signUp.mutateAsync({
+        shiftId,
+        acknowledgeOverlap,
+        waiverSigned,
+      });
       toast(
         signup.status === "confirmed"
           ? "You are confirmed. Check your email for the details."
@@ -56,7 +64,12 @@ export default function ShiftList({ event }: { event: ClientEventDetail }) {
     } catch (error) {
       if (error instanceof HTTPError && error.code === "overlap")
         setOverlapFor(shiftId);
-      else toast(errorMessage(error), "error");
+      else {
+        setSigned(false);
+        if (error instanceof HTTPError && error.code === "waiver")
+          setWaiverFor(shiftId);
+        else toast(errorMessage(error), "error");
+      }
     }
   };
 
@@ -153,11 +166,11 @@ export default function ShiftList({ event }: { event: ClientEventDetail }) {
       <WaiverDialog
         open={!!waiverFor}
         onClose={() => setWaiverFor(null)}
-        onAccept={async () => {
-          await acceptWaiver.mutateAsync();
+        onConfirm={async () => {
           const shiftId = waiverFor;
           setWaiverFor(null);
-          if (shiftId) await attempt(shiftId);
+          setSigned(true);
+          if (shiftId) await attempt(shiftId, false, true);
         }}
       />
 

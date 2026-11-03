@@ -4,7 +4,6 @@ import type { Role } from "@/types/user";
 export const TOKEN_PURPOSES = [
   "reset_password",
   "organizer_invite",
-  "guardian_consent",
   "verify_email",
 ] as const;
 export type TokenPurpose = (typeof TOKEN_PURPOSES)[number];

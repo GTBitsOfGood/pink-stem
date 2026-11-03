@@ -26,6 +26,8 @@ export type UpdateWithAuthor = Doc<EventUpdate> & { authorName: string };
 
 export interface EventDetail extends EventWithShifts {
   mySignups: Doc<Signup>[];
+  /** Any of the viewer's sign-ups for this event, cancelled ones too, has a waiver confirmation. */
+  waiverSigned: boolean;
   updates: UpdateWithAuthor[];
   canManage: boolean;
 }
@@ -55,7 +57,6 @@ export interface MeResponse {
   isMinor: boolean;
   /** Account-level items that keep every sign-up pending. */
   outstanding: PendingReason[];
-  waiverVersion: number;
   unreadMessages: number;
 }
 
@@ -144,6 +145,5 @@ export interface AdminApprovals {
   clearances: UserSummary[];
   awaitingClearance: AwaitingClearance[];
   rosters: Doc<Event>[];
-  guardianConsent: UserSummary[];
   reportedThreads: ThreadSummary[];
 }

@@ -89,10 +89,8 @@ export const settingsInputSchema = z
     website: z.url(),
     signatoryName: text(100),
     signatoryTitle: text(100),
-    waiverText: text(20_000),
+    waiverFormUrl: z.url(),
     codeOfConductText: text(20_000),
-    /** Bumping the version makes every volunteer re-accept at next sign-up. */
-    bumpWaiverVersion: z.boolean(),
     cancellationCutoffHours: z.number().int().min(0).max(168),
     autoPromoteCutoffHours: z.number().int().min(0).max(168),
     noShowThreshold: z.number().int().min(1).max(20),

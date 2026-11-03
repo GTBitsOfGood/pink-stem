@@ -8,7 +8,6 @@ import {
 } from "@/types/user";
 import {
   dateInputSchema,
-  emailSchema,
   optionalText,
   phoneSchema,
   text,
@@ -22,7 +21,6 @@ export const updateProfileSchema = z
     city: optionalText(80),
     region: z.enum(REGIONS),
     dateOfBirth: dateInputSchema,
-    guardianEmail: emailSchema.or(z.literal("")),
     emergencyContact: z.object({
       name: text(100, 0),
       phone: z.string().trim().max(25),

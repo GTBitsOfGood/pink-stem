@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LogOut, Menu, X } from "lucide-react";
+import { Menu, MessageSquare, X } from "lucide-react";
 import Container from "@/components/layout/Container";
 import { useSession } from "@/components/hooks/useSession";
 import { buttonClasses } from "@/components/ui/Button";
@@ -17,26 +17,25 @@ interface NavItem {
   roles?: Role[];
 }
 
-/** Everyone else participates, so their nav is the participant items plus Organize for organizers. */
+/** Everyone else participates, so their nav is the participant items plus My events for organizers. */
 const NAV: NavItem[] = [
-  { href: "/events", label: "Events" },
+  { href: "/events", label: "Event shifts" },
   { href: "/dashboard", label: "My shifts", roles: ["volunteer", "organizer"] },
   { href: "/hours", label: "Hours", roles: ["volunteer", "organizer"] },
-  { href: "/messages", label: "Messages", roles: ["volunteer", "organizer"] },
-  { href: "/organizer", label: "Organize", roles: ["organizer"] },
+  { href: "/organizer", label: "My events", roles: ["organizer"] },
 ];
 
 /** Admins administer, so their nav is the console's five sections and nothing else. */
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Approvals" },
   { href: "/admin/people", label: "People" },
-  { href: "/organizer", label: "Organize" },
+  { href: "/organizer", label: "Events" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/admin/settings", label: "Settings" },
 ];
 
 export default function SiteHeader() {
-  const { me, user, isLoading, logout } = useSession();
+  const { me, user, isLoading } = useSession();
   const pathname = usePathname();
   // The menu remembers which page opened it, so navigating closes it.
   const [openFor, setOpenFor] = useState<string | null>(null);
@@ -52,6 +51,21 @@ export default function SiteHeader() {
   const isActive = (href: string) =>
     pathname === href || (href !== "/admin" && pathname.startsWith(`${href}/`));
   const unread = me?.unreadMessages ?? 0;
+  const messagesLabel = unread ? `Messages, ${unread} unread` : "Messages";
+  // The link's label carries the real count, so the badge is not announced.
+  const badge = (className?: string) =>
+    unread ? (
+      <span
+        aria-hidden
+        className={cn(
+          "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white",
+          className
+        )}
+      >
+        {unread > 9 ? "9+" : unread}
+      </span>
+    ) : null;
+  const hasInbox = user?.role === "volunteer" || user?.role === "organizer";
 
   const links = (
     <>
@@ -67,11 +81,6 @@ export default function SiteHeader() {
           )}
         >
           {item.label}
-          {item.href === "/messages" && unread > 0 ? (
-            <span className="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-[11px] font-bold text-white">
-              {unread}
-            </span>
-          ) : null}
         </Link>
       ))}
     </>
@@ -105,20 +114,27 @@ export default function SiteHeader() {
         <div className="hidden items-center gap-2 md:flex">
           {isLoading ? null : user ? (
             <>
+              {hasInbox ? (
+                <Link
+                  href="/messages"
+                  aria-label={messagesLabel}
+                  className={cn(
+                    "relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                    isActive("/messages")
+                      ? "bg-brand-50 text-brand-800"
+                      : "text-ink-700 hover:bg-ink-100"
+                  )}
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden />
+                  {badge("absolute -right-1.5 -top-1.5")}
+                </Link>
+              ) : null}
               <Link
                 href="/profile"
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-ink-100"
               >
-                {user.firstName}
+                Profile
               </Link>
-              <button
-                type="button"
-                onClick={logout}
-                className={buttonClasses("ghost", "sm")}
-                aria-label="Sign out"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
             </>
           ) : (
             <>
@@ -147,40 +163,47 @@ export default function SiteHeader() {
         <div className="border-t border-ink-100 bg-white md:hidden">
           <Container className="grid gap-1 py-3">
             {links}
-            <div className="mt-2 flex gap-2 border-t border-ink-100 pt-3">
-              {user ? (
-                <>
+            {user ? (
+              <div className="mt-2 grid gap-1 border-t border-ink-100 pt-3">
+                {hasInbox ? (
                   <Link
-                    href="/profile"
-                    className={buttonClasses("secondary", "md", "flex-1")}
+                    href="/messages"
+                    aria-label={messagesLabel}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+                      isActive("/messages")
+                        ? "bg-brand-50 text-brand-800"
+                        : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+                    )}
                   >
-                    Profile
+                    <MessageSquare className="h-4 w-4" aria-hidden />
+                    <span>Messages</span>
+                    {badge()}
                   </Link>
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className={buttonClasses("ghost", "md")}
-                  >
-                    Sign out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/login"
-                    className={buttonClasses("secondary", "md", "flex-1")}
-                  >
-                    Sign in
-                  </Link>
-                  <Link
-                    href="/register"
-                    className={buttonClasses("primary", "md", "flex-1")}
-                  >
-                    Become a volunteer
-                  </Link>
-                </>
-              )}
-            </div>
+                ) : null}
+                <Link
+                  href="/profile"
+                  className={buttonClasses("secondary", "md", "w-full")}
+                >
+                  Profile
+                </Link>
+              </div>
+            ) : (
+              <div className="mt-2 flex gap-2 border-t border-ink-100 pt-3">
+                <Link
+                  href="/login"
+                  className={buttonClasses("secondary", "md", "flex-1")}
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className={buttonClasses("primary", "md", "flex-1")}
+                >
+                  Become a volunteer
+                </Link>
+              </div>
+            )}
           </Container>
         </div>
       ) : null}

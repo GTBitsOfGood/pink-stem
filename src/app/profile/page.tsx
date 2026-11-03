@@ -1,12 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useProfile } from "@/components/hooks/useProfile";
 import { useSession } from "@/components/hooks/useSession";
 import Container from "@/components/layout/Container";
 import PasswordForm from "@/components/profile/PasswordForm";
 import ProfileForm from "@/components/profile/ProfileForm";
-import WaiverDialog from "@/components/profile/WaiverDialog";
 import Badge, { ClearanceBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -15,9 +12,7 @@ import { ROLE_LABELS } from "@/constants/labels";
 import { formatLongDate } from "@/lib/dates";
 
 export default function ProfilePage() {
-  const { me, user } = useSession();
-  const { acceptWaiver } = useProfile();
-  const [waiverOpen, setWaiverOpen] = useState(false);
+  const { me, user, logout } = useSession();
 
   if (!me || !user)
     return (
@@ -25,7 +20,6 @@ export default function ProfilePage() {
         <Spinner />
       </Container>
     );
-  const waiverCurrent = (user.waiverVersionAccepted ?? 0) >= me.waiverVersion;
 
   return (
     <Container className="py-8 sm:py-10">
@@ -55,62 +49,17 @@ export default function ProfilePage() {
               </p>
             </CardBody>
           </Card>
+          <PasswordForm />
           <Card>
-            <CardHeader title="Waiver & code of conduct" />
-            <CardBody className="grid gap-3 text-sm text-ink-600">
-              {waiverCurrent ? (
-                <p>
-                  Accepted{" "}
-                  {user.waiverAcceptedAt
-                    ? formatLongDate(user.waiverAcceptedAt)
-                    : ""}{" "}
-                  (version {user.waiverVersionAccepted}).
-                </p>
-              ) : (
-                <p className="text-amber-800">
-                  {user.waiverVersionAccepted
-                    ? "The waiver has been updated since you last accepted it."
-                    : "Not yet accepted."}{" "}
-                  You will be asked to accept it at your next sign-up.
-                </p>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setWaiverOpen(true)}
-              >
-                {waiverCurrent
-                  ? "Read the current version"
-                  : "Review and accept"}
+            <CardHeader title="Account" />
+            <CardBody>
+              <Button type="button" variant="danger" size="sm" onClick={logout}>
+                Sign out
               </Button>
             </CardBody>
           </Card>
-          {me.isMinor ? (
-            <Card>
-              <CardHeader title="Guardian consent" />
-              <CardBody className="text-sm text-ink-600">
-                {user.guardianConsentAt ? (
-                  <p>
-                    Consent given by {user.guardianEmail} on{" "}
-                    {formatLongDate(user.guardianConsentAt)}.
-                  </p>
-                ) : (
-                  <p>
-                    Waiting on {user.guardianEmail}. Resend the link from your
-                    dashboard if it has not arrived.
-                  </p>
-                )}
-              </CardBody>
-            </Card>
-          ) : null}
-          <PasswordForm />
         </div>
       </div>
-      <WaiverDialog
-        open={waiverOpen}
-        onClose={() => setWaiverOpen(false)}
-        onAccept={() => acceptWaiver.mutateAsync()}
-      />
     </Container>
   );
 }

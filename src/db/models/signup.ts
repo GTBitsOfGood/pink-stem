@@ -36,6 +36,7 @@ const signupSchema = new Schema<Signup>(
     status: { type: String, enum: SIGNUP_STATUSES, required: true },
     pendingReasons: { type: [String], enum: PENDING_REASONS, default: [] },
     signedUpAt: { type: Date, required: true },
+    waiverSignedAt: { type: Date, default: null },
     confirmedAt: { type: Date, default: null },
     approvedAt: { type: Date, default: null },
     approvedBy: { type: Schema.ObjectId, ref: "User", default: null },

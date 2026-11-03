@@ -11,8 +11,7 @@ export type PublicSettings = Pick<
   | "phone"
   | "email"
   | "website"
-  | "waiverVersion"
-  | "waiverText"
+  | "waiverFormUrl"
   | "codeOfConductText"
   | "cancellationCutoffHours"
   | "autoPromoteCutoffHours"
@@ -32,8 +31,7 @@ export default class SettingsService {
       phone: s.phone,
       email: s.email,
       website: s.website,
-      waiverVersion: s.waiverVersion,
-      waiverText: s.waiverText,
+      waiverFormUrl: s.waiverFormUrl,
       codeOfConductText: s.codeOfConductText,
       cancellationCutoffHours: s.cancellationCutoffHours,
       autoPromoteCutoffHours: s.autoPromoteCutoffHours,
@@ -41,10 +39,6 @@ export default class SettingsService {
   }
 
   static async update(input: unknown): Promise<OrgSettings> {
-    const { bumpWaiverVersion, ...updates } = settingsInputSchema.parse(input);
-    return OrgSettingsDAO.update({
-      ...updates,
-      ...(bumpWaiverVersion ? { $inc: { waiverVersion: 1 } } : {}),
-    });
+    return OrgSettingsDAO.update(settingsInputSchema.parse(input));
   }
 }

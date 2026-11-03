@@ -5,16 +5,13 @@ import {
   MAX_UPDATE_LENGTH,
 } from "@/constants/limits";
 import {
-  EVENT_COMMITMENTS,
   EVENT_STATUSES,
   EVENT_VISIBILITIES,
   PROGRAM_AREAS,
   UPDATE_KINDS,
-  WEEKDAYS,
 } from "@/types/event";
 import { REGIONS, SKILLS } from "@/types/user";
 import {
-  dateInputSchema,
   dateRangeSchema,
   dateSchema,
   objectIdSchema,
@@ -52,11 +49,6 @@ export const createEventSchema = eventInputSchema.extend({
   organizerId: objectIdSchema.optional(),
 });
 
-/** Which create schema applies. A body that names none is a short-term event. */
-export const commitmentSchema = z.object({
-  commitment: z.enum(EVENT_COMMITMENTS).default("short_term"),
-});
-
 export const shiftInputSchema = z.object({
   roleName: text(80),
   description: optionalText(500),
@@ -67,51 +59,6 @@ export const shiftInputSchema = z.object({
   requiredSkills: z.array(z.enum(SKILLS)).default([]),
 });
 export type ShiftInput = z.infer<typeof shiftInputSchema>;
-
-const timeInputSchema = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "must be a time (HH:mm)");
-
-/** What every session of a program shares. Long-term rules fix clearance and age. */
-const longTermDetailsSchema = eventInputSchema.omit({
-  eventDate: true,
-  requiresClearance: true,
-  minAge: true,
-});
-
-/** The one shift each session gets; its times come from the schedule. */
-const longTermShiftInputSchema = shiftInputSchema.omit({
-  startsAt: true,
-  endsAt: true,
-});
-
-export const longTermEventInputSchema = longTermDetailsSchema.extend({
-  commitment: z.literal("long_term"),
-  organizerId: objectIdSchema.optional(),
-  schedule: z.object({
-    weekdays: z
-      .array(z.enum(WEEKDAYS))
-      .min(1)
-      .transform((days) => [...new Set(days)]),
-    startTime: timeInputSchema,
-    endTime: timeInputSchema,
-    firstDate: dateInputSchema,
-    lastDate: dateInputSchema,
-  }),
-  shift: longTermShiftInputSchema,
-});
-export type LongTermEventInput = z.infer<typeof longTermEventInputSchema>;
-
-/** A program keeps its first date and weekdays; its last date can move. */
-export const seriesUpdateInputSchema = longTermDetailsSchema.extend({
-  schedule: z.object({
-    startTime: timeInputSchema,
-    endTime: timeInputSchema,
-    lastDate: dateInputSchema,
-  }),
-  shift: longTermShiftInputSchema,
-});
-export type SeriesUpdateInput = z.infer<typeof seriesUpdateInputSchema>;
 
 export const cancelEventSchema = z.object({ reason: text(500) });
 

@@ -34,7 +34,7 @@ export default function SiteFooter() {
           <ul className="grid gap-1">
             <li>
               <Link href="/events" className="hover:text-brand-700">
-                Browse events
+                Browse event shifts
               </Link>
             </li>
             <li>

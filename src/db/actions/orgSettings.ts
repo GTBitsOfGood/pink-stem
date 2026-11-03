@@ -3,6 +3,14 @@ import OrgSettingsModel, { ORG_SETTINGS_KEY } from "@/db/models/orgSettings";
 import { DEFAULT_ORG_SETTINGS } from "@/constants/org";
 import type { OrgSettings } from "@/types/settings";
 
+/** Settings created before the waiver link existed do not have one yet. */
+function withDefaults(doc: OrgSettings): OrgSettings {
+  return {
+    ...doc,
+    waiverFormUrl: doc?.waiverFormUrl ?? DEFAULT_ORG_SETTINGS.waiverFormUrl,
+  };
+}
+
 export default class OrgSettingsDAO {
   /** Reads the singleton, creating it from the defaults on first use. */
   static async get(): Promise<OrgSettings> {
@@ -12,19 +20,16 @@ export default class OrgSettingsDAO {
       { $setOnInsert: { key: ORG_SETTINGS_KEY, ...DEFAULT_ORG_SETTINGS } },
       { upsert: true, returnDocument: "after" }
     ).lean<OrgSettings>();
-    return doc as OrgSettings;
+    return withDefaults(doc as OrgSettings);
   }
 
-  static async update(
-    updates: Partial<OrgSettings> & { $inc?: { waiverVersion: number } }
-  ): Promise<OrgSettings> {
+  static async update(updates: Partial<OrgSettings>): Promise<OrgSettings> {
     await dbConnect();
-    const { $inc, ...set } = updates;
     const doc = await OrgSettingsModel.findOneAndUpdate(
       { key: ORG_SETTINGS_KEY },
-      { $set: set, ...($inc ? { $inc } : {}) },
+      { $set: updates },
       { returnDocument: "after", runValidators: true }
     ).lean<OrgSettings>();
-    return doc as OrgSettings;
+    return withDefaults(doc as OrgSettings);
   }
 }

@@ -22,8 +22,6 @@ export const LIVE_SIGNUP_STATUSES = [
 
 export const PENDING_REASONS = [
   "email_verification",
-  "waiver",
-  "guardian_consent",
   "clearance",
   "approval",
 ] as const;
@@ -58,6 +56,8 @@ export interface Signup {
   status: SignupStatus;
   pendingReasons: PendingReason[];
   signedUpAt: Date;
+  /** When the volunteer said they signed Pink STEM's waiver for this event. */
+  waiverSignedAt?: Date | null;
   confirmedAt?: Date | null;
   approvedAt?: Date | null;
   approvedBy?: Types.ObjectId | null;

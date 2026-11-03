@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Primitives";
 import { errorMessage } from "@/components/ui/Toast";
 import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
-import { isMinor } from "@/lib/dates";
 
 function RegisterForm() {
   const next = useSearchParams().get("next") ?? "/dashboard";
@@ -22,16 +21,13 @@ function RegisterForm() {
     email: "",
     password: "",
     dateOfBirth: "",
-    guardianEmail: "",
     phone: "",
   });
-  const minor = values.dateOfBirth ? isMinor(values.dateOfBirth) : false;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     register.mutate({
       ...values,
-      guardianEmail: minor ? values.guardianEmail : undefined,
       phone: values.phone || undefined,
     });
   };
@@ -94,20 +90,10 @@ function RegisterForm() {
           label="Date of birth"
           type="date"
           required
-          hint="Used only to confirm age requirements. Volunteers under 18 need a parent or guardian's consent."
+          hint="Used only to confirm age requirements."
           value={values.dateOfBirth}
           onChange={(e) => set("dateOfBirth")(e.target.value)}
         />
-        {minor ? (
-          <Input
-            label="Parent or guardian email"
-            type="email"
-            required
-            hint="We will email them a consent link. Sign-ups stay pending until they respond."
-            value={values.guardianEmail}
-            onChange={(e) => set("guardianEmail")(e.target.value)}
-          />
-        ) : null}
         <Input
           label="Phone (optional)"
           type="tel"
@@ -119,8 +105,8 @@ function RegisterForm() {
           Create account
         </Button>
         <p className="text-center text-xs text-ink-500">
-          By continuing you agree to Pink STEM&apos;s volunteer waiver and code
-          of conduct, which you will review before your first sign-up.
+          Volunteers sign Pink STEM&apos;s waiver for each event they sign up
+          for.
         </p>
       </form>
     </AuthCard>
