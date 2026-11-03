@@ -24,7 +24,7 @@ const eventSchema = new Schema<Event>(
     address: String,
     locationNote: String,
     city: String,
-    requiresClearance: { type: Boolean, default: true },
+    requiresClearance: { type: Boolean, default: false },
     requiresApproval: { type: Boolean, default: false },
     minAge: Number,
     siteContactName: String,

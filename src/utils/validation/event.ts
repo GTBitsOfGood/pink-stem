@@ -35,7 +35,7 @@ export const eventInputSchema = z.object({
   address: optionalText(200),
   locationNote: optionalText(200),
   city: optionalText(80),
-  requiresClearance: z.boolean().default(true),
+  requiresClearance: z.boolean().default(false),
   requiresApproval: z.boolean().default(false),
   minAge: z.number().int().min(0).max(99).optional().nullable(),
   siteContactName: optionalText(100),

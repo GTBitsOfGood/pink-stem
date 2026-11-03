@@ -169,11 +169,10 @@ async function main() {
     });
   }
 
-  const existingEvents = await EventDAO.count({ organizerId: organizer._id });
-  if (existingEvents) {
-    console.log("Demo events already exist.");
-    return;
-  }
+  const existingEvents = await EventDAO.findAll({
+    organizerId: organizer._id,
+  });
+  const existingTitles = new Set(existingEvents.map((event) => event.title));
 
   const day = (offset: number, time: string) =>
     fromDateTimeLocal(`${toDateInput(addDays(new Date(), offset))}T${time}`);
@@ -278,13 +277,14 @@ async function main() {
   ];
 
   for (const { shifts, ...event } of events) {
+    if (existingTitles.has(event.title)) continue;
     const created = await EventDAO.create({
       ...event,
       organizerId: organizer._id as Types.ObjectId,
       status: "published",
       visibility: "public",
       isVirtual: event.isVirtual ?? false,
-      requiresClearance: event.requiresClearance ?? true,
+      requiresClearance: event.requiresClearance ?? false,
       requiresApproval: false,
       publishedAt: new Date(),
     });
@@ -302,6 +302,7 @@ async function main() {
     );
     console.log(`  created event: ${created.title}`);
   }
+
   console.log(`\nDemo accounts use the password ${DEMO_PASSWORD}`);
 }
 

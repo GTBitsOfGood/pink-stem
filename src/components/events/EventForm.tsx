@@ -63,7 +63,7 @@ export default function EventForm({
     address: initial?.address ?? "",
     locationNote: initial?.locationNote ?? "",
     city: initial?.city ?? "",
-    requiresClearance: initial?.requiresClearance ?? true,
+    requiresClearance: initial?.requiresClearance ?? false,
     requiresApproval: initial?.requiresApproval ?? false,
     minAge: initial?.minAge ? String(initial.minAge) : "",
     siteContactName: initial?.siteContactName ?? "",
