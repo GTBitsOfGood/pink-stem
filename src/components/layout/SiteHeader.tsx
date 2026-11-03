@@ -17,19 +17,19 @@ interface NavItem {
   roles?: Role[];
 }
 
-/** Everyone else participates, so their nav is the participant items plus Organize for organizers. */
+/** Everyone else participates, so their nav is the participant items plus My events for organizers. */
 const NAV: NavItem[] = [
-  { href: "/events", label: "Events" },
+  { href: "/events", label: "Event shifts" },
   { href: "/dashboard", label: "My shifts", roles: ["volunteer", "organizer"] },
   { href: "/hours", label: "Hours", roles: ["volunteer", "organizer"] },
-  { href: "/organizer", label: "Organize", roles: ["organizer"] },
+  { href: "/organizer", label: "My events", roles: ["organizer"] },
 ];
 
 /** Admins administer, so their nav is the console's five sections and nothing else. */
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Approvals" },
   { href: "/admin/people", label: "People" },
-  { href: "/organizer", label: "Organize" },
+  { href: "/organizer", label: "Events" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/admin/settings", label: "Settings" },
 ];
