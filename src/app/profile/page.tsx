@@ -5,13 +5,14 @@ import Container from "@/components/layout/Container";
 import PasswordForm from "@/components/profile/PasswordForm";
 import ProfileForm from "@/components/profile/ProfileForm";
 import Badge, { ClearanceBadge } from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
 import { ROLE_LABELS } from "@/constants/labels";
 import { formatLongDate } from "@/lib/dates";
 
 export default function ProfilePage() {
-  const { me, user } = useSession();
+  const { me, user, logout } = useSession();
 
   if (!me || !user)
     return (
@@ -49,6 +50,14 @@ export default function ProfilePage() {
             </CardBody>
           </Card>
           <PasswordForm />
+          <Card>
+            <CardHeader title="Account" />
+            <CardBody>
+              <Button type="button" variant="danger" size="sm" onClick={logout}>
+                Sign out
+              </Button>
+            </CardBody>
+          </Card>
         </div>
       </div>
     </Container>

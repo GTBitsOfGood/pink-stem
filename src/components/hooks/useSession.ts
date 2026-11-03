@@ -17,6 +17,7 @@ export function useSession() {
     queryKey: QUERY_KEYS.session,
     queryFn: () => AuthHTTPClient.me(),
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const logout = useMutation({

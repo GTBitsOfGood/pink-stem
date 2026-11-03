@@ -40,7 +40,6 @@ import type { ClientRoster } from "@/http/eventHTTPClient";
 import { formatDateTime, formatHours } from "@/lib/dates";
 
 type DialogKind = "cancel" | "update" | "broadcast" | null;
-type CancelScope = "session" | "series";
 
 function PendingAndWaitlist({ roster }: { roster: ClientRoster }) {
   const toast = useToast();
@@ -133,7 +132,6 @@ export default function ManageEventPage() {
   const now = useNow();
   const { user } = useSession();
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const [cancelScope, setCancelScope] = useState<CancelScope>("session");
   const [text, setText] = useState("");
   const [important, setImportant] = useState(false);
   const [rosterOnly, setRosterOnly] = useState(false);
@@ -156,25 +154,8 @@ export default function ManageEventPage() {
     );
 
   const e = event.data;
-  const longTerm = !!e.seriesId;
   const editable = e.status === "draft" || e.status === "published";
   const past = new Date(e.eventDate).getTime() < now;
-  // A program is edited from a session that has not started, whose values are current.
-  const started = e.shifts.some((s) => new Date(s.startsAt).getTime() <= now);
-  const cancelCopy =
-    cancelScope === "series"
-      ? {
-          title: "Cancel remaining sessions",
-          description:
-            "Every session that has not started is cancelled. Your reason is emailed to the volunteers signed up for them.",
-          action: "Cancel remaining sessions",
-        }
-      : {
-          title: longTerm ? "Cancel this session" : "Cancel this event",
-          description:
-            "Your reason is posted as a pinned update and emailed to every volunteer signed up. No hours are credited.",
-          action: longTerm ? "Cancel session" : "Cancel event",
-        };
   const entries = roster.data?.entries ?? [];
   const count = (status: string) =>
     entries.filter((x) => x.signup.status === status).length;
@@ -196,17 +177,10 @@ export default function ManageEventPage() {
 
   const submitDialog = (ev: FormEvent) => {
     ev.preventDefault();
-    if (dialog === "cancel" && cancelScope === "series")
-      run(async () => {
-        const { cancelled } = await actions.cancelSeries.mutateAsync(text);
-        toast(
-          `${cancelled} ${cancelled === 1 ? "session" : "sessions"} cancelled.`
-        );
-      }, "Everyone signed up has been emailed.");
-    else if (dialog === "cancel")
+    if (dialog === "cancel")
       run(
         () => actions.cancel.mutateAsync(text),
-        `${longTerm ? "Session" : "Event"} cancelled. Everyone signed up has been emailed.`
+        "Event cancelled. Everyone signed up has been emailed."
       );
     if (dialog === "update")
       run(
@@ -248,17 +222,17 @@ export default function ManageEventPage() {
         }
         back={{
           href: "/organizer",
-          label: user?.role === "admin" ? "All events" : "Your events",
+          label: user?.role === "admin" ? "Events" : "My events",
         }}
         action={
           <>
-            {editable && !(longTerm && started) ? (
+            {editable ? (
               <ButtonLink
                 href={`/organizer/events/${e._id}/edit`}
                 variant="secondary"
                 icon={<Pencil className="h-4 w-4" />}
               >
-                {longTerm ? "Edit program" : "Edit details"}
+                Edit details
               </ButtonLink>
             ) : null}
             <Button
@@ -285,7 +259,7 @@ export default function ManageEventPage() {
                   )
                 }
               >
-                {longTerm ? "Publish program" : "Publish"}
+                Publish
               </Button>
             ) : null}
             {e.status === "published" || e.status === "completed" ? (
@@ -307,10 +281,8 @@ export default function ManageEventPage() {
 
       {e.status === "draft" ? (
         <Alert tone="info" className="mb-6">
-          Drafts are invisible to volunteers and send no notifications.{" "}
-          {longTerm
-            ? "Publishing the program opens this session and every later one to sign-ups."
-            : "Add at least one shift, then publish."}
+          Drafts are invisible to volunteers and send no notifications. Add at
+          least one shift, then publish.
         </Alert>
       ) : null}
       {e.status === "published" && past ? (
@@ -344,17 +316,13 @@ export default function ManageEventPage() {
           <Card>
             <CardHeader
               title="Shifts"
-              description={
-                longTerm
-                  ? "This session has one shift. Use Edit program to change the shift on upcoming sessions."
-                  : "Capacity is enforced at the database, so a shift can never be over-filled."
-              }
+              description="Capacity is enforced at the database, so a shift can never be over-filled."
             />
             <CardBody>
               <ShiftEditor
                 shifts={e.shifts}
                 eventDate={e.eventDate}
-                editable={editable && !longTerm}
+                editable={editable}
                 onAdd={(body) => actions.addShift.mutateAsync(body)}
                 onUpdate={(shiftId, body) =>
                   actions.updateShift.mutateAsync({ shiftId, body })
@@ -442,38 +410,18 @@ export default function ManageEventPage() {
           {editable ? (
             <Card>
               <CardHeader
-                title={longTerm ? "Cancel" : "Cancel this event"}
-                description={
-                  longTerm
-                    ? "Cancel this session only, or cancel every remaining session in the program."
-                    : "Requires a reason. Everyone signed up is released and emailed it."
-                }
+                title="Cancel this event"
+                description="Requires a reason. Everyone signed up is released and emailed it."
               />
-              <CardBody className="grid gap-2">
+              <CardBody>
                 <Button
                   variant="danger"
                   className="w-full"
                   icon={<XCircle className="h-4 w-4" />}
-                  onClick={() => {
-                    setCancelScope("session");
-                    setDialog("cancel");
-                  }}
+                  onClick={() => setDialog("cancel")}
                 >
-                  {longTerm ? "Cancel this session" : "Cancel event"}
+                  Cancel event
                 </Button>
-                {longTerm ? (
-                  <Button
-                    variant="danger"
-                    className="w-full"
-                    icon={<XCircle className="h-4 w-4" />}
-                    onClick={() => {
-                      setCancelScope("series");
-                      setDialog("cancel");
-                    }}
-                  >
-                    Cancel remaining sessions
-                  </Button>
-                ) : null}
               </CardBody>
             </Card>
           ) : null}
@@ -485,14 +433,14 @@ export default function ManageEventPage() {
         onClose={() => setDialog(null)}
         title={
           dialog === "cancel"
-            ? cancelCopy.title
+            ? "Cancel this event"
             : dialog === "update"
               ? "Post an update"
               : "Message the whole roster"
         }
         description={
           dialog === "cancel"
-            ? cancelCopy.description
+            ? "Your reason is posted as a pinned update and emailed to every volunteer signed up. No hours are credited."
             : dialog === "update"
               ? "Newest updates appear at the top of the event page and in every volunteer's My shifts view."
               : "Each confirmed, pending, and waitlisted volunteer receives this as a private message from you."
@@ -549,13 +497,12 @@ export default function ManageEventPage() {
               variant={dialog === "cancel" ? "danger" : "primary"}
               loading={
                 actions.cancel.isPending ||
-                actions.cancelSeries.isPending ||
                 actions.postUpdate.isPending ||
                 actions.broadcast.isPending
               }
             >
               {dialog === "cancel"
-                ? cancelCopy.action
+                ? "Cancel event"
                 : dialog === "update"
                   ? "Post"
                   : "Send"}

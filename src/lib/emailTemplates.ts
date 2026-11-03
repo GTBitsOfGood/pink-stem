@@ -252,7 +252,7 @@ export const emailTemplates = {
       {
         event: p.event,
         cta: {
-          label: "Find another event",
+          label: "Browse event shifts",
           url: p.event.url.replace(/\/events\/.*$/, "/events"),
         },
       }
