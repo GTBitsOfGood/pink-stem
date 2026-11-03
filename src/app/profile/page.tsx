@@ -15,7 +15,7 @@ import { ROLE_LABELS } from "@/constants/labels";
 import { formatLongDate } from "@/lib/dates";
 
 export default function ProfilePage() {
-  const { me, user } = useSession();
+  const { me, user, logout } = useSession();
   const { acceptWaiver } = useProfile();
   const [waiverOpen, setWaiverOpen] = useState(false);
 
@@ -104,6 +104,14 @@ export default function ProfilePage() {
             </Card>
           ) : null}
           <PasswordForm />
+          <Card>
+            <CardHeader title="Account" />
+            <CardBody>
+              <Button type="button" variant="danger" size="sm" onClick={logout}>
+                Sign out
+              </Button>
+            </CardBody>
+          </Card>
         </div>
       </div>
       <WaiverDialog
