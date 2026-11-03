@@ -4,10 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/constants/queryKeys";
 import { compactFilters } from "@/http/fetchHTTPClient";
 import EventHTTPClient, {
-  CreateEventBody,
   EventBody,
   EventListFilters,
-  SeriesUpdateBody,
   ShiftBody,
 } from "@/http/eventHTTPClient";
 import type { EventUpdateInput } from "@/utils/validation/event";
@@ -52,16 +50,11 @@ export function useEventActions(eventId?: string) {
 
   return {
     create: useMutation({
-      mutationFn: (body: CreateEventBody) => EventHTTPClient.create(body),
+      mutationFn: (body: EventBody) => EventHTTPClient.create(body),
       onSuccess: invalidate,
     }),
     update: useMutation({
       mutationFn: (body: EventBody) => EventHTTPClient.update(id(), body),
-      onSuccess: invalidate,
-    }),
-    updateSeries: useMutation({
-      mutationFn: (body: SeriesUpdateBody) =>
-        EventHTTPClient.updateSeries(id(), body),
       onSuccess: invalidate,
     }),
     publish: useMutation({
@@ -70,11 +63,6 @@ export function useEventActions(eventId?: string) {
     }),
     cancel: useMutation({
       mutationFn: (reason: string) => EventHTTPClient.cancel(id(), reason),
-      onSuccess: invalidate,
-    }),
-    cancelSeries: useMutation({
-      mutationFn: (reason: string) =>
-        EventHTTPClient.cancelSeries(id(), reason),
       onSuccess: invalidate,
     }),
     duplicate: useMutation({

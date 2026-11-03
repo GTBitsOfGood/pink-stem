@@ -20,7 +20,7 @@ export default function NewEventPage() {
       <PageHeader
         eyebrow="New event"
         title="Create an event"
-        description="Events start as drafts. Add shifts next, then publish when volunteers should see it. A long-term program creates every session with its shift."
+        description="Events start as drafts. Add shifts next, then publish when volunteers should see it."
         back={{
           href: "/organizer",
           label: admin ? "Events" : "My events",
