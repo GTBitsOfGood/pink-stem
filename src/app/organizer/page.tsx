@@ -92,8 +92,7 @@ export default function OrganizerPage() {
   return (
     <Container className="py-8 sm:py-10">
       <PageHeader
-        eyebrow="Organize"
-        title={admin ? "All events" : "Your events"}
+        title={admin ? "Events" : "My events"}
         description={
           admin
             ? "Every event across every organizer, including drafts. A new event goes to the organizer you pick."
