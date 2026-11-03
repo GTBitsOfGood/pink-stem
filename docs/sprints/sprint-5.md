@@ -48,14 +48,12 @@ Sai stays on #43 from sprint 4.
 
 ## Things to know before you start
 
-- **Sprint 4 PRs land first.** #49 through #53 are still open, and three of them
-  overlap with this sprint:
-  - #53 cuts the long-term fields out of the event form, which #54 also changes.
-    Anish has both, so #54 builds on #53.
-  - #50 relabels the footer links, and #39 changes the verify link in the same
-    footer. Brody has both.
-  - #51 changes how sign-up handles the waiver. The test steps in #18 work
-    before and after it.
+- **Sprint 4 has landed.** #49 through #53 are merged, so branch from an up to
+  date `main`. #54 changes the event form #53 just cut down, and #39 changes the
+  footer #50 relabeled.
+- **Signing up asks for the waiver now.** Since #51, the first sign-up for each
+  event asks you to confirm Pink STEM's waiver. Tick it when you follow the test
+  steps in #18.
 - **#55 fixes every dialog, not just the invite.** Errors in the shift editor,
   for example, are hidden the same way.
 
