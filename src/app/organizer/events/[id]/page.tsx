@@ -222,7 +222,7 @@ export default function ManageEventPage() {
         }
         back={{
           href: "/organizer",
-          label: user?.role === "admin" ? "All events" : "Your events",
+          label: user?.role === "admin" ? "Events" : "My events",
         }}
         action={
           <>
