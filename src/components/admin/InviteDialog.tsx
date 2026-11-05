@@ -7,6 +7,7 @@ import Dialog from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Field";
 import { errorMessage, useToast } from "@/components/ui/Toast";
 import { formatShortDate } from "@/lib/dates";
+import { emailSchema } from "@/utils/validation/common";
 
 export default function InviteDialog({
   open,
@@ -19,13 +20,20 @@ export default function InviteDialog({
   const invitations = useInvitations();
   const toast = useToast();
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string>();
   const [role, setRole] = useState<"organizer" | "admin">("organizer");
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // The browser lets addresses like a@b through; the server doesn't.
+    const parsed = emailSchema.safeParse(email);
+    if (!parsed.success) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
     try {
-      await invite.mutateAsync({ email, role });
-      toast(`Invitation sent to ${email}.`);
+      await invite.mutateAsync({ email: parsed.data, role });
+      toast(`Invitation sent to ${parsed.data}.`);
       setEmail("");
     } catch (error) {
       toast(errorMessage(error), "error");
@@ -45,7 +53,11 @@ export default function InviteDialog({
           type="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          error={emailError}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setEmailError(undefined);
+          }}
         />
         <Select
           label="Role"
