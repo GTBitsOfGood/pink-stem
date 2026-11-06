@@ -1,9 +1,10 @@
 # Sprint 5
 
-Four fixes, one per dev. Two come from what Yuhan found while getting the
-usability test session ready, and two are older tickets that never got a PR.
-The tickets are GitHub issues #18, #39, #54 and #55, and this file is the shared
-context, so read it before starting yours.
+A bug sprint. The first tickets came from what Yuhan found while getting the
+usability test session ready, plus two older tickets that never got a PR. The
+rest came from the PM's questions and a QA pass on November 5. The tickets are
+GitHub issues #18, #39, #54, #55 and #61 through #67, with #58 to #60 next up,
+and this file is the shared context, so read it before starting yours.
 
 ## What Yuhan found
 
@@ -22,6 +23,39 @@ usability test session. The session was canceled, but these came out of it:
 - **The logo takes admins to the home page.** That's #39.
 - **Verification and invite emails never arrived.** That's expected on staging.
   See below.
+
+## What the PM asked
+
+- **"I don't see forgot password or change password."** Both exist. "Forgot your
+  password?" is under the password field when you sign in, and Profile has a
+  Password card. On staging the reset email goes to the function log like every
+  other email. No ticket.
+- **A pending volunteer could read a roster-only update.** Roster-only updates
+  reach anyone with a live sign-up, and the emails leak them too. That's #61.
+- **"What does 'Flagged or not' mean?"** It's the no-show flag, and nothing on
+  People says so. That's #62.
+- **Drop the home page and land on Event shifts.** That's #39.
+
+## What QA found
+
+We ran the app locally as each role and reproduced every bug before filing it.
+Each ticket says how to see the problem. The worst ones are in this sprint:
+shifts left behind when an event's date changes (#63), sign-ups that aren't
+re-checked when an event starts requiring clearance (#64), duplicate
+certificates after an hours correction (#65), virtual join links reaching
+volunteers who aren't cleared (#66), and the login redirect and invite holes
+(#67).
+
+## Emails at launch
+
+The PM listed all 28 emails with a priority. Every one is built. We checked
+each P0 locally and each reached the right person. We're keeping the P1 and P2
+emails too, because each tells someone something they need, and the frequent
+ones (reminders, notes, messages and the organizer digest) can be turned off in
+Profile. A few need fixes first: who gets important changes (#61), the join link
+(#66), and reminder wording, how often notes go out and the admin's clearance
+email (#60). Nothing is sent for real until production has a sending domain and
+#18 lands.
 
 ## Staging doesn't send email
 
@@ -56,6 +90,10 @@ Sai stays on #43 from sprint 4.
   steps in #18.
 - **#55 fixes every dialog, not just the invite.** Errors in the shift editor,
   for example, are hidden the same way.
+- **Anish's three tickets share `src/services/event.ts`.** Land #54, then #63,
+  then #64. #61 touches `get` in the same file, so Brody rebases on whichever
+  lands first.
+- **#66 and #18 both change `src/services/notification.ts`.** Vania has both.
 
 **Definition of done** is the same as sprint 4: a PR against `main`, CI green,
 one approval, and a PR description with what you ran and a preview link. Add
@@ -65,18 +103,36 @@ an issue instead of adding it to your PR.
 
 ## Tickets
 
-| Ticket                                                | Owner   | Size   | Lands in                                                                     |
-| ----------------------------------------------------- | ------- | ------ | ---------------------------------------------------------------------------- |
-| #18 Stop dropping emails                              | Vania   | Large  | `notification.ts`, `mail.ts`, `jobs.ts`, `src/db/actions/notificationLog.ts` |
-| #39 Remove the home page and land on Event shifts     | Brody   | Light  | `src/proxy.ts`, `src/app/page.tsx`, `SiteFooter.tsx`                         |
-| #54 Fix location checks on the event form             | Anish   | Light  | `EventForm.tsx`, `src/services/event.ts`, `src/utils/validation/event.ts`    |
-| #55 Show toasts above dialogs and check invite emails | Spencer | Medium | `Toast.tsx`, `Dialog.tsx`, `InviteDialog.tsx`                                |
+| Ticket                                                             | Owner   | Size   | Lands in                                                                     |
+| ------------------------------------------------------------------ | ------- | ------ | ---------------------------------------------------------------------------- |
+| #18 Stop dropping emails                                           | Vania   | Large  | `notification.ts`, `mail.ts`, `jobs.ts`, `src/db/actions/notificationLog.ts` |
+| #39 Remove the home page and land on Event shifts                  | Brody   | Light  | `src/proxy.ts`, `src/app/page.tsx`, `SiteFooter.tsx`                         |
+| #54 Fix location checks on the event form                          | Anish   | Light  | `EventForm.tsx`, `src/services/event.ts`, `src/utils/validation/event.ts`    |
+| #55 Show toasts above dialogs and check invite emails              | Spencer | Medium | `Toast.tsx`, `Dialog.tsx`, `InviteDialog.tsx`                                |
+| #61 Keep roster-only updates to confirmed volunteers               | Brody   | Medium | `src/services/event.ts`, `src/services/eventUpdate.ts`, organizer event page |
+| #62 Fix the flag label, name search and audit trail on People      | Brody   | Light  | `src/app/admin/people/`, `src/db/actions/user.ts`, `auditLog.ts`             |
+| #63 Move shifts with the event when its date changes               | Anish   | Medium | `src/services/event.ts`, `src/lib/dates.ts`                                  |
+| #64 Re-check sign-ups when an event's requirements change          | Anish   | Medium | `src/services/event.ts`, `src/services/signup.ts`                            |
+| #65 Fix certificates and negative totals when correcting hours     | Spencer | Medium | `attendance.ts`, `certificate.ts`, `hours.ts`                                |
+| #66 Keep virtual join links private until a volunteer is confirmed | Vania   | Medium | `notification.ts`, `src/services/event.ts`, `signup.ts`, `EventMeta.tsx`     |
+| #67 Fix the login redirect, old invites and staff profiles         | Spencer | Light  | `src/app/login/`, `src/services/auth.ts`, `ProfileForm.tsx`                  |
+
+Everyone has three tickets except Vania, whose #18 is the biggest one.
+
+## Next up
+
+These are filed and ready but not in this sprint. Take one if you finish early.
+
+- **#58** Stop double cancels and fix Promote on full shifts
+- **#59** Fix the past-event label, last-shift delete and reassign refresh
+- **#60** Fix email timing and wording, and closed threads. Start after #18,
+  since both change `jobs.ts`.
 
 ## Not this sprint
 
 - **#45, the notification center.** It's a new feature, not a fix, and Molly and
   Hannah still need to decide whether a bell replaces the messages icon from
-  #41, which hasn't merged.
+  #41.
 - **Real email on staging.** It needs a verified sending domain first.
-- **Cancelling invites.** A typo in an otherwise valid address can't be caught.
-  The invite just expires after seven days.
+- **A button to cancel an invite.** A typo in an otherwise valid address can't
+  be caught. The invite just expires after seven days.
