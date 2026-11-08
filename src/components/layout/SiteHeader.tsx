@@ -20,7 +20,7 @@ interface NavItem {
 /** Everyone else participates, so their nav is the participant items plus My events for organizers. */
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "My shifts", roles: ["volunteer", "organizer"] },
-  { href: "/events", label: "Event shifts" },
+  { href: "/events", label: "Browse Events" },
   { href: "/hours", label: "Hours", roles: ["volunteer", "organizer"] },
   { href: "/organizer", label: "My events", roles: ["organizer"] },
 ];
