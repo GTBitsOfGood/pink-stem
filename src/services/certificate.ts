@@ -269,17 +269,6 @@ export default class CertificateService {
     );
     if (!affected.length) return;
 
-    // Revoke all affected certificates first, then issue one replacement per
-    // unique (type, period) combination so duplicates from multi-shift approvals
-    // never produce multiple valid certificates with the same hours.
-    const revoked = await Promise.all(
-      affected.map((old) =>
-        CertificateService.revoke(admin, old._id.toString(), {
-          reason: "Hours corrected; replacement issued",
-        })
-      )
-    );
-
     const eventCerts = affected.filter((c) => c.type === "event");
     const serviceRecordPeriods = [
       ...new Map(
@@ -292,6 +281,8 @@ export default class CertificateService {
       ).values(),
     ];
 
+    // Issue the replacement before revoking so the volunteer is never left
+    // with zero valid certificates if issuance fails.
     let replacement: Doc<Certificate> | null = null;
 
     if (eventCerts.length) {
@@ -328,10 +319,22 @@ export default class CertificateService {
       }
     }
 
+    // Replacement exists — now safe to revoke all old certificates.
+    const revoked = await Promise.all(
+      affected.map((old) =>
+        CertificateService.revoke(admin, old._id.toString(), {
+          reason: "Hours corrected; replacement issued",
+        })
+      )
+    );
+
+    // Link every revoked certificate to the replacement for a complete audit trail.
     if (replacement) {
-      await CertificateDAO.updateById(revoked[0]._id, {
-        supersededBy: replacement._id,
-      });
+      await Promise.all(
+        revoked.map((r) =>
+          CertificateDAO.updateById(r._id, { supersededBy: replacement!._id })
+        )
+      );
     }
 
     const org = await NotificationService.org();

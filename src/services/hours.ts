@@ -91,10 +91,33 @@ export default class HoursService {
       reason: data.reason,
       reversalOf: existing[0]?._id ?? null,
     });
+
+    // Re-read after write to catch concurrent adjustments that both passed the
+    // pre-check but together would take the total below zero.
+    const afterEntries = await HoursLedgerDAO.findByVolunteerAndEvent(
+      volunteer._id,
+      event._id
+    );
+    const afterTotal = afterEntries.reduce((sum, e) => sum + e.hours, 0);
+    if (afterTotal < 0) {
+      await HoursLedgerDAO.create({
+        volunteerId: volunteer._id,
+        eventId: event._id,
+        signupId: existing[0]?.signupId ?? null,
+        hours: -afterTotal,
+        approvedBy: new Types.ObjectId(admin.id),
+        approvedAt: new Date(),
+        reason:
+          "Reverted: concurrent adjustment would have taken hours below zero",
+        reversalOf: entry._id,
+      });
+      throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
+    }
+
     await AuditService.record(admin, "hours.adjusted", "ledger", entry._id, {
       before: { eventHours: before },
       after: {
-        eventHours: before + data.hours,
+        eventHours: afterTotal,
         delta: data.hours,
         reason: data.reason,
       },

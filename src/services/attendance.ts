@@ -135,6 +135,15 @@ export default class AttendanceService {
       attendedByVolunteer.set(key, group);
     }
 
+    // Issue all certificates before sending any notifications so a failed email
+    // cannot prevent a subsequent volunteer from receiving their certificate.
+    type NotificationPayload = {
+      volunteer: Awaited<ReturnType<typeof UserDAO.findById>> & object;
+      firstShift: (typeof shifts)[number];
+      eventHours: number;
+    };
+    const notifications: NotificationPayload[] = [];
+
     for (const group of attendedByVolunteer.values()) {
       const volunteer = await UserDAO.findById(group[0].volunteerId);
       if (!volunteer) continue;
@@ -158,16 +167,24 @@ export default class AttendanceService {
       );
       const firstShift = shifts.find((s) => sameId(s._id, group[0].shiftId));
       if (!firstShift) continue;
-      const org = await NotificationService.org();
-      await NotificationService.send(
-        volunteer,
-        NotificationService.templates.hoursApproved(org, {
-          name: volunteer.firstName,
-          event: NotificationService.eventDetails(event, firstShift),
-          hours: formatHours(eventHours),
-          certificateUrl: appUrl("/hours"),
-        })
-      );
+      notifications.push({ volunteer, firstShift, eventHours });
+    }
+
+    for (const { volunteer, firstShift, eventHours } of notifications) {
+      try {
+        const org = await NotificationService.org();
+        await NotificationService.send(
+          volunteer,
+          NotificationService.templates.hoursApproved(org, {
+            name: volunteer.firstName,
+            event: NotificationService.eventDetails(event, firstShift),
+            hours: formatHours(eventHours),
+            certificateUrl: appUrl("/hours"),
+          })
+        );
+      } catch {
+        // Email failure is non-fatal; certificate is already committed.
+      }
     }
 
     // Whoever never reached confirmed is quietly closed out with the event.
