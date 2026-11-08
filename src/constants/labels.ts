@@ -62,6 +62,24 @@ export const CLEARANCE_LABELS: Record<ClearanceStatus, string> = {
   expired: "Expired",
 };
 
+/** Staff clearance is separate from an automated registry pre-check. */
+export const CLEARANCE_STATUS_HELP: Record<ClearanceStatus, string> = {
+  none: "Pink STEM staff have not recorded a background clearance. Contact staff about screening; an automated registry pre-check does not grant clearance.",
+  submitted:
+    "A submitted screening record is waiting for Pink STEM staff review. You are not cleared yet; an automated registry pre-check does not grant clearance.",
+  cleared:
+    "Pink STEM staff have recorded background clearance. This is a staff decision, not an automated registry pre-check. Other event requirements may still apply.",
+  expired:
+    "Your recorded clearance has expired. Contact Pink STEM staff about renewal; an automated registry pre-check does not renew clearance.",
+};
+
+export const SIGNUP_STATUS_HELP: Partial<Record<SignupStatus, string>> = {
+  pending:
+    "Your signup is not confirmed yet. Check its outstanding requirements for email verification, background clearance, or organizer approval.",
+  waitlisted:
+    "The shift is full and you are waiting for a place. Pink STEM will notify you if you are moved into the shift. Outstanding requirements still apply.",
+};
+
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   draft: "Draft",
   published: "Published",
