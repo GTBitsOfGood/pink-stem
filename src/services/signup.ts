@@ -274,7 +274,6 @@ export default class SignupService {
           (self ? "Cancelled by volunteer" : "Cancelled by organizer"),
       }
     );
-    // Another request already cancelled it; that one freed the spot.
     if (!released) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
 
     if (!self) {
@@ -334,7 +333,8 @@ export default class SignupService {
 
     const late = insideCutoff(shift, settings);
     // release() claims the sign-up atomically, so a double submit (or a
-    // racing cancel) cannot free the spot twice.
+    // racing cancel) cannot free the spot twice. Promotion waits until the
+    // audit is written, so a failed promotion email cannot skip the audit.
     const released = await SignupService.release(
       signup,
       shift,
@@ -343,6 +343,7 @@ export default class SignupService {
       {
         by: new Types.ObjectId(actor.id),
         reason: `Absence reported: ${ABSENCE_REASON_LABELS[reason]}`,
+        promote: false,
         fields: { absence: { reason, note: note || undefined, late } },
       }
     );
@@ -372,6 +373,9 @@ export default class SignupService {
     ).catch((error) =>
       console.error("[absence] organizer email failed", error)
     );
+
+    // Last, since it emails the promoted volunteer and that email can throw.
+    await SignupService.promoteWaitlist(shift._id, event, settings);
     return released;
   }
 
@@ -416,6 +420,43 @@ export default class SignupService {
       await ShiftDAO.adjustWaitlist(shift._id, -1);
     }
     return updated;
+  }
+
+  /**
+   * release() for cancellations that must happen (deactivation, event
+   * cancellation). If the status changed after it was read, for example an
+   * approval or a waitlist promotion slipped in, the sign-up is re-read and
+   * released again from its new status, so the right counter is updated.
+   * Stops once the sign-up is no longer live (someone else already resolved it).
+   */
+  private static async releaseRequired(
+    signup: Doc<Signup>,
+    shift: Doc<Shift>,
+    event: Doc<Event>,
+    settings: OrgSettings,
+    options: Parameters<typeof SignupService.release>[4]
+  ): Promise<Doc<Signup> | null> {
+    // Each retry needs a fresh status change to lose again, so a few tries is
+    // plenty; the cap only guards against looping forever.
+    let current: Doc<Signup> | null = signup;
+    for (
+      let attempt = 0;
+      attempt < 5 && current && isLive(current);
+      attempt++
+    ) {
+      const released = await SignupService.release(
+        current,
+        shift,
+        event,
+        settings,
+        options
+      );
+      if (released) return released;
+      current = await SignupDAO.findById(signup._id);
+    }
+    if (current && isLive(current))
+      console.error("[release] gave up releasing sign-up", signup._id);
+    return null;
   }
 
   /**
@@ -742,7 +783,7 @@ export default class SignupService {
         EventDAO.findById(signup.eventId),
       ]);
       if (!shift || !event || shift.startsAt <= new Date()) continue;
-      await SignupService.release(signup, shift, event, settings, {
+      await SignupService.releaseRequired(signup, shift, event, settings, {
         by: null,
         reason,
       });
@@ -760,7 +801,7 @@ export default class SignupService {
     for (const signup of live) {
       const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
       if (shift)
-        await SignupService.release(signup, shift, event, settings, {
+        await SignupService.releaseRequired(signup, shift, event, settings, {
           by: null,
           reason,
           promote: false,
