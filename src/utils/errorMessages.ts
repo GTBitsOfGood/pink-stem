@@ -15,6 +15,8 @@ const ERRORS = Object.freeze({
     NOT_FOUND: "That account does not exist.",
     CANNOT_CHANGE_OWN_ROLE: "You cannot change your own role.",
     CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account.",
+    DEACTIVATED:
+      "This account is deactivated. Reactivate it before inviting it.",
   },
   CLEARANCE: {
     EXPIRY_REQUIRED: "A cleared record needs an expiry date.",
