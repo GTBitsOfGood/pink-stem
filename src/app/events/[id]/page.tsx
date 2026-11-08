@@ -143,6 +143,24 @@ export default function EventPage() {
               ) : null}
             </div>
             <UpdatesFeed updates={e.updates} />
+            {user && onRoster ? (
+              <Card className="mt-4">
+                <CardHeader
+                  title="Questions?"
+                  description="Message the organizer. Conversations stay attached to this event and are visible to Pink STEM administrators."
+                />
+                <CardBody>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    icon={<MessageSquare className="h-4 w-4" />}
+                    onClick={() => setComposing(true)}
+                  >
+                    Message the organizer
+                  </Button>
+                </CardBody>
+              </Card>
+            ) : null}
           </section>
         </div>
 
@@ -155,24 +173,6 @@ export default function EventPage() {
             >
               Manage this event
             </ButtonLink>
-          ) : null}
-          {user && onRoster ? (
-            <Card>
-              <CardHeader
-                title="Questions?"
-                description="Message the organizer. Conversations stay attached to this event and are visible to Pink STEM administrators."
-              />
-              <CardBody>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  icon={<MessageSquare className="h-4 w-4" />}
-                  onClick={() => setComposing(true)}
-                >
-                  Message the organizer
-                </Button>
-              </CardBody>
-            </Card>
           ) : null}
           {!user ? (
             <Card>
