@@ -122,25 +122,49 @@ export default class AttendanceService {
         approvedAt: now,
         reason: attendance.adjustmentReason,
       });
-      const [volunteer, shift] = [
-        await UserDAO.findById(signup.volunteerId),
-        shifts.find((s) => sameId(s._id, signup.shiftId)),
-      ];
-      if (!volunteer || !shift) continue;
+    }
+
+    // Group attended signups by volunteer so each volunteer gets one
+    // certificate and one notification covering all their shifts at this event.
+    const attendedByVolunteer = new Map<string, typeof confirmed>();
+    for (const signup of confirmed) {
+      if (signup.attendance?.status !== "attended") continue;
+      const key = signup.volunteerId.toString();
+      const group = attendedByVolunteer.get(key) ?? [];
+      group.push(signup);
+      attendedByVolunteer.set(key, group);
+    }
+
+    for (const group of attendedByVolunteer.values()) {
+      const volunteer = await UserDAO.findById(group[0].volunteerId);
+      if (!volunteer) continue;
+      const eventHours = group.reduce((sum, s) => sum + s.attendance!.hours, 0);
+      const roles =
+        [
+          ...new Set(
+            group
+              .map(
+                (s) => shifts.find((sh) => sameId(sh._id, s.shiftId))?.roleName
+              )
+              .filter((r): r is string => !!r)
+          ),
+        ].join(", ") || "Volunteer";
       await CertificateService.issueEventCertificate(
         volunteer,
         event,
-        shift.roleName,
-        attendance.hours,
+        roles,
+        eventHours,
         actor
       );
+      const firstShift = shifts.find((s) => sameId(s._id, group[0].shiftId));
+      if (!firstShift) continue;
       const org = await NotificationService.org();
       await NotificationService.send(
         volunteer,
         NotificationService.templates.hoursApproved(org, {
           name: volunteer.firstName,
-          event: NotificationService.eventDetails(event, shift),
-          hours: formatHours(attendance.hours),
+          event: NotificationService.eventDetails(event, firstShift),
+          hours: formatHours(eventHours),
           certificateUrl: appUrl("/hours"),
         })
       );

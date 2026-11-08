@@ -11,7 +11,7 @@ import AuditService from "@/services/audit";
 import CertificateService from "@/services/certificate";
 import type { HoursSummary, LedgerEntryWithEvent, Report } from "@/types/api";
 import type { Actor } from "@/types/auth";
-import { NotFoundError } from "@/types/exceptions";
+import { InvalidArgumentsError, NotFoundError } from "@/types/exceptions";
 import type { HoursLedgerEntry } from "@/types/signup";
 import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
@@ -79,6 +79,8 @@ export default class HoursService {
       event._id
     );
     const before = existing.reduce((sum, e) => sum + e.hours, 0);
+    if (before + data.hours < 0)
+      throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
     const entry = await HoursLedgerDAO.create({
       volunteerId: volunteer._id,
       eventId: event._id,

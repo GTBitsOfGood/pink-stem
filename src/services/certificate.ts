@@ -257,7 +257,7 @@ export default class CertificateService {
     return revoked;
   }
 
-  /** After an hours correction: revoke every certificate covering the event and issue replacements. */
+  /** After an hours correction: revoke every certificate covering the event and issue one replacement per type. */
   static async reissueAfterAdjustment(
     volunteer: Doc<SafeUser>,
     event: Doc<Event>,
@@ -269,46 +269,69 @@ export default class CertificateService {
     );
     if (!affected.length) return;
 
-    for (const old of affected) {
-      const revoked = await CertificateService.revoke(
-        admin,
-        old._id.toString(),
-        { reason: "Hours corrected; replacement issued" }
+    // Revoke all affected certificates first, then issue one replacement per
+    // unique (type, period) combination so duplicates from multi-shift approvals
+    // never produce multiple valid certificates with the same hours.
+    const revoked = await Promise.all(
+      affected.map((old) =>
+        CertificateService.revoke(admin, old._id.toString(), {
+          reason: "Hours corrected; replacement issued",
+        })
+      )
+    );
+
+    const eventCerts = affected.filter((c) => c.type === "event");
+    const serviceRecordPeriods = [
+      ...new Map(
+        affected
+          .filter((c) => c.type === "service_record")
+          .map((c) => [
+            `${c.periodStart.getTime()}-${c.periodEnd.getTime()}`,
+            { periodStart: c.periodStart, periodEnd: c.periodEnd },
+          ])
+      ).values(),
+    ];
+
+    let replacement: Doc<Certificate> | null = null;
+
+    if (eventCerts.length) {
+      const items = await CertificateService.buildServiceItems(
+        volunteer._id,
+        event.eventDate,
+        event.eventDate
       );
-      let replacement: Doc<Certificate> | null = null;
-      if (old.type === "event") {
-        const items = await CertificateService.buildServiceItems(
-          volunteer._id,
-          event.eventDate,
-          event.eventDate
+      const item = items.find((i) => sameId(i.eventId, event._id));
+      if (item)
+        replacement = await CertificateService.issueEventCertificate(
+          volunteer,
+          event,
+          item.roleName,
+          item.hours,
+          admin
         );
-        const item = items.find((i) => sameId(i.eventId, event._id));
-        if (item)
-          replacement = await CertificateService.issueEventCertificate(
-            volunteer,
-            event,
-            item.roleName,
-            item.hours,
-            admin
-          );
-      } else {
-        const items = await CertificateService.buildServiceItems(
-          volunteer._id,
-          old.periodStart,
-          old.periodEnd
+    }
+
+    for (const { periodStart, periodEnd } of serviceRecordPeriods) {
+      const items = await CertificateService.buildServiceItems(
+        volunteer._id,
+        periodStart,
+        periodEnd
+      );
+      if (items.length) {
+        const sr = await CertificateService.issueServiceRecord(
+          volunteer,
+          periodStart,
+          periodEnd,
+          admin
         );
-        if (items.length)
-          replacement = await CertificateService.issueServiceRecord(
-            volunteer,
-            old.periodStart,
-            old.periodEnd,
-            admin
-          );
+        if (!replacement) replacement = sr;
       }
-      if (replacement)
-        await CertificateDAO.updateById(revoked._id, {
-          supersededBy: replacement._id,
-        });
+    }
+
+    if (replacement) {
+      await CertificateDAO.updateById(revoked[0]._id, {
+        supersededBy: replacement._id,
+      });
     }
 
     const org = await NotificationService.org();
