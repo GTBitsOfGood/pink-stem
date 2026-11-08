@@ -48,7 +48,7 @@ export default function EventPage() {
           description={errorMessage(event.error)}
           action={
             <ButtonLink href="/events" variant="secondary">
-              Browse event shifts
+              Browse Events
             </ButtonLink>
           }
         />

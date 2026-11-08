@@ -162,7 +162,7 @@ export default function DashboardPage() {
         description="Everything you have signed up for, what is still outstanding, and your hours to date."
         action={
           <ButtonLink href="/events" variant="secondary">
-            Browse event shifts
+            Browse Events
           </ButtonLink>
         }
       />
@@ -209,9 +209,7 @@ export default function DashboardPage() {
                 <EmptyState
                   title="Nothing scheduled"
                   description="Browse upcoming events and claim a shift that fits."
-                  action={
-                    <ButtonLink href="/events">Browse event shifts</ButtonLink>
-                  }
+                  action={<ButtonLink href="/events">Browse Events</ButtonLink>}
                 />
               </CardBody>
             )}
