@@ -3,7 +3,7 @@ import ActionTokenDAO from "@/db/actions/actionToken";
 import AuditLogDAO from "@/db/actions/auditLog";
 import CertificateDAO from "@/db/actions/certificate";
 import ClearanceDAO from "@/db/actions/clearance";
-import EventDAO from "@/db/actions/event";
+import ApprovalDAO from "@/db/actions/approval";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
 import MessageThreadDAO from "@/db/actions/messageThread";
 import ScreeningCheckDAO from "@/db/actions/screeningCheck";
@@ -24,6 +24,7 @@ import type {
   PersonRow,
 } from "@/types/api";
 import type { Actor } from "@/types/auth";
+import type { Event } from "@/types/event";
 import {
   ConflictError,
   IllegalOperationError,
@@ -40,6 +41,7 @@ import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
   auditFiltersSchema,
+  approvalFiltersSchema,
   inviteSchema,
   peopleFiltersSchema,
   updateUserSchema,
@@ -53,32 +55,73 @@ const RESERVED_ACTOR_NAMES: Record<string, string> = {
 
 /** Oversight across people, events, and the audit trail. Admin-only routes call in here. */
 export default class AdminService {
-  /** What is waiting on a decision: one list per kind of approval. */
-  static async approvals(admin: Actor): Promise<AdminApprovals> {
-    const [submitted, rosters, clearanceSignups, reported] = await Promise.all([
-      ClearanceDAO.findUserIdsByStatus("submitted"),
-      EventDAO.findAll({
-        status: "published",
-        eventDate: { $lt: new Date() },
-      }),
-      SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
-      MessageService.reportedThreads(admin),
-    ]);
-    const awaitingIds = clearanceSignups.map((s) => s.volunteerId);
-    const [clearances, awaiting, screenings] = await Promise.all([
-      UserDAO.findSummaries(submitted),
-      UserDAO.findSummaries(awaitingIds),
-      ScreeningCheckDAO.findByUsers(awaitingIds),
-    ]);
+  /** One bounded page from the selected approval queue, plus every tab count. */
+  static async approvals(
+    admin: Actor,
+    input: Record<string, string | undefined>
+  ): Promise<AdminApprovals> {
+    const filters = approvalFiltersSchema.parse(input);
+    const now = new Date();
+    const counts = await ApprovalDAO.counts(now);
+    const total = counts[filters.queue];
+    const page = Math.min(
+      filters.page,
+      Math.max(1, Math.ceil(total / PAGE_SIZE))
+    );
+    const items = await ApprovalDAO.page(filters.queue, page, now);
+    const common = { counts, total, page, pageSize: PAGE_SIZE };
+
+    if (filters.queue === "clearances") {
+      const ids = items as Types.ObjectId[];
+      const users = await UserDAO.findSummaries(ids);
+      const order = new Map(ids.map((id, index) => [id.toString(), index]));
+      users.sort(
+        (a, b) =>
+          (order.get(a._id.toString()) ?? 0) -
+          (order.get(b._id.toString()) ?? 0)
+      );
+      return {
+        ...common,
+        queue: filters.queue,
+        items: users,
+      };
+    }
+    if (filters.queue === "awaitingClearance") {
+      const ids = items as Types.ObjectId[];
+      const [volunteers, screenings] = await Promise.all([
+        UserDAO.findSummaries(ids),
+        ScreeningCheckDAO.findByUsers(ids),
+      ]);
+      const order = new Map(ids.map((id, index) => [id.toString(), index]));
+      volunteers.sort(
+        (a, b) =>
+          (order.get(a._id.toString()) ?? 0) -
+          (order.get(b._id.toString()) ?? 0)
+      );
+      return {
+        ...common,
+        queue: filters.queue,
+        items: volunteers.map((volunteer) => ({
+          volunteer,
+          screening:
+            screenings.find((check) => sameId(check.userId, volunteer._id)) ??
+            null,
+        })),
+      };
+    }
+    if (filters.queue === "rosters") {
+      return { ...common, queue: filters.queue, items: items as Doc<Event>[] };
+    }
     return {
-      clearances,
-      awaitingClearance: awaiting.map((volunteer) => ({
-        volunteer,
-        screening:
-          screenings.find((c) => sameId(c.userId, volunteer._id)) ?? null,
-      })),
-      rosters,
-      reportedThreads: reported,
+      ...common,
+      queue: filters.queue,
+      items: await MessageService.summarize(
+        admin,
+        items as Doc<import("@/types/message").MessageThread>[],
+        (items as Doc<import("@/types/message").MessageThread>[]).map(
+          (thread) => thread._id
+        )
+      ),
     };
   }
 
