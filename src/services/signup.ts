@@ -135,12 +135,11 @@ export default class SignupService {
       event,
       false
     );
-    if (
-      event.minAge &&
-      (!user.dateOfBirth ||
-        ageOn(user.dateOfBirth, shift.startsAt) < event.minAge)
-    ) {
-      throw new ForbiddenError(ERRORS.SIGNUP.MIN_AGE);
+    if (event.minAge) {
+      if (!user.dateOfBirth)
+        throw new ForbiddenError(ERRORS.SIGNUP.DATE_OF_BIRTH_REQUIRED);
+      if (ageOn(user.dateOfBirth, shift.startsAt) < event.minAge)
+        throw new ForbiddenError(ERRORS.SIGNUP.MIN_AGE);
     }
 
     const existing = await SignupDAO.findByShiftAndVolunteer(shiftId, actor.id);

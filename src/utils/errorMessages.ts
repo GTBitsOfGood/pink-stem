@@ -59,6 +59,8 @@ const ERRORS = Object.freeze({
       'The cancellation window has closed. Use "Can\'t make it" on your dashboard to let the organizer know.',
     NOT_CANCELLABLE: "This sign-up can no longer be cancelled.",
     MIN_AGE: "You do not meet the minimum age for this event.",
+    DATE_OF_BIRTH_REQUIRED:
+      "Add your date of birth to your profile to sign up for this event.",
     NOT_APPROVABLE: "Only pending sign-ups awaiting approval can be approved.",
     NOT_ON_ROSTER: "Only confirmed volunteers can be marked.",
     ADJUSTMENT_REASON: "A reason is required when changing the hours.",
