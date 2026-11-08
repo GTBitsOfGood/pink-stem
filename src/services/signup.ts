@@ -485,7 +485,7 @@ export default class SignupService {
     if (signup.status !== "waitlisted")
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
     if (!(await SignupService.promoteOne(signup, shift, event))) {
-      throw new ConflictError(ERRORS.SHIFT.CAPACITY_BELOW_FILLED);
+      throw new ConflictError(ERRORS.SHIFT.FULL_SHIFT);
     }
     return (await SignupDAO.findById(signupId)) as Doc<Signup>;
   }
