@@ -1,8 +1,38 @@
 "use client";
 
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/*
+ * Open modal dialogs, newest last. A modal dialog makes everything outside it
+ * inert, so toasts render inside the newest one to stay clickable.
+ */
+let openDialogs: HTMLDialogElement[] = [];
+const listeners = new Set<() => void>();
+
+const setOpenDialogs = (next: HTMLDialogElement[]) => {
+  openDialogs = next;
+  listeners.forEach((listener) => listener());
+};
+const removeDialog = (dialog: HTMLDialogElement) => {
+  if (openDialogs.includes(dialog)) {
+    setOpenDialogs(openDialogs.filter((d) => d !== dialog));
+  }
+};
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+/** The modal dialog on top right now, or null when none is open. */
+export function useTopDialog() {
+  return useSyncExternalStore(
+    subscribe,
+    () => openDialogs.at(-1) ?? null,
+    () => null
+  );
+}
 
 interface DialogProps {
   open: boolean;
@@ -27,14 +57,22 @@ export default function Dialog({
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
+    if (!open) {
+      if (dialog.open) dialog.close();
+      return;
+    }
+    if (!dialog.open) dialog.showModal();
+    setOpenDialogs([...openDialogs.filter((d) => d !== dialog), dialog]);
+    return () => removeDialog(dialog);
   }, [open]);
 
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={() => {
+        if (ref.current) removeDialog(ref.current);
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
