@@ -99,6 +99,9 @@ export default function EventPage() {
           <p className="mt-2 text-sm text-ink-500">
             Organized by {e.organizerName}
           </p>
+          <div className="mt-4 border-y border-ink-200 py-4">
+            <EventMeta event={e} />
+          </div>
           {e.coverImageUrl ? (
             <div className="relative mt-5 aspect-[2/1] overflow-hidden rounded-2xl border border-ink-200 bg-ink-100">
               <Image
@@ -144,12 +147,6 @@ export default function EventPage() {
         </div>
 
         <aside className="grid content-start gap-4">
-          <Card>
-            <CardHeader title="Details" />
-            <CardBody>
-              <EventMeta event={e} />
-            </CardBody>
-          </Card>
           {e.canManage ? (
             <ButtonLink
               href={`/organizer/events/${e._id}`}
