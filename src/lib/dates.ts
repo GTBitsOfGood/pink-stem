@@ -156,16 +156,6 @@ export const startOfDay = (value: DateLike) =>
   fromDateTimeLocal(toDateInput(value));
 
 /**
- * Moves an instant to a new calendar day in the org time zone while preserving
- * its wall-clock time (hour and minute).
- */
-export const moveToDay = (value: DateLike, targetDate: DateLike): Date => {
-  const targetDay = toDateInput(targetDate);
-  const time = toDateTimeLocal(value).slice(11);
-  return fromDateTimeLocal(`${targetDay}T${time}`);
-};
-
-/**
  * Moves shift start and end times to a target event date in the org time zone,
  * preserving their original wall-clock times and any multi-day span without
  * daylight-saving shifts.

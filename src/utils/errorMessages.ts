@@ -36,7 +36,6 @@ const ERRORS = Object.freeze({
     TIME_ORDER: "A shift must end after it starts.",
     TOO_LONG: "A shift cannot be longer than sixteen hours.",
     DIFFERENT_DAY: "A shift cannot be on a different day from its event.",
-    WRONG_DAY: "A shift cannot be on a different day from its event.",
     CAPACITY_BELOW_FILLED:
       "Capacity cannot be reduced below the number of volunteers already holding a spot.",
     MIN_STAFFING: "Minimum staffing cannot exceed capacity.",
