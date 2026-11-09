@@ -12,6 +12,7 @@ import {
   PAGE_SIZE,
 } from "@/constants/limits";
 import {
+  ageOn,
   hoursBetween,
   moveShiftDates,
   startOfDay,
@@ -315,6 +316,16 @@ export default class EventService {
         })
       : [];
 
+    await EventService.assertMinAgeFits(
+      event,
+      data.minAge ?? null,
+      shifts.map((s) => ({
+        _id: s._id,
+        startsAt:
+          movedShifts.find((m) => sameId(m.id, s._id))?.startsAt ?? s.startsAt,
+      }))
+    );
+
     if (movedShifts.length > 0) {
       await Promise.all(
         movedShifts.map((s) =>
@@ -327,8 +338,67 @@ export default class EventService {
       ...data,
       minAge: data.minAge ?? null,
     })) as Doc<Event>;
+    await EventService.recheckSignups(event, updated);
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
+  }
+
+  /**
+   * Refuses to raise the minimum age past someone already signed up, judged
+   * on their shift's (possibly moved) day. Other edits are never blocked by
+   * an older sign-up.
+   */
+  private static async assertMinAgeFits(
+    event: Doc<Event>,
+    minAge: number | null,
+    shifts: Pick<Doc<Shift>, "_id" | "startsAt">[]
+  ) {
+    if (!minAge || minAge <= (event.minAge ?? 0)) return;
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      LIVE_SIGNUP_STATUSES
+    );
+    if (!signups.length) return;
+    const volunteers = await Promise.all(
+      [...new Set(signups.map((s) => s.volunteerId.toString()))].map((id) =>
+        UserDAO.findById(id)
+      )
+    );
+    const under = new Set<string>();
+    for (const signup of signups) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      const volunteer = volunteers.find(
+        (v) => v && sameId(v._id, signup.volunteerId)
+      );
+      if (!shift || !volunteer) continue;
+      if (
+        !volunteer.dateOfBirth ||
+        ageOn(volunteer.dateOfBirth, shift.startsAt) < minAge
+      ) {
+        under.add(`${volunteer.firstName} ${volunteer.lastName}`);
+      }
+    }
+    if (under.size) {
+      throw new IllegalOperationError(
+        ERRORS.EVENT.MIN_AGE_RAISED(minAge, [...under])
+      );
+    }
+  }
+
+  /**
+   * Sign-ups were checked against the requirements in force when they were
+   * made, so a change to clearance or approval re-checks them. Newly requiring
+   * approval leaves confirmed volunteers alone; pending ones pick it up.
+   */
+  private static async recheckSignups(before: Doc<Event>, after: Doc<Event>) {
+    if (after.status !== "published") return;
+    const clearanceChanged =
+      before.requiresClearance !== after.requiresClearance;
+    const approvalChanged = before.requiresApproval !== after.requiresApproval;
+    if (clearanceChanged || approvalChanged)
+      await SignupService.reevaluateForEvent(after);
+    if (clearanceChanged && after.requiresClearance)
+      await SignupService.lapseForEvent(after);
   }
 
   static async publish(

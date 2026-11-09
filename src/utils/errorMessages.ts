@@ -30,6 +30,8 @@ const ERRORS = Object.freeze({
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
     VIRTUAL_LINK: "Virtual events need a join link.",
     LOCATION_REQUIRED: "In-person events need a location.",
+    MIN_AGE_RAISED: (minAge: number, names: string[]) =>
+      `The minimum age can't be raised to ${minAge} while ${names.join(", ")} ${names.length === 1 ? "is" : "are"} signed up and under it. Cancel ${names.length === 1 ? "that sign-up" : "those sign-ups"} first.`,
   },
   SHIFT: {
     NOT_FOUND: "That shift does not exist.",

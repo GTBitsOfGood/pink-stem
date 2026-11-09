@@ -661,6 +661,12 @@ export default class SignupService {
     return drift;
   }
 
+  /** Pending sign-ups on an event whose requirements changed, re-checked and confirmed if nothing blocks them now. */
+  static async reevaluateForEvent(event: Doc<Event>): Promise<void> {
+    const pending = await SignupDAO.findByEvent(event._id, ["pending"]);
+    for (const signup of pending) await SignupService.reevaluate(signup);
+  }
+
   /**
    * Clearance lapsed between sign-up and event day: confirmed spots on
    * clearance-required events revert to pending and are held for 7 days.
@@ -673,61 +679,101 @@ export default class SignupService {
       "confirmed",
     ]);
     if (!confirmed.length) return;
-    const [events, shifts, user, org] = await Promise.all([
+    const [events, shifts, user] = await Promise.all([
       EventDAO.findByIds(confirmed.map((s) => s.eventId)),
       ShiftDAO.findByIds(confirmed.map((s) => s.shiftId)),
       UserDAO.findById(volunteerId),
-      NotificationService.org(),
     ]);
     if (!user) return;
-    const now = new Date();
 
     for (const signup of confirmed) {
       const event = events.find((e) => sameId(e._id, signup.eventId));
       const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
-      if (
-        !event ||
-        !shift ||
-        event.status !== "published" ||
-        !event.requiresClearance ||
-        shift.startsAt <= now
-      )
-        continue;
+      if (!event || !shift) continue;
+      await SignupService.lapse(signup, event, shift, reasonText);
+    }
+  }
 
-      const { reasons } = await SignupService.reasonsFor(
-        volunteerId,
+  /**
+   * The organizer started requiring clearance: confirmed volunteers who are
+   * not cleared revert to pending and are held, as when a clearance lapses.
+   */
+  static async lapseForEvent(event: Doc<Event>): Promise<void> {
+    const confirmed = await SignupDAO.findByEvent(event._id, ["confirmed"]);
+    if (!confirmed.length) return;
+    const shifts = await ShiftDAO.findByEvent(event._id);
+    for (const signup of confirmed) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      if (!shift) continue;
+      await SignupService.lapse(
+        signup,
         event,
-        !!signup.approvedAt
+        shift,
+        "This event now requires a background clearance, and you are not cleared yet."
       );
-      await SignupDAO.updateById(signup._id, {
-        status: "pending",
-        pendingReasons: reasons,
-        holdUntil: addDays(now, LAPSED_SPOT_HOLD_DAYS),
-      });
+    }
+  }
 
-      const details = NotificationService.eventDetails(event, shift);
+  /**
+   * Puts one confirmed sign-up back to pending with a hold, if its event needs
+   * clearance the volunteer lacks. Confirmation already got them past any
+   * approval, so that is recorded rather than asked for again.
+   */
+  private static async lapse(
+    signup: Doc<Signup>,
+    event: Doc<Event>,
+    shift: Doc<Shift>,
+    reasonText: string
+  ): Promise<void> {
+    if (
+      signup.status !== "confirmed" ||
+      event.status !== "published" ||
+      !event.requiresClearance ||
+      shift.startsAt <= new Date()
+    )
+      return;
+
+    const { user, reasons } = await SignupService.reasonsFor(
+      signup.volunteerId,
+      event,
+      true
+    );
+    if (!reasons.includes("clearance")) return;
+    const now = new Date();
+    const lapsed = await SignupDAO.updateByIdIfStatus(signup._id, "confirmed", {
+      status: "pending",
+      pendingReasons: reasons,
+      holdUntil: addDays(now, LAPSED_SPOT_HOLD_DAYS),
+      ...(event.requiresApproval && !signup.approvedAt
+        ? { approvedAt: signup.confirmedAt ?? now }
+        : {}),
+    });
+    // Cancelled or otherwise changed since it was read.
+    if (!lapsed) return;
+
+    const org = await NotificationService.org();
+    const details = NotificationService.eventDetails(event, shift);
+    await NotificationService.send(
+      user,
+      NotificationService.templates.spotLapsed(org, {
+        name: user.firstName,
+        event: details,
+        reason: reasonText,
+        holdDays: LAPSED_SPOT_HOLD_DAYS,
+      })
+    );
+    const organizer = await UserDAO.findById(event.organizerId);
+    if (organizer) {
       await NotificationService.send(
-        user,
-        NotificationService.templates.spotLapsed(org, {
-          name: user.firstName,
-          event: details,
-          reason: reasonText,
-          holdDays: LAPSED_SPOT_HOLD_DAYS,
+        organizer,
+        NotificationService.templates.organizerNotice(org, {
+          name: organizer.firstName,
+          subject: `Roster change: ${event.title}`,
+          title: "A confirmed volunteer's spot is on hold",
+          body: `${user.firstName} ${user.lastName} (${shift.roleName}) is not cleared, so their spot has reverted to pending. It is held for ${LAPSED_SPOT_HOLD_DAYS} days before returning to the waitlist.`,
+          url: appUrl(`/organizer/events/${event._id}`),
         })
       );
-      const organizer = await UserDAO.findById(event.organizerId);
-      if (organizer) {
-        await NotificationService.send(
-          organizer,
-          NotificationService.templates.organizerNotice(org, {
-            name: organizer.firstName,
-            subject: `Roster change: ${event.title}`,
-            title: "A confirmed volunteer's spot is on hold",
-            body: `${user.firstName} ${user.lastName} (${shift.roleName}) is no longer cleared, so their spot has reverted to pending. It is held for ${LAPSED_SPOT_HOLD_DAYS} days before returning to the waitlist.`,
-            url: appUrl(`/organizer/events/${event._id}`),
-          })
-        );
-      }
     }
   }
 
