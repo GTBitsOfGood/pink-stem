@@ -1,4 +1,5 @@
 import { QueryFilter, Types } from "mongoose";
+import { z } from "zod";
 import EventDAO from "@/db/actions/event";
 import MessageThreadDAO from "@/db/actions/messageThread";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
@@ -10,7 +11,13 @@ import {
   MAX_SHIFTS_PER_EVENT,
   PAGE_SIZE,
 } from "@/constants/limits";
-import { hoursBetween, startOfDay } from "@/lib/dates";
+import {
+  hoursBetween,
+  moveShiftDates,
+  startOfDay,
+  toDateInput,
+  toDateTimeLocal,
+} from "@/lib/dates";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -36,6 +43,7 @@ import {
   sameId,
 } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
+import { dateSchema } from "@/utils/validation/common";
 import {
   adminEventFiltersSchema,
   cancelEventSchema,
@@ -268,9 +276,53 @@ export default class EventService {
     eventId: string,
     input: unknown
   ): Promise<EventWithShifts> {
-    await EventService.editable(actor, eventId);
+    const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
+    const oldDay = toDateInput(event.eventDate);
+    const newDay = toDateInput(data.eventDate);
+    const shifts = await ShiftDAO.findByEvent(event._id);
+    const needsMove =
+      oldDay !== newDay ||
+      shifts.some((s) => toDateInput(s.startsAt) !== newDay);
+
+    const movedShifts = needsMove
+      ? shifts.map((shift) => {
+          const origStartTime = toDateTimeLocal(shift.startsAt).slice(11);
+          const origEndTime = toDateTimeLocal(shift.endsAt).slice(11);
+          const { startsAt, endsAt } = moveShiftDates(
+            shift.startsAt,
+            shift.endsAt,
+            newDay
+          );
+          if (
+            toDateTimeLocal(startsAt).slice(11) !== origStartTime ||
+            toDateTimeLocal(endsAt).slice(11) !== origEndTime
+          ) {
+            throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
+          }
+          EventService.validateShift(
+            { eventDate: data.eventDate },
+            {
+              startsAt,
+              endsAt,
+              capacity: shift.capacity,
+              minStaffing: shift.minStaffing,
+            },
+            shift.filledCount
+          );
+          return { id: shift._id, startsAt, endsAt };
+        })
+      : [];
+
+    if (movedShifts.length > 0) {
+      await Promise.all(
+        movedShifts.map((s) =>
+          ShiftDAO.updateById(s.id, { startsAt: s.startsAt, endsAt: s.endsAt })
+        )
+      );
+    }
+
     const updated = (await EventDAO.updateById(eventId, {
       ...data,
       minAge: data.minAge ?? null,
@@ -345,11 +397,65 @@ export default class EventService {
 
   static async duplicate(
     actor: Actor,
-    eventId: string
+    eventId: string,
+    input?: unknown
   ): Promise<EventWithShifts> {
     const source = await EventDAO.findById(eventId);
     if (!source) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     assertCanManageEvent(actor, source);
+    const data = input
+      ? z.object({ eventDate: dateSchema.optional() }).parse(input)
+      : undefined;
+    const targetDate = data?.eventDate ?? source.eventDate;
+    const oldDay = toDateInput(source.eventDate);
+    const newDay = toDateInput(targetDate);
+    const dateChanged = oldDay !== newDay;
+
+    const shifts = await ShiftDAO.findByEvent(source._id);
+    const preparedShifts = shifts.map(
+      ({
+        roleName,
+        description,
+        startsAt,
+        endsAt,
+        capacity,
+        minStaffing,
+        requiredSkills,
+      }) => {
+        const origStartTime = toDateTimeLocal(startsAt).slice(11);
+        const origEndTime = toDateTimeLocal(endsAt).slice(11);
+        const times = dateChanged
+          ? moveShiftDates(startsAt, endsAt, newDay)
+          : { startsAt, endsAt };
+        if (dateChanged) {
+          if (
+            toDateTimeLocal(times.startsAt).slice(11) !== origStartTime ||
+            toDateTimeLocal(times.endsAt).slice(11) !== origEndTime
+          ) {
+            throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
+          }
+          EventService.validateShift(
+            { eventDate: targetDate },
+            {
+              startsAt: times.startsAt,
+              endsAt: times.endsAt,
+              capacity,
+              minStaffing,
+            }
+          );
+        }
+        return {
+          roleName,
+          description,
+          startsAt: times.startsAt,
+          endsAt: times.endsAt,
+          capacity,
+          minStaffing,
+          requiredSkills,
+        };
+      }
+    );
+
     // The copy stays with whoever runs the original, even when an admin makes it.
     const organizer = await EventService.assignableOrganizer(
       source.organizerId.toString()
@@ -359,7 +465,7 @@ export default class EventService {
       description: source.description,
       programArea: source.programArea,
       visibility: source.visibility,
-      eventDate: source.eventDate,
+      eventDate: targetDate,
       region: source.region,
       isVirtual: source.isVirtual,
       virtualLink: source.virtualLink,
@@ -375,28 +481,8 @@ export default class EventService {
       coverImageUrl: source.coverImageUrl,
       organizerId: organizer._id,
     });
-    const shifts = await ShiftDAO.findByEvent(source._id);
     await ShiftDAO.createMany(
-      shifts.map(
-        ({
-          roleName,
-          description,
-          startsAt,
-          endsAt,
-          capacity,
-          minStaffing,
-          requiredSkills,
-        }) => ({
-          eventId: copy._id,
-          roleName,
-          description,
-          startsAt,
-          endsAt,
-          capacity,
-          minStaffing,
-          requiredSkills,
-        })
-      )
+      preparedShifts.map((s) => ({ ...s, eventId: copy._id }))
     );
     const [withShifts] = await EventService.attachShifts([copy]);
     return withShifts;
@@ -435,16 +521,28 @@ export default class EventService {
   // ---- Shifts -------------------------------------------------------------
 
   private static validateShift(
-    data: ReturnType<typeof shiftInputSchema.parse>,
+    event: Pick<Event, "eventDate">,
+    data: Pick<Shift, "startsAt" | "endsAt"> &
+      Partial<Pick<Shift, "capacity" | "minStaffing">>,
     filledCount = 0
   ) {
     if (data.endsAt <= data.startsAt)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
     if (hoursBetween(data.startsAt, data.endsAt) > MAX_SHIFT_HOURS)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TOO_LONG);
-    if (data.minStaffing > data.capacity)
+    if (
+      toDateInput(data.startsAt) !== toDateInput(event.eventDate) ||
+      toDateInput(data.endsAt) !== toDateInput(event.eventDate)
+    ) {
+      throw new InvalidArgumentsError(ERRORS.SHIFT.DIFFERENT_DAY);
+    }
+    if (
+      data.minStaffing != null &&
+      data.capacity != null &&
+      data.minStaffing > data.capacity
+    )
       throw new InvalidArgumentsError(ERRORS.SHIFT.MIN_STAFFING);
-    if (data.capacity < filledCount)
+    if (data.capacity != null && data.capacity < filledCount)
       throw new InvalidArgumentsError(ERRORS.SHIFT.CAPACITY_BELOW_FILLED);
   }
 
@@ -455,7 +553,7 @@ export default class EventService {
   ): Promise<Doc<Shift>> {
     const event = await EventService.editable(actor, eventId);
     const data = shiftInputSchema.parse(input);
-    EventService.validateShift(data);
+    EventService.validateShift(event, data);
     const existing = await ShiftDAO.findByEvent(event._id);
     if (existing.length >= MAX_SHIFTS_PER_EVENT)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TOO_MANY);
@@ -471,7 +569,7 @@ export default class EventService {
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
     const event = await EventService.editable(actor, shift.eventId.toString());
     const data = shiftInputSchema.parse(input);
-    EventService.validateShift(data, shift.filledCount);
+    EventService.validateShift(event, data, shift.filledCount);
     const updated = (await ShiftDAO.updateById(shift._id, data)) as Doc<Shift>;
     if (updated.capacity > shift.capacity && updated.waitlistCount > 0) {
       await SignupService.promoteWaitlist(

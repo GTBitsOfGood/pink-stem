@@ -79,6 +79,13 @@ export default function ShiftEditor({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    const day = toDateTimeLocal(eventDate).slice(0, 10);
+    const startDay = editing.values.startsAt.slice(0, 10);
+    const endDay = editing.values.endsAt.slice(0, 10);
+    if (startDay !== day || endDay !== day) {
+      toast("A shift cannot be on a different day from its event.", "error");
+      return;
+    }
     const body: ShiftBody = {
       roleName: editing.values.roleName,
       description: editing.values.description || undefined,
@@ -192,6 +199,8 @@ export default function ShiftEditor({
                 label="Starts"
                 type="datetime-local"
                 required
+                min={`${toDateTimeLocal(eventDate).slice(0, 10)}T00:00`}
+                max={`${toDateTimeLocal(eventDate).slice(0, 10)}T23:59`}
                 value={editing.values.startsAt}
                 onChange={(e) => set("startsAt", e.target.value)}
               />
@@ -199,6 +208,8 @@ export default function ShiftEditor({
                 label="Ends"
                 type="datetime-local"
                 required
+                min={`${toDateTimeLocal(eventDate).slice(0, 10)}T00:00`}
+                max={`${toDateTimeLocal(eventDate).slice(0, 10)}T23:59`}
                 value={editing.values.endsAt}
                 onChange={(e) => set("endsAt", e.target.value)}
               />
