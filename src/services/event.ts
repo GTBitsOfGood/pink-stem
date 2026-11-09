@@ -584,12 +584,18 @@ export default class EventService {
   static async deleteShift(actor: Actor, shiftId: string): Promise<void> {
     const shift = await ShiftDAO.findById(shiftId);
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
-    await EventService.editable(actor, shift.eventId.toString());
+    const event = await EventService.editable(actor, shift.eventId.toString());
     const live = await SignupDAO.count({
       shiftId: shift._id,
       status: { $in: LIVE_SIGNUP_STATUSES },
     });
     if (live > 0) throw new IllegalOperationError(ERRORS.SHIFT.HAS_SIGNUPS);
+    // A published event with no shifts could never have its roster approved.
+    if (event.status === "published") {
+      const shifts = await ShiftDAO.findByEvent(event._id);
+      if (shifts.length <= 1)
+        throw new IllegalOperationError(ERRORS.SHIFT.LAST_SHIFT);
+    }
     await ShiftDAO.deleteById(shift._id);
   }
 }

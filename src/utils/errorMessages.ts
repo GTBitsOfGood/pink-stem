@@ -42,6 +42,8 @@ const ERRORS = Object.freeze({
     TOO_MANY: "An event cannot have more than twenty shifts.",
     HAS_SIGNUPS:
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
+    LAST_SHIFT:
+      "A published event needs at least one shift. Add another shift first, or cancel the event.",
     IN_PAST: "This shift has already started.",
     FULL_SHIFT: "This shift is currently full.",
   },

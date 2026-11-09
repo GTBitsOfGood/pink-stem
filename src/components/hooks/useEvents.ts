@@ -72,7 +72,11 @@ export function useEventActions(eventId?: string) {
     reassign: useMutation({
       mutationFn: (organizerId: string) =>
         EventHTTPClient.reassign(id(), organizerId),
-      onSuccess: invalidate,
+      onSuccess: () => {
+        invalidate();
+        // Refresh the admin Events table on every page and filter.
+        queryClient.invalidateQueries({ queryKey: ["admin", "events"] });
+      },
     }),
     addShift: useMutation({
       mutationFn: (body: ShiftBody) => EventHTTPClient.addShift(id(), body),
