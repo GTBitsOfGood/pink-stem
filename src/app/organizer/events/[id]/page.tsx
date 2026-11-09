@@ -478,7 +478,7 @@ export default function ManageEventPage() {
               />
               <Checkbox
                 label="Roster only"
-                description="Hidden from signed-out visitors and anyone who cancelled. Use for door codes or a contact's mobile number."
+                description="Only confirmed volunteers see this, not anyone pending or on the waitlist. Use for door codes or a contact's mobile number."
                 checked={rosterOnly}
                 onChange={(ev) => setRosterOnly(ev.target.checked)}
               />

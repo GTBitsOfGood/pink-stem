@@ -13,6 +13,16 @@ export type SignupStatus = (typeof SIGNUP_STATUSES)[number];
 /** Statuses that hold a spot on the shift. */
 export const ACTIVE_SIGNUP_STATUSES = ["pending", "confirmed"] as const;
 
+/**
+ * Statuses of someone actually on the roster: confirmed, or marked after the
+ * event. Only they see roster-only updates.
+ */
+export const ROSTER_SIGNUP_STATUSES = [
+  "confirmed",
+  "attended",
+  "no_show",
+] as const;
+
 /** Statuses that still put the volunteer on the roster in some form. */
 export const LIVE_SIGNUP_STATUSES = [
   "pending",

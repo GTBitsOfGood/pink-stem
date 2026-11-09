@@ -10,6 +10,7 @@ import type { Actor } from "@/types/auth";
 import type { Event, EventUpdate } from "@/types/event";
 import { IllegalOperationError, NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
+import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import { assertCanManageEvent, sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -20,7 +21,8 @@ import {
 /**
  * Short posts attached to an event. Notes collect into a daily digest;
  * important changes email everyone signed up immediately and pin to the
- * top of the page until the event completes.
+ * top of the page until the event completes. Roster-only posts (door codes,
+ * a contact's mobile) reach confirmed volunteers only.
  */
 export default class EventUpdateService {
   private static async withAuthors(
@@ -105,10 +107,10 @@ export default class EventUpdateService {
     event: Doc<Event>,
     update: Doc<EventUpdate>
   ): Promise<void> {
-    const signups = await SignupDAO.findByEvent(event._id, [
-      "confirmed",
-      "waitlisted",
-    ]);
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      update.rosterOnly ? ["confirmed"] : LIVE_SIGNUP_STATUSES
+    );
     const recipients = [
       ...new Set(signups.map((s) => s.volunteerId.toString())),
     ];
@@ -174,14 +176,22 @@ export default class EventUpdateService {
       const eventNotes = await EventUpdateService.withAuthors(
         notes.filter((n) => sameId(n.eventId, event._id))
       );
-      const signups = await SignupDAO.findByEvent(event._id, [
-        "pending",
-        "confirmed",
-        "waitlisted",
-      ]);
+      const signups = await SignupDAO.findByEvent(
+        event._id,
+        LIVE_SIGNUP_STATUSES
+      );
+      const confirmed = new Set(
+        signups
+          .filter((s) => s.status === "confirmed")
+          .map((s) => s.volunteerId.toString())
+      );
       for (const volunteerId of new Set(
         signups.map((s) => s.volunteerId.toString())
       )) {
+        const visible = confirmed.has(volunteerId)
+          ? eventNotes
+          : eventNotes.filter((n) => !n.rosterOnly);
+        if (!visible.length) continue;
         const user = await UserDAO.findById(volunteerId);
         if (!user) continue;
         const delivered = await NotificationService.send(
@@ -190,7 +200,7 @@ export default class EventUpdateService {
             name: user.firstName,
             eventTitle: event.title,
             url: appUrl(`/events/${event._id}`),
-            notes: eventNotes.map((n) => ({
+            notes: visible.map((n) => ({
               author: n.authorName,
               body: n.body,
             })),

@@ -35,7 +35,7 @@ import {
   NotFoundError,
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
-import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
+import { LIVE_SIGNUP_STATUSES, ROSTER_SIGNUP_STATUSES } from "@/types/signup";
 import {
   assertCanManageEvent,
   canManageEvent,
@@ -149,8 +149,9 @@ export default class EventService {
         )
       : [];
     const mySignups = allMine.filter((s) => s.status !== "cancelled");
+    // Pending and waitlisted volunteers are not on the roster yet.
     const onRoster = mySignups.some((s) =>
-      (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status)
+      (ROSTER_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
     return {
