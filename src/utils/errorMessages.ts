@@ -43,6 +43,7 @@ const ERRORS = Object.freeze({
     HAS_SIGNUPS:
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
     IN_PAST: "This shift has already started.",
+    FULL_SHIFT: "This shift is currently full.",
   },
   SIGNUP: {
     NOT_FOUND: "That sign-up does not exist.",

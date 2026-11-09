@@ -99,6 +99,9 @@ export default function EventPage() {
           <p className="mt-2 text-sm text-ink-500">
             Organized by {e.organizerName}
           </p>
+          <div className="mt-4 border-y border-ink-200 py-4">
+            <EventMeta event={e} />
+          </div>
           {e.coverImageUrl ? (
             <div className="relative mt-5 aspect-[2/1] overflow-hidden rounded-2xl border border-ink-200 bg-ink-100">
               <Image
@@ -140,16 +143,28 @@ export default function EventPage() {
               ) : null}
             </div>
             <UpdatesFeed updates={e.updates} />
+            {user && onRoster ? (
+              <Card className="mt-4">
+                <CardHeader
+                  title="Questions?"
+                  description="Message the organizer. Conversations stay attached to this event and are visible to Pink STEM administrators."
+                />
+                <CardBody>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    icon={<MessageSquare className="h-4 w-4" />}
+                    onClick={() => setComposing(true)}
+                  >
+                    Message the organizer
+                  </Button>
+                </CardBody>
+              </Card>
+            ) : null}
           </section>
         </div>
 
         <aside className="grid content-start gap-4">
-          <Card>
-            <CardHeader title="Details" />
-            <CardBody>
-              <EventMeta event={e} />
-            </CardBody>
-          </Card>
           {e.canManage ? (
             <ButtonLink
               href={`/organizer/events/${e._id}`}
@@ -158,24 +173,6 @@ export default function EventPage() {
             >
               Manage this event
             </ButtonLink>
-          ) : null}
-          {user && onRoster ? (
-            <Card>
-              <CardHeader
-                title="Questions?"
-                description="Message the organizer. Conversations stay attached to this event and are visible to Pink STEM administrators."
-              />
-              <CardBody>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  icon={<MessageSquare className="h-4 w-4" />}
-                  onClick={() => setComposing(true)}
-                >
-                  Message the organizer
-                </Button>
-              </CardBody>
-            </Card>
           ) : null}
           {!user ? (
             <Card>

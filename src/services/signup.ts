@@ -274,6 +274,7 @@ export default class SignupService {
           (self ? "Cancelled by volunteer" : "Cancelled by organizer"),
       }
     );
+    if (!released) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
 
     if (!self) {
       await AuditService.record(
@@ -331,26 +332,9 @@ export default class SignupService {
       throw new IllegalOperationError(ERRORS.SHIFT.IN_PAST);
 
     const late = insideCutoff(shift, settings);
-    // Claimed first, so a double submit cannot free the spot twice.
-    const claimed = await SignupDAO.updateByIdIfStatus(
-      signup._id,
-      signup.status,
-      {
-        status: "cancelled",
-        absence: { reason, note: note || undefined, late },
-      }
-    );
-    if (!claimed) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
-    await AuditService.record(
-      actor,
-      "signup.absence_reported",
-      "signup",
-      signup._id,
-      {
-        before: { status: signup.status },
-        after: { status: "cancelled", reason, late },
-      }
-    );
+    // release() claims the sign-up atomically, so a double submit (or a
+    // racing cancel) cannot free the spot twice. Promotion waits until the
+    // audit is written, so a failed promotion email cannot skip the audit.
     const released = await SignupService.release(
       signup,
       shift,
@@ -359,6 +343,19 @@ export default class SignupService {
       {
         by: new Types.ObjectId(actor.id),
         reason: `Absence reported: ${ABSENCE_REASON_LABELS[reason]}`,
+        promote: false,
+        fields: { absence: { reason, note: note || undefined, late } },
+      }
+    );
+    if (!released) throw new ConflictError(ERRORS.SIGNUP.NOT_CANCELLABLE);
+    await AuditService.record(
+      actor,
+      "signup.absence_reported",
+      "signup",
+      signup._id,
+      {
+        before: { status: signup.status },
+        after: { status: "cancelled", reason, late },
       }
     );
 
@@ -376,24 +373,44 @@ export default class SignupService {
     ).catch((error) =>
       console.error("[absence] organizer email failed", error)
     );
+
+    // Last, since it emails the promoted volunteer and that email can throw.
+    await SignupService.promoteWaitlist(shift._id, event, settings);
     return released;
   }
 
-  /** Cancels a live sign-up, frees its spot, and promotes the waitlist. */
+  /**
+   * Cancels a live sign-up, frees its spot, and promotes the waitlist.
+   *
+   * The status flip is conditional on the status the caller read, so when two
+   * requests race (a double click, two tabs, cancel vs. absence) only one wins
+   * and the spot is freed once. The loser gets null and must not act further.
+   */
   private static async release(
     signup: Doc<Signup>,
     shift: Doc<Shift>,
     event: Doc<Event>,
     settings: OrgSettings,
-    options: { by: Types.ObjectId | null; reason: string; promote?: boolean }
-  ): Promise<Doc<Signup>> {
-    const updated = (await SignupDAO.updateById(signup._id, {
-      status: "cancelled",
-      cancelledAt: new Date(),
-      cancelledBy: options.by,
-      cancellationReason: options.reason,
-      holdUntil: null,
-    })) as Doc<Signup>;
+    options: {
+      by: Types.ObjectId | null;
+      reason: string;
+      promote?: boolean;
+      fields?: Partial<Pick<Signup, "absence">>;
+    }
+  ): Promise<Doc<Signup> | null> {
+    const updated = await SignupDAO.updateByIdIfStatus(
+      signup._id,
+      signup.status,
+      {
+        ...options.fields,
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledBy: options.by,
+        cancellationReason: options.reason,
+        holdUntil: null,
+      }
+    );
+    if (!updated) return null;
 
     if (isActive(signup)) {
       await ShiftDAO.releaseSpot(shift._id);
@@ -403,6 +420,43 @@ export default class SignupService {
       await ShiftDAO.adjustWaitlist(shift._id, -1);
     }
     return updated;
+  }
+
+  /**
+   * release() for cancellations that must happen (deactivation, event
+   * cancellation). If the status changed after it was read, for example an
+   * approval or a waitlist promotion slipped in, the sign-up is re-read and
+   * released again from its new status, so the right counter is updated.
+   * Stops once the sign-up is no longer live (someone else already resolved it).
+   */
+  private static async releaseRequired(
+    signup: Doc<Signup>,
+    shift: Doc<Shift>,
+    event: Doc<Event>,
+    settings: OrgSettings,
+    options: Parameters<typeof SignupService.release>[4]
+  ): Promise<Doc<Signup> | null> {
+    // Each retry needs a fresh status change to lose again, so a few tries is
+    // plenty; the cap only guards against looping forever.
+    let current: Doc<Signup> | null = signup;
+    for (
+      let attempt = 0;
+      attempt < 5 && current && isLive(current);
+      attempt++
+    ) {
+      const released = await SignupService.release(
+        current,
+        shift,
+        event,
+        settings,
+        options
+      );
+      if (released) return released;
+      current = await SignupDAO.findById(signup._id);
+    }
+    if (current && isLive(current))
+      console.error("[release] gave up releasing sign-up", signup._id);
+    return null;
   }
 
   /**
@@ -485,7 +539,7 @@ export default class SignupService {
     if (signup.status !== "waitlisted")
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
     if (!(await SignupService.promoteOne(signup, shift, event))) {
-      throw new ConflictError(ERRORS.SHIFT.CAPACITY_BELOW_FILLED);
+      throw new ConflictError(ERRORS.SHIFT.FULL_SHIFT);
     }
     return (await SignupDAO.findById(signupId)) as Doc<Signup>;
   }
@@ -691,10 +745,15 @@ export default class SignupService {
         UserDAO.findById(signup.volunteerId),
       ]);
       if (!shift || !event) continue;
-      await SignupService.release(signup, shift, event, settings, {
-        by: null,
-        reason: "Hold expired without clearance",
-      });
+      const released = await SignupService.release(
+        signup,
+        shift,
+        event,
+        settings,
+        { by: null, reason: "Hold expired without clearance" }
+      );
+      // Resolved (or cancelled) since it was read, so it did not expire.
+      if (!released) continue;
       if (user) {
         const org = await NotificationService.org();
         await NotificationService.send(
@@ -724,7 +783,7 @@ export default class SignupService {
         EventDAO.findById(signup.eventId),
       ]);
       if (!shift || !event || shift.startsAt <= new Date()) continue;
-      await SignupService.release(signup, shift, event, settings, {
+      await SignupService.releaseRequired(signup, shift, event, settings, {
         by: null,
         reason,
       });
@@ -742,7 +801,7 @@ export default class SignupService {
     for (const signup of live) {
       const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
       if (shift)
-        await SignupService.release(signup, shift, event, settings, {
+        await SignupService.releaseRequired(signup, shift, event, settings, {
           by: null,
           reason,
           promote: false,
