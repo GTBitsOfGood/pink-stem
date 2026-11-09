@@ -23,6 +23,8 @@ export interface Message {
   senderId: Types.ObjectId;
   body: string;
   sentAt: Date;
+  /** Set when the message delivers an event update to the roster. */
+  eventUpdateId?: Types.ObjectId | null;
   notifiedAt?: Date | null;
   reportedAt?: Date | null;
   reportedBy?: Types.ObjectId | null;
