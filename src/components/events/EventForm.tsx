@@ -162,7 +162,13 @@ export default function EventForm({
               label="Virtual event"
               description="Volunteers join by link instead of in person."
               checked={v.isVirtual}
-              onChange={(e) => set("isVirtual", e.target.checked)}
+              onChange={(e) => {
+                set("isVirtual", e.target.checked);
+                // Clear only the join link when switching to in-person so a
+                // junk URL typed before toggling back cannot block the save.
+                // Location values are preserved so switching back restores them.
+                if (!e.target.checked) set("virtualLink", "");
+              }}
             />
           </div>
           {v.isVirtual ? (
@@ -179,6 +185,7 @@ export default function EventForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input
                   label="Host site"
+                  required
                   placeholder="Pink STEM Discovery Lab"
                   value={v.locationName}
                   onChange={(e) => set("locationName", e.target.value)}
@@ -191,6 +198,7 @@ export default function EventForm({
               </div>
               <Input
                 label="Address"
+                required
                 value={v.address}
                 onChange={(e) => set("address", e.target.value)}
               />

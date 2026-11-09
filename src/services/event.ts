@@ -194,11 +194,31 @@ export default class EventService {
   private static validateInput(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
-    if (data.isVirtual && !data.virtualLink)
-      throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
-    if (!data.isVirtual && !data.locationName && !data.address) {
+    if (data.isVirtual) {
+      if (!data.virtualLink)
+        throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
+      if (!URL.canParse(data.virtualLink))
+        throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
+    }
+    if (!data.isVirtual && (!data.locationName || !data.address)) {
       throw new InvalidArgumentsError(ERRORS.EVENT.LOCATION_REQUIRED);
     }
+  }
+
+  /** Strip fields that belong to the other mode before writing to the DB. */
+  private static sanitizeByMode(
+    data: ReturnType<typeof eventInputSchema.parse>
+  ) {
+    if (data.isVirtual) {
+      return {
+        ...data,
+        locationName: undefined,
+        address: undefined,
+        locationNote: undefined,
+        city: undefined,
+      };
+    }
+    return { ...data, virtualLink: undefined };
   }
 
   /** Events can only be owned by an active organizer or admin. */
@@ -239,12 +259,13 @@ export default class EventService {
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const sanitized = EventService.sanitizeByMode(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
       : null;
     const event = await EventDAO.create({
-      ...data,
-      minAge: data.minAge ?? undefined,
+      ...sanitized,
+      minAge: sanitized.minAge ?? undefined,
       organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
     if (organizer && !sameId(organizer._id, actor.id)) {
@@ -279,6 +300,7 @@ export default class EventService {
     const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
+    const sanitized = EventService.sanitizeByMode(data);
     const oldDay = toDateInput(event.eventDate);
     const newDay = toDateInput(data.eventDate);
     const shifts = await ShiftDAO.findByEvent(event._id);
@@ -324,8 +346,8 @@ export default class EventService {
     }
 
     const updated = (await EventDAO.updateById(eventId, {
-      ...data,
-      minAge: data.minAge ?? null,
+      ...sanitized,
+      minAge: sanitized.minAge ?? null,
     })) as Doc<Event>;
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
