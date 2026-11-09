@@ -205,20 +205,32 @@ export default class EventService {
     }
   }
 
-  /** Strip fields that belong to the other mode before writing to the DB. */
+  /**
+   * Returns the fields to $set and the fields to $unset for the active mode.
+   * On create, pass only `set` (no prior values to clear).
+   * On update, use both so stale fields from the previous mode are removed from the document.
+   * Mongoose strips undefined values from $set before sending to MongoDB,
+   * so there is no conflict between the two operators.
+   */
   private static sanitizeByMode(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
     if (data.isVirtual) {
       return {
-        ...data,
-        locationName: undefined,
-        address: undefined,
-        locationNote: undefined,
-        city: undefined,
+        set: {
+          ...data,
+          locationName: undefined,
+          address: undefined,
+          locationNote: undefined,
+          city: undefined,
+        },
+        unset: { locationName: "", address: "", locationNote: "", city: "" },
       };
     }
-    return { ...data, virtualLink: undefined };
+    return {
+      set: { ...data, virtualLink: undefined },
+      unset: { virtualLink: "" },
+    };
   }
 
   /** Events can only be owned by an active organizer or admin. */
@@ -259,7 +271,7 @@ export default class EventService {
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
-    const sanitized = EventService.sanitizeByMode(data);
+    const { set: sanitized } = EventService.sanitizeByMode(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
       : null;
@@ -300,7 +312,7 @@ export default class EventService {
     const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
-    const sanitized = EventService.sanitizeByMode(data);
+    const { set: sanitized, unset } = EventService.sanitizeByMode(data);
     const oldDay = toDateInput(event.eventDate);
     const newDay = toDateInput(data.eventDate);
     const shifts = await ShiftDAO.findByEvent(event._id);
@@ -346,8 +358,8 @@ export default class EventService {
     }
 
     const updated = (await EventDAO.updateById(eventId, {
-      ...sanitized,
-      minAge: sanitized.minAge ?? null,
+      $set: { ...sanitized, minAge: sanitized.minAge ?? null },
+      $unset: unset,
     })) as Doc<Event>;
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
