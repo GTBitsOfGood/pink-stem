@@ -81,6 +81,11 @@ export default class HoursService {
     const before = existing.reduce((sum, e) => sum + e.hours, 0);
     if (before + data.hours < 0)
       throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
+    // NOTE: the pre-check and ledger insert are separate operations. Two
+    // concurrent corrections for the same volunteer and event can both pass
+    // the check and together write a negative total. The post-write re-read
+    // below compensates, but cannot perfectly reverse a concurrent write
+    // without a MongoDB transaction wrapping the entire check-write sequence.
     const entry = await HoursLedgerDAO.create({
       volunteerId: volunteer._id,
       eventId: event._id,

@@ -281,9 +281,13 @@ export default class CertificateService {
       ).values(),
     ];
 
-    // Issue the replacement before revoking so the volunteer is never left
-    // with zero valid certificates if issuance fails.
-    let replacement: Doc<Certificate> | null = null;
+    // Issue all replacements before revoking so the volunteer is never left
+    // with zero valid certificates if issuance fails. Track a replacement per
+    // type+period so each original is linked to its correct successor.
+    // NOTE: a concurrent adjustment can still create a second replacement before
+    // either request revokes the shared original. Closing that window requires a
+    // MongoDB transaction wrapping the ledger write and certificate replacement.
+    const replacementByKey = new Map<string, Doc<Certificate>>();
 
     if (eventCerts.length) {
       const items = await CertificateService.buildServiceItems(
@@ -292,14 +296,16 @@ export default class CertificateService {
         event.eventDate
       );
       const item = items.find((i) => sameId(i.eventId, event._id));
-      if (item)
-        replacement = await CertificateService.issueEventCertificate(
+      if (item) {
+        const r = await CertificateService.issueEventCertificate(
           volunteer,
           event,
           item.roleName,
           item.hours,
           admin
         );
+        replacementByKey.set("event", r);
+      }
     }
 
     for (const { periodStart, periodEnd } of serviceRecordPeriods) {
@@ -309,17 +315,20 @@ export default class CertificateService {
         periodEnd
       );
       if (items.length) {
-        const sr = await CertificateService.issueServiceRecord(
+        const r = await CertificateService.issueServiceRecord(
           volunteer,
           periodStart,
           periodEnd,
           admin
         );
-        if (!replacement) replacement = sr;
+        replacementByKey.set(
+          `sr:${periodStart.getTime()}-${periodEnd.getTime()}`,
+          r
+        );
       }
     }
 
-    // Replacement exists — now safe to revoke all old certificates.
+    // Replacements exist — now safe to revoke all old certificates.
     const revoked = await Promise.all(
       affected.map((old) =>
         CertificateService.revoke(admin, old._id.toString(), {
@@ -328,14 +337,20 @@ export default class CertificateService {
       )
     );
 
-    // Link every revoked certificate to the replacement for a complete audit trail.
-    if (replacement) {
-      await Promise.all(
-        revoked.map((r) =>
-          CertificateDAO.updateById(r._id, { supersededBy: replacement!._id })
-        )
-      );
-    }
+    // Link each revoked certificate to its type-matched replacement.
+    await Promise.all(
+      affected.map((old, i) => {
+        const key =
+          old.type === "event"
+            ? "event"
+            : `sr:${old.periodStart.getTime()}-${old.periodEnd.getTime()}`;
+        const replacement = replacementByKey.get(key);
+        if (!replacement) return Promise.resolve();
+        return CertificateDAO.updateById(revoked[i]._id, {
+          supersededBy: replacement._id,
+        });
+      })
+    );
 
     const org = await NotificationService.org();
     await NotificationService.send(

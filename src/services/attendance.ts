@@ -97,31 +97,19 @@ export default class AttendanceService {
     const approver = new Types.ObjectId(actor.id);
     let totalHours = 0;
 
+    // No-shows are finalized immediately; attended signups stay as "confirmed"
+    // until their certificate is committed so a retry can resume from here if
+    // issuance fails partway through.
     for (const signup of confirmed) {
       const attendance = signup.attendance!;
-      const attended = attendance.status === "attended";
-      await SignupDAO.updateById(signup._id, {
-        status: attended ? "attended" : "no_show",
-      });
-      if (!attended) {
-        await AttendanceService.reviewNoShows(
-          actor,
-          signup.volunteerId,
-          settings.noShowThreshold,
-          settings.noShowWindowDays
-        );
-        continue;
-      }
-      totalHours += attendance.hours;
-      await HoursService.post({
-        volunteerId: signup.volunteerId,
-        eventId: event._id,
-        signupId: signup._id,
-        hours: attendance.hours,
-        approvedBy: approver,
-        approvedAt: now,
-        reason: attendance.adjustmentReason,
-      });
+      if (attendance.status === "attended") continue;
+      await SignupDAO.updateById(signup._id, { status: "no_show" });
+      await AttendanceService.reviewNoShows(
+        actor,
+        signup.volunteerId,
+        settings.noShowThreshold,
+        settings.noShowWindowDays
+      );
     }
 
     // Group attended signups by volunteer so each volunteer gets one
@@ -158,6 +146,20 @@ export default class AttendanceService {
               .filter((r): r is string => !!r)
           ),
         ].join(", ") || "Volunteer";
+
+      for (const signup of group) {
+        totalHours += signup.attendance!.hours;
+        await HoursService.post({
+          volunteerId: signup.volunteerId,
+          eventId: event._id,
+          signupId: signup._id,
+          hours: signup.attendance!.hours,
+          approvedBy: approver,
+          approvedAt: now,
+          reason: signup.attendance!.adjustmentReason,
+        });
+      }
+
       await CertificateService.issueEventCertificate(
         volunteer,
         event,
@@ -165,6 +167,13 @@ export default class AttendanceService {
         eventHours,
         actor
       );
+
+      // Mark attended only after certificate is committed so a failed
+      // issuance leaves signups as "confirmed" and the roster can be retried.
+      for (const signup of group) {
+        await SignupDAO.updateById(signup._id, { status: "attended" });
+      }
+
       const firstShift = shifts.find((s) => sameId(s._id, group[0].shiftId));
       if (!firstShift) continue;
       notifications.push({ volunteer, firstShift, eventHours });
