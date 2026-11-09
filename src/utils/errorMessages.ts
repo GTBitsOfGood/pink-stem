@@ -44,6 +44,8 @@ const ERRORS = Object.freeze({
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
     LAST_SHIFT:
       "A published event needs at least one shift. Add another shift first, or cancel the event.",
+    DELETE_IN_PROGRESS:
+      "Another shift on this event is being deleted. Try again in a moment.",
     IN_PAST: "This shift has already started.",
     FULL_SHIFT: "This shift is currently full.",
   },
