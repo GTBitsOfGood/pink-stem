@@ -72,7 +72,7 @@ export default function PersonPage() {
   };
 
   return (
-    <div>
+    <div className="min-w-0 overflow-x-hidden">
       <PageHeader
         title={`${u.firstName} ${u.lastName}`}
         description={
