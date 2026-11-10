@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
+import SignupDAO from "@/db/actions/signup";
 import EventService from "@/services/event";
 import EventUpdateService from "@/services/eventUpdate";
 import SignupService from "@/services/signup";
@@ -115,13 +116,28 @@ describe("roster-only updates reach confirmed volunteers only", () => {
     assert.deepEqual(recipients(), [confirmed.email]);
   });
 
-  test("old roster-only notes are not emailed to someone confirmed after the digest", async () => {
+  test("someone confirmed after a digest gets new notes but never the old roster-only ones", async () => {
     await post("note", true);
+    await post("note", false);
     await EventUpdateService.sendNoteDigest();
+    const [signup] = await SignupDAO.findByEvent(event._id, ["pending"]);
+    await SignupService.approve(actorFor(organizer), signup._id.toString());
+    assert.equal(
+      (await SignupDAO.findById(signup._id.toString()))?.status,
+      "confirmed"
+    );
     sent.length = 0;
 
+    await EventUpdateService.create(actorFor(organizer), event._id.toString(), {
+      kind: "note",
+      body: "Fresh note after approval",
+      rosterOnly: false,
+    });
     await EventUpdateService.sendNoteDigest();
 
-    assert.equal(sent.length, 0);
+    const digest = sent.find((m) => m.to === pending.email)?.text ?? "";
+    assert.match(digest, /Fresh note after approval/);
+    assert.doesNotMatch(digest, /door code 4321/);
+    assert.doesNotMatch(digest, /for everyone/);
   });
 });
