@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
+import { beforeEach, describe, mock, test } from "node:test";
 import mongoose from "mongoose";
 import MessageDAO from "@/db/actions/message";
 import MessageThreadDAO from "@/db/actions/messageThread";
@@ -15,6 +15,7 @@ import {
   setupTestDatabase,
 } from "@/test/setup";
 import type { Event, Shift } from "@/types/event";
+import type { Message } from "@/types/message";
 import type { Doc } from "@/types/models";
 import type { User } from "@/types/user";
 
@@ -157,18 +158,83 @@ describe("event updates are delivered to the approved roster as messages", () =>
     assert.ok(await threadOf(confirmed));
   });
 
-  test("a roster larger than the hourly message limit is not rate limited", async () => {
+  test("a roster larger than the hourly message limit is delivered in full and doesn't block the organizer's replies", async () => {
     for (let i = 0; i < MAX_MESSAGES_PER_HOUR; i += 1) {
       await makeSignup(await makeUser(), event, shift);
     }
 
     await post();
 
-    const delivered = await MessageDAO.countBySenderSince(
-      organizer._id.toString(),
-      new Date(Date.now() - 60_000)
+    const copies = await mongoose.connection
+      .collection("messages")
+      .countDocuments({ eventUpdateId: { $ne: null } });
+    assert.equal(copies, MAX_MESSAGES_PER_HOUR + 1);
+    const thread = (await threadOf(confirmed))!;
+    const { message } = await MessageService.send(
+      actorFor(organizer),
+      thread._id.toString(),
+      { body: "Replying to your question about parking." }
     );
-    assert.equal(delivered, MAX_MESSAGES_PER_HOUR + 1);
+    assert.equal(message.eventUpdateId, null);
+  });
+
+  test("posting an update doesn't mark a volunteer's unread question as read for the organizer", async () => {
+    await MessageService.createThread(actorFor(confirmed), {
+      eventId: event._id.toString(),
+      body: "Is there parking on site?",
+    });
+    assert.equal(await MessageService.unreadCount(actorFor(organizer)), 1);
+
+    await post();
+
+    assert.equal(await MessageService.unreadCount(actorFor(organizer)), 1);
+  });
+
+  test("a thread opened by an overlapping request is reused instead of failing", async () => {
+    const { thread } = await MessageService.createThread(actorFor(confirmed), {
+      eventId: event._id.toString(),
+      body: "Hello!",
+    });
+    // The update's lookup runs just before the volunteer's insert lands.
+    const stale = mock.method(
+      MessageThreadDAO,
+      "findByEventAndVolunteer",
+      async () => null,
+      { times: 1 }
+    );
+    try {
+      await post();
+    } finally {
+      stale.mock.restore();
+    }
+
+    const messages = await MessageDAO.findByThread(thread._id);
+    assert.equal(messages.length, 2);
+    assert.ok(messages[1].eventUpdateId);
+  });
+
+  test("one volunteer's failed delivery doesn't stop the rest of the roster", async () => {
+    const second = await makeUser({ firstName: "Second" });
+    await makeSignup(second, event, shift);
+    const original = MessageDAO.create.bind(MessageDAO);
+    let calls = 0;
+    const flaky = mock.method(MessageDAO, "create", async (data: Message) => {
+      calls += 1;
+      if (calls === 1) throw new Error("write failed");
+      return original(data);
+    });
+    const quiet = mock.method(console, "error", () => {});
+    try {
+      await post();
+    } finally {
+      flaky.mock.restore();
+      quiet.mock.restore();
+    }
+
+    const delivered = await mongoose.connection
+      .collection("messages")
+      .countDocuments({ eventUpdateId: { $ne: null } });
+    assert.equal(delivered, 1);
   });
 
   test("an update an admin posts arrives from the event's organizer", async () => {
