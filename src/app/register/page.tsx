@@ -32,6 +32,37 @@ function RegisterForm() {
     });
   };
 
+  if (register.isSuccess) {
+    return (
+      <AuthCard
+        title="Check your email"
+        description="One more step before you can get confirmed for shifts."
+        footer={
+          <>
+            Already have an account?{" "}
+            <Link
+              href="/login"
+              className="font-semibold text-brand-700 hover:underline"
+            >
+              Sign in
+            </Link>
+          </>
+        }
+      >
+        <Alert tone="info" title="Verification link sent">
+          We sent a link to <strong>{values.email}</strong>. Click it to confirm
+          your email address — sign-ups stay pending until you do.
+        </Alert>
+        <Link
+          href="/dashboard"
+          className="mt-4 block text-center text-sm font-semibold text-brand-700 hover:underline"
+        >
+          Continue to dashboard →
+        </Link>
+      </AuthCard>
+    );
+  }
+
   return (
     <AuthCard
       title="Become a Pink STEM volunteer"
