@@ -580,6 +580,9 @@ export default class SignupService {
     if (reasons.length) {
       return (await SignupDAO.updateById(signup._id, {
         pendingReasons: reasons,
+        // A hold only waits on clearance, so it ends when clearance does,
+        // even if something else still blocks the spot.
+        ...(reasons.includes("clearance") ? {} : { holdUntil: null }),
       })) as Doc<Signup>;
     }
     const confirmed = (await SignupDAO.updateById(signup._id, {
@@ -588,8 +591,23 @@ export default class SignupService {
       confirmedAt: new Date(),
       holdUntil: null,
     })) as Doc<Signup>;
-    await SignupService.notifyStatus(user, event, shift, confirmed);
+    await SignupService.notifySafely(() =>
+      SignupService.notifyStatus(user, event, shift, confirmed)
+    );
     return confirmed;
+  }
+
+  /**
+   * Sends an email about a change that is already saved. A failed send is
+   * logged rather than thrown, so it cannot stop the rest of a batch of
+   * roster changes or fail a request whose work is done.
+   */
+  private static async notifySafely(send: () => Promise<unknown>) {
+    try {
+      await send();
+    } catch (error) {
+      console.error("[signup] notification failed", error);
+    }
   }
 
   static async reevaluateForVolunteer(
@@ -751,19 +769,24 @@ export default class SignupService {
     // Cancelled or otherwise changed since it was read.
     if (!lapsed) return;
 
-    const org = await NotificationService.org();
-    const details = NotificationService.eventDetails(event, shift);
-    await NotificationService.send(
-      user,
-      NotificationService.templates.spotLapsed(org, {
-        name: user.firstName,
-        event: details,
-        reason: reasonText,
-        holdDays: LAPSED_SPOT_HOLD_DAYS,
-      })
-    );
-    const organizer = await UserDAO.findById(event.organizerId);
-    if (organizer) {
+    await SignupService.notifySafely(async () => {
+      const org = await NotificationService.org();
+      await NotificationService.send(
+        user,
+        NotificationService.templates.spotLapsed(org, {
+          name: user.firstName,
+          event: NotificationService.eventDetails(event, shift),
+          reason: reasonText,
+          holdDays: LAPSED_SPOT_HOLD_DAYS,
+        })
+      );
+    });
+    await SignupService.notifySafely(async () => {
+      const [org, organizer] = await Promise.all([
+        NotificationService.org(),
+        UserDAO.findById(event.organizerId),
+      ]);
+      if (!organizer) return;
       await NotificationService.send(
         organizer,
         NotificationService.templates.organizerNotice(org, {
@@ -774,7 +797,7 @@ export default class SignupService {
           url: appUrl(`/organizer/events/${event._id}`),
         })
       );
-    }
+    });
   }
 
   /** Scheduled: held spots that were never resolved return to the waitlist. */

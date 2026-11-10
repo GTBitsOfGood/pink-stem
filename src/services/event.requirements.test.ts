@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
+import { beforeEach, describe, mock, test } from "node:test";
+import EventDAO from "@/db/actions/event";
 import SignupDAO from "@/db/actions/signup";
 import EventService from "@/services/event";
+import MailService from "@/services/mail";
 import {
   actorFor,
   clear,
@@ -143,6 +145,58 @@ describe("EventService.update re-checks sign-ups when requirements change", () =
     await save({ requiresClearance: true });
 
     assert.equal((await reload(signup._id)).status, "confirmed");
+  });
+
+  test("removing clearance ends a hold even when approval still blocks the spot", async () => {
+    ({ event, shift } = await makeEvent(organizer, {
+      requiresClearance: true,
+      requiresApproval: true,
+    }));
+    const volunteer = await makeUser();
+    const signup = await makeSignup(volunteer, event, shift, {
+      status: "pending",
+      pendingReasons: ["clearance", "approval"],
+      holdUntil: new Date(Date.now() + 86_400_000),
+    });
+
+    await save({ requiresClearance: false });
+
+    const after = await reload(signup._id);
+    assert.equal(after.status, "pending");
+    assert.deepEqual(after.pendingReasons, ["approval"]);
+    assert.equal(after.holdUntil, null, "expireHolds can no longer release it");
+  });
+
+  test("a failing email does not stop the rest of the roster from being re-checked", async () => {
+    const first = await makeUser();
+    const second = await makeUser();
+    const a = await makeSignup(first, event, shift);
+    const b = await makeSignup(second, event, shift);
+    const failing = mock.method(MailService, "send", async () => {
+      throw new Error("mail provider is down");
+    });
+    const quiet = mock.method(console, "error", () => {});
+    try {
+      await save({ requiresClearance: true });
+    } finally {
+      failing.mock.restore();
+      quiet.mock.restore();
+    }
+
+    assert.equal((await reload(a._id)).status, "pending");
+    assert.equal((await reload(b._id)).status, "pending");
+  });
+
+  test("a re-check that was cut short is finished by the next save", async () => {
+    const volunteer = await makeUser();
+    const signup = await makeSignup(volunteer, event, shift);
+    // The flag was saved but the roster was never updated.
+    await EventDAO.updateById(event._id, { requiresClearance: true });
+    event = { ...event, requiresClearance: true };
+
+    await save({ title: "Same requirements, saved again" });
+
+    assert.equal((await reload(signup._id)).status, "pending");
   });
 
   describe("minimum age", () => {

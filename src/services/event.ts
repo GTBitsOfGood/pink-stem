@@ -338,7 +338,7 @@ export default class EventService {
       ...data,
       minAge: data.minAge ?? null,
     })) as Doc<Event>;
-    await EventService.recheckSignups(event, updated);
+    await EventService.recheckSignups(updated);
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
   }
@@ -387,18 +387,16 @@ export default class EventService {
 
   /**
    * Sign-ups were checked against the requirements in force when they were
-   * made, so a change to clearance or approval re-checks them. Newly requiring
-   * approval leaves confirmed volunteers alone; pending ones pick it up.
+   * made, so clearance and approval are re-checked against the saved event.
+   * This runs on every save, not only when a flag flips: both steps are
+   * no-ops once the roster matches, and a recheck cut short by a failure is
+   * finished by the organizer's next save. Newly requiring approval leaves
+   * confirmed volunteers alone; pending ones pick it up.
    */
-  private static async recheckSignups(before: Doc<Event>, after: Doc<Event>) {
-    if (after.status !== "published") return;
-    const clearanceChanged =
-      before.requiresClearance !== after.requiresClearance;
-    const approvalChanged = before.requiresApproval !== after.requiresApproval;
-    if (clearanceChanged || approvalChanged)
-      await SignupService.reevaluateForEvent(after);
-    if (clearanceChanged && after.requiresClearance)
-      await SignupService.lapseForEvent(after);
+  private static async recheckSignups(event: Doc<Event>) {
+    if (event.status !== "published") return;
+    await SignupService.reevaluateForEvent(event);
+    if (event.requiresClearance) await SignupService.lapseForEvent(event);
   }
 
   static async publish(

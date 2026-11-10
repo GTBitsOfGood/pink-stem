@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, mock } from "node:test";
 import mongoose, { Types } from "mongoose";
-import dbConnect from "@/db/dbConnect";
+import "@/db/dbConnect";
 import ClearanceDAO from "@/db/actions/clearance";
 import EventDAO from "@/db/actions/event";
 import ShiftDAO from "@/db/actions/shift";
@@ -21,25 +21,41 @@ import type { Role, User } from "@/types/user";
  * Mail is captured instead of sent; read it from the returned `sent` array.
  */
 export function setupTestDatabase(): { sent: OutgoingEmail[] } {
-  const base = (
-    process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017"
-  ).replace(/\/+$/, "");
-  process.env.MONGODB_URI = `${base}/pink-stem-test-${randomUUID().slice(0, 8)}`;
+  const uri = process.env.TEST_MONGODB_URI ?? "mongodb://127.0.0.1:27017";
+  // The database is chosen with `dbName`, never by editing the URI, so a
+  // database or options already in TEST_MONGODB_URI cannot redirect it.
+  const dbName = `pink-stem-test-${randomUUID().slice(0, 8)}`;
+  process.env.MONGODB_URI = uri;
   delete process.env.RESEND_API_KEY;
+
+  /** Refuses to touch anything but this run's own database. */
+  const assertTestDatabase = () => {
+    const connected = mongoose.connection.db?.databaseName;
+    if (connected !== dbName)
+      throw new Error(
+        `Refusing to clear "${connected}": it is not this test run's database`
+      );
+  };
 
   const sent: OutgoingEmail[] = [];
   before(async () => {
-    await dbConnect();
+    const conn = await mongoose.connect(uri, { dbName, bufferCommands: false });
+    // dbConnect reuses the cached connection instead of opening its own.
+    global.mongoose.conn = conn;
+    global.mongoose.promise = Promise.resolve(conn);
+    assertTestDatabase();
     mock.method(MailService, "send", async (email: OutgoingEmail) => {
       sent.push(email);
     });
   });
   beforeEach(async () => {
     sent.length = 0;
+    assertTestDatabase();
     const collections = await mongoose.connection.db!.collections();
     await Promise.all(collections.map((c) => c.deleteMany({})));
   });
   after(async () => {
+    assertTestDatabase();
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   });
