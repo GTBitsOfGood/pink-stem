@@ -56,6 +56,11 @@ export function setupTestDatabase(): { sent: OutgoingEmail[] } {
   });
   after(async () => {
     assertTestDatabase();
+    // Index builds run in the background; one finishing after the drop would
+    // quietly recreate the database, so let them settle first.
+    await Promise.all(
+      Object.values(mongoose.connection.models).map((m) => m.init())
+    );
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   });
