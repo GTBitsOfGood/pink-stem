@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Send } from "lucide-react";
 import { useProfile } from "@/components/hooks/useProfile";
 import Button from "@/components/ui/Button";
@@ -9,7 +8,7 @@ import { errorMessage, isRateLimited, useToast } from "@/components/ui/Toast";
 export default function ResendVerificationButton() {
   const { resendEmailVerification } = useProfile();
   const toast = useToast();
-  const [blocked, setBlocked] = useState(false);
+  const blocked = isRateLimited(resendEmailVerification.error);
 
   if (blocked) {
     return (
@@ -29,10 +28,9 @@ export default function ResendVerificationButton() {
       onClick={() =>
         resendEmailVerification.mutate(undefined, {
           onSuccess: () => toast("Verification link re-sent to your email."),
-          onError: (error) =>
-            isRateLimited(error)
-              ? setBlocked(true)
-              : toast(errorMessage(error), "error"),
+          onError: (error) => {
+            if (!isRateLimited(error)) toast(errorMessage(error), "error");
+          },
         })
       }
     >

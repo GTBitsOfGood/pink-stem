@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, Suspense } from "react";
-
+import { useSearchParams } from "next/navigation";
 import AuthCard from "@/components/auth/AuthCard";
 import { useFormValues } from "@/components/hooks/useFormValues";
 import Button from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { QUERY_KEYS } from "@/constants/queryKeys";
 import AuthHTTPClient from "@/http/authHTTPClient";
 
 function RegisterForm() {
+  const next = useSearchParams().get("next") ?? "/dashboard";
   const queryClient = useQueryClient();
   const register = useMutation({
     mutationFn: AuthHTTPClient.register,
@@ -60,10 +61,10 @@ function RegisterForm() {
           your email address — sign-ups stay pending until you do.
         </Alert>
         <Link
-          href="/dashboard"
+          href={next}
           className="mt-4 block text-center text-sm font-semibold text-brand-700 hover:underline"
         >
-          Continue to dashboard →
+          Continue →
         </Link>
       </AuthCard>
     );
