@@ -82,7 +82,7 @@ export default function PersonPage() {
               <Badge tone="danger">Inactive</Badge>
             ) : null}
             {u.flaggedForReviewAt ? (
-              <Badge tone="warning">Flagged for review</Badge>
+              <Badge tone="warning">Too many no-shows</Badge>
             ) : null}
           </span>
         }
@@ -440,11 +440,11 @@ export default function PersonPage() {
                         actions.updateUser.mutateAsync({
                           clearReviewFlag: true,
                         }),
-                      "Review flag cleared."
+                      "No-show flag cleared."
                     )
                   }
                 >
-                  Clear review flag
+                  Clear no-show flag
                 </Button>
               ) : null}
               <p className="text-[12px] text-ink-500">
