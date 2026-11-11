@@ -111,7 +111,10 @@ export default class JobService {
       for (const shift of shifts) {
         const event = events.find((e) => sameId(e._id, shift.eventId));
         if (!event || event.status !== "published") continue;
-        const details = NotificationService.eventDetails(event, shift);
+        // Reminders only go to confirmed sign-ups.
+        const details = NotificationService.eventDetails(event, shift, null, {
+          joinLink: true,
+        });
         const signups = await SignupDAO.find({
           shiftId: shift._id,
           status: "confirmed",

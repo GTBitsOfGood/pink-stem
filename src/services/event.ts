@@ -18,6 +18,7 @@ import {
   toDateInput,
   toDateTimeLocal,
 } from "@/lib/dates";
+import { withoutJoinLink, canSeeJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -120,7 +121,10 @@ export default class EventService {
     // Spot availability lives on shifts, so filter after the join. Upcoming
     // events number in the dozens, not thousands, which keeps this cheap.
     const { items } = await EventDAO.list(filter, { limit: 500 });
-    let withShifts = await EventService.attachShifts(items);
+    // Public listing: nobody here has been checked, so no join links.
+    let withShifts = (await EventService.attachShifts(items)).map(
+      withoutJoinLink
+    );
     if (filters.hasSpots) {
       withShifts = withShifts.filter((e) =>
         e.shifts.some((s) => s.filledCount < s.capacity)
@@ -153,8 +157,9 @@ export default class EventService {
       (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
+    const joinLink = manage || mySignups.some((s) => canSeeJoinLink(s.status));
     return {
-      ...withShifts,
+      ...(joinLink ? withShifts : withoutJoinLink(withShifts)),
       mySignups,
       waiverSigned: allMine.some((s) => s.waiverSignedAt),
       updates,

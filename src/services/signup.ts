@@ -16,6 +16,7 @@ import {
 import { isCleared } from "@/lib/clearance";
 import { addDays, ageOn } from "@/lib/dates";
 import { buildIcs } from "@/lib/ics";
+import { canSeeJoinLink, withoutJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
@@ -505,7 +506,9 @@ export default class SignupService {
     await ShiftDAO.adjustWaitlist(shift._id, -1);
 
     const org = await NotificationService.org();
-    const details = NotificationService.eventDetails(event, claimed);
+    const details = NotificationService.eventDetails(event, claimed, null, {
+      joinLink: canSeeJoinLink(status),
+    });
     await NotificationService.send(
       user,
       status === "confirmed"
@@ -820,7 +823,9 @@ export default class SignupService {
       NotificationService.org(),
       UserDAO.findById(event.organizerId),
     ]);
-    const details = NotificationService.eventDetails(event, shift, organizer);
+    const details = NotificationService.eventDetails(event, shift, organizer, {
+      joinLink: canSeeJoinLink(signup.status),
+    });
     const base = { name: user.firstName, event: details, role: shift.roleName };
     const content =
       signup.status === "confirmed"
@@ -858,7 +863,16 @@ export default class SignupService {
       .flatMap((signup) => {
         const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
         const event = events.find((e) => sameId(e._id, signup.eventId));
-        return shift && event ? [{ signup, shift, event }] : [];
+        if (!shift || !event) return [];
+        return [
+          {
+            signup,
+            shift,
+            event: canSeeJoinLink(signup.status)
+              ? event
+              : withoutJoinLink(event),
+          },
+        ];
       })
       .sort((a, b) => a.shift.startsAt.getTime() - b.shift.startsAt.getTime());
   }
@@ -902,7 +916,9 @@ export default class SignupService {
       EventDAO.findById(signup.eventId),
     ]);
     if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
-    const details = NotificationService.eventDetails(event, shift);
+    const details = NotificationService.eventDetails(event, shift, null, {
+      joinLink: canSeeJoinLink(signup.status),
+    });
     return buildIcs({
       uid: signup._id.toString(),
       title: `${event.title} – ${shift.roleName}`,
