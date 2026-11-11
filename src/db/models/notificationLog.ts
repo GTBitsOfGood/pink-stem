@@ -1,11 +1,21 @@
 import { Schema } from "mongoose";
 import { defineModel } from "@/db/defineModel";
-import { NotificationLog } from "@/types/notification";
+import {
+  MAIL_FAILURES,
+  NOTIFICATION_STATUSES,
+  NotificationLog,
+} from "@/types/notification";
 
 const notificationLogSchema = new Schema<NotificationLog>(
   {
     key: { type: String, required: true, unique: true },
-    sentAt: { type: Date, required: true },
+    status: { type: String, enum: NOTIFICATION_STATUSES },
+    claimedAt: { type: Date },
+    attempts: { type: Number },
+    sentAt: { type: Date },
+    failedAt: { type: Date },
+    failureKind: { type: String, enum: MAIL_FAILURES },
+    lastError: { type: String },
     expiresAt: { type: Date },
   },
   { timestamps: false }

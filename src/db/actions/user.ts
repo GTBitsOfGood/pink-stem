@@ -62,6 +62,15 @@ export default class UserDAO {
     return UserModel.findById(id).lean<Doc<SafeUser>>();
   }
 
+  /** Batched `findById`: full safe users, including notification preferences. */
+  static async findByIds(
+    ids: (string | Types.ObjectId)[]
+  ): Promise<Doc<SafeUser>[]> {
+    if (!ids.length) return [];
+    await dbConnect();
+    return UserModel.find({ _id: { $in: ids } }).lean<Doc<SafeUser>[]>();
+  }
+
   static async findByEmail(email: string): Promise<Doc<SafeUser> | null> {
     await dbConnect();
     return UserModel.findOne({ email: email.toLowerCase() }).lean<

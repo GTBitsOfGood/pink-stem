@@ -42,6 +42,12 @@ export const PAGE_SIZE = 25;
 export const JOB_LOCK_TTL_MS = 10 * 60_000;
 
 /**
+ * How long a keyed email stays claimed by a sender that never reported back.
+ * Past this, the sender is assumed dead and the next run sends it again.
+ */
+export const NOTIFICATION_CLAIM_TTL_MS = 15 * 60_000;
+
+/**
  * Rate limits, expressed as hits per fixed window. Login is limited per
  * account and address, so a neighbour's typos on a shared address do not lock
  * an account out. Looser ceilings per address stop enumeration and per

@@ -14,6 +14,7 @@ import {
   ROSTER_NUDGE_HOURS,
 } from "@/constants/limits";
 import { addHours, toDateInput } from "@/lib/dates";
+import { addCounts, emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import ClearanceService from "@/services/clearance";
 import EventUpdateService from "@/services/eventUpdate";
@@ -21,9 +22,17 @@ import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
 import ScreeningService from "@/services/screening";
 import SignupService from "@/services/signup";
+import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
+import type { Signup } from "@/types/signup";
 import { sameId } from "@/utils/authorization";
 
-type JobResult = { ok: true; count: number } | { ok: false; error: string };
+/**
+ * Every job reports the same shape. Email jobs count emails; jobs that send
+ * none count records: `sent` for each one acted on, `skipped` for each one
+ * looked at and left alone, `failed` for each one that could not be handled.
+ */
+type JobResult = ({ ok: true } & SendCounts) | { ok: false; error: string };
 
 const JOB_LOCK_KEY = "jobs:run:lock";
 
@@ -49,7 +58,7 @@ export default class JobService {
   }
 
   static async runAll(): Promise<Record<string, JobResult>> {
-    const jobs: Record<string, () => Promise<number>> = {
+    const jobs: Record<string, () => Promise<SendCounts>> = {
       // Repair counters before the jobs that read them.
       shiftCounters: JobService.reconcileShiftCounters,
       reminders: JobService.sendReminders,
@@ -68,7 +77,7 @@ export default class JobService {
     const results: Record<string, JobResult> = {};
     for (const [name, job] of Object.entries(jobs)) {
       try {
-        results[name] = { ok: true, count: await job() };
+        results[name] = { ok: true, ...(await job()) };
       } catch (error) {
         results[name] = {
           ok: false,
@@ -80,16 +89,20 @@ export default class JobService {
     return results;
   }
 
-  /** Repairs drifted shift counters and counts the shifts corrected. */
-  static async reconcileShiftCounters(): Promise<number> {
+  /** Repairs drifted shift counters: sent = corrected, failed = drifted but not corrected. */
+  static async reconcileShiftCounters(): Promise<SendCounts> {
     const drift = await SignupService.reconcileCounters({ correct: true });
-    return drift.filter((d) => d.corrected).length;
+    const corrected = drift.filter((d) => d.corrected).length;
+    return { sent: corrected, skipped: 0, failed: drift.length - corrected };
   }
 
-  /** 72h and 24h reminders to confirmed volunteers, each sent once. */
-  static async sendReminders(): Promise<number> {
+  /**
+   * 72h and 24h reminders to confirmed volunteers, each sent once. Looks up
+   * every sign-up, volunteer and the org settings once for the whole run.
+   */
+  static async sendReminders(): Promise<SendCounts> {
     const now = new Date();
-    let sent = 0;
+    const counts = emptyCounts();
     const windows = [
       {
         hours: REMINDER_HOURS[0],
@@ -102,25 +115,42 @@ export default class JobService {
         to: addHours(now, REMINDER_HOURS[1]),
       },
     ];
-    for (const window of windows) {
-      const shifts = await ShiftDAO.findStartingBetween(window.from, window.to);
-      if (!shifts.length) continue;
-      const events = await EventDAO.findByIds([
-        ...new Set(shifts.map((s) => s.eventId.toString())),
-      ]);
-      for (const shift of shifts) {
+    const shiftsByWindow = await Promise.all(
+      windows.map((w) => ShiftDAO.findStartingBetween(w.from, w.to))
+    );
+    const shifts = shiftsByWindow.flat();
+    if (!shifts.length) return counts;
+
+    const [events, signups, org] = await Promise.all([
+      EventDAO.findByIds([...new Set(shifts.map((s) => s.eventId.toString()))]),
+      SignupDAO.find({
+        shiftId: { $in: shifts.map((s) => s._id) },
+        status: "confirmed",
+      }),
+      NotificationService.org(),
+    ]);
+    const users = await UserDAO.findByIds([
+      ...new Set(signups.map((s) => s.volunteerId.toString())),
+    ]);
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+    const signupsByShift = new Map<string, Doc<Signup>[]>();
+    for (const signup of signups) {
+      const id = signup.shiftId.toString();
+      signupsByShift.set(id, [...(signupsByShift.get(id) ?? []), signup]);
+    }
+
+    for (const [i, window] of windows.entries()) {
+      for (const shift of shiftsByWindow[i]) {
         const event = events.find((e) => sameId(e._id, shift.eventId));
         if (!event || event.status !== "published") continue;
         const details = NotificationService.eventDetails(event, shift);
-        const signups = await SignupDAO.find({
-          shiftId: shift._id,
-          status: "confirmed",
-        });
-        for (const signup of signups) {
-          const user = await UserDAO.findById(signup.volunteerId);
-          if (!user) continue;
-          const org = await NotificationService.org();
-          const delivered = await NotificationService.send(
+        for (const signup of signupsByShift.get(shift._id.toString()) ?? []) {
+          const user = userById.get(signup.volunteerId.toString());
+          if (!user) {
+            counts.skipped += 1;
+            continue;
+          }
+          const outcome = await NotificationService.send(
             user,
             NotificationService.templates.reminder(org, {
               name: user.firstName,
@@ -133,15 +163,15 @@ export default class JobService {
               dedupeKey: `reminder:${window.hours}:${signup._id}`,
             }
           );
-          if (delivered) sent += 1;
+          counts[outcome] += 1;
         }
       }
     }
-    return sent;
+    return counts;
   }
 
   /** Shifts under minimum staffing at the 72-hour mark alert their organizer. */
-  static async lowFillAlerts(): Promise<number> {
+  static async lowFillAlerts(): Promise<SendCounts> {
     const now = new Date();
     const shifts = (
       await ShiftDAO.findStartingBetween(
@@ -149,18 +179,21 @@ export default class JobService {
         addHours(now, LOW_FILL_ALERT_HOURS)
       )
     ).filter((s) => s.filledCount < s.minStaffing);
-    if (!shifts.length) return 0;
+    const counts = emptyCounts();
+    if (!shifts.length) return counts;
     const events = await EventDAO.findByIds([
       ...new Set(shifts.map((s) => s.eventId.toString())),
     ]);
     const org = await NotificationService.org();
-    let sent = 0;
     for (const event of events) {
       if (event.status !== "published") continue;
       const organizer = await UserDAO.findById(event.organizerId);
-      if (!organizer) continue;
+      if (!organizer) {
+        counts.skipped += 1;
+        continue;
+      }
       const low = shifts.filter((s) => sameId(s.eventId, event._id));
-      const delivered = await NotificationService.send(
+      const outcome = await NotificationService.send(
         organizer,
         NotificationService.templates.lowFill(org, {
           name: organizer.firstName,
@@ -176,22 +209,22 @@ export default class JobService {
           dedupeKey: `low-fill:${event._id}:${low.map((s) => s._id).join(",")}`,
         }
       );
-      if (delivered) sent += 1;
+      counts[outcome] += 1;
     }
-    return sent;
+    return counts;
   }
 
   /** Unapproved rosters: organizer at 24h and 72h after the last shift, admins at 7 days. */
-  static async rosterNudges(): Promise<number> {
+  static async rosterNudges(): Promise<SendCounts> {
     const now = new Date();
     const events = await EventDAO.findAll({
       status: "published",
       eventDate: { $lt: now },
     });
-    if (!events.length) return 0;
+    const counts = emptyCounts();
+    if (!events.length) return counts;
     const shifts = await ShiftDAO.findByEvents(events.map((e) => e._id));
     const org = await NotificationService.org();
-    let sent = 0;
 
     for (const event of events) {
       const ends = shifts
@@ -207,7 +240,7 @@ export default class JobService {
 
       for (const stage of ROSTER_NUDGE_HOURS) {
         if (hoursSince < stage || !organizer) continue;
-        const delivered = await NotificationService.send(
+        const outcome = await NotificationService.send(
           organizer,
           NotificationService.templates.rosterNudge(org, {
             name: organizer.firstName,
@@ -217,10 +250,10 @@ export default class JobService {
           }),
           { dedupeKey: `roster-nudge:${stage}:${event._id}` }
         );
-        if (delivered) sent += 1;
+        counts[outcome] += 1;
       }
       if (hoursSince >= ROSTER_ADMIN_ESCALATION_DAYS * 24) {
-        await NotificationService.toAdmins(
+        const escalated = await NotificationService.toAdmins(
           (o, admin) =>
             NotificationService.templates.rosterEscalation(o, {
               name: admin.firstName,
@@ -230,15 +263,17 @@ export default class JobService {
                 : "a former organizer",
               url,
             }),
-          `roster-escalation:${event._id}`
+          `roster-escalation:${event._id}`,
+          org
         );
+        addCounts(counts, escalated);
       }
     }
-    return sent;
+    return counts;
   }
 
   /** Once a day per organizer: roster changes, low fill, unapproved rosters, unanswered messages. */
-  static async organizerDigest(): Promise<number> {
+  static async organizerDigest(): Promise<SendCounts> {
     const now = new Date();
     const dayAgo = addHours(now, -24);
     const staff = [
@@ -246,7 +281,7 @@ export default class JobService {
       ...(await UserDAO.listByRole("admin")),
     ];
     const org = await NotificationService.org();
-    let sent = 0;
+    const counts = emptyCounts();
 
     for (const organizer of staff) {
       const events = await EventDAO.findAll({
@@ -331,7 +366,7 @@ export default class JobService {
         });
       if (!sections.length) continue;
 
-      const delivered = await NotificationService.send(
+      const outcome = await NotificationService.send(
         organizer,
         NotificationService.templates.organizerDigest(org, {
           name: organizer.firstName,
@@ -343,8 +378,8 @@ export default class JobService {
           dedupeKey: `organizer-digest:${organizer._id}:${toDateInput(now)}`,
         }
       );
-      if (delivered) sent += 1;
+      counts[outcome] += 1;
     }
-    return sent;
+    return counts;
   }
 }
