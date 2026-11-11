@@ -14,6 +14,8 @@ export const ADULT_AGE = 18;
 export const REMINDER_HOURS = [72, 24] as const;
 /** Notes on an event are emailed as one digest at most this often. */
 export const NOTE_DIGEST_INTERVAL_HOURS = 24;
+/** How long a failed note digest email keeps being retried. */
+export const NOTE_DIGEST_RETRY_DAYS = 7;
 export const LOW_FILL_ALERT_HOURS = 72;
 export const ROSTER_NUDGE_HOURS = [24, 72] as const;
 export const ROSTER_ADMIN_ESCALATION_DAYS = 7;

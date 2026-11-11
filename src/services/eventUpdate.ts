@@ -3,7 +3,11 @@ import EventUpdateDAO from "@/db/actions/eventUpdate";
 import EventDAO from "@/db/actions/event";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
-import { NOTE_DIGEST_INTERVAL_HOURS } from "@/constants/limits";
+import NotificationLogDAO from "@/db/actions/notificationLog";
+import {
+  NOTE_DIGEST_INTERVAL_HOURS,
+  NOTE_DIGEST_RETRY_DAYS,
+} from "@/constants/limits";
 import { addHours } from "@/lib/dates";
 import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
@@ -20,6 +24,15 @@ import {
   editUpdateSchema,
   eventUpdateInputSchema,
 } from "@/utils/validation/event";
+
+type Batch = {
+  eventId: Types.ObjectId;
+  at: Date;
+  notes: Doc<EventUpdate>[];
+};
+
+/** `note-digest:<eventId>:<batch ISO time>:<userId>`; the time has colons in it. */
+const DIGEST_KEY = /^note-digest:([0-9a-f]{24}):(.+):([0-9a-f]{24})$/;
 
 /**
  * Short posts attached to an event. Notes collect into a daily digest;
@@ -169,33 +182,47 @@ export default class EventUpdateService {
    * job runs hourly. A digest is a batch: its notes are marked notified with
    * one timestamp before anything is sent, and each recipient's email is
    * keyed on that timestamp. Until the interval passes, every run re-sends
-   * the batch to anyone whose email failed or was never attempted (a crash
-   * mid-run), and new notes wait for the next batch.
+   * the batch to anyone not yet sent it (a failure, or a crash mid-run), and
+   * new notes wait for the next batch. After that, a recipient whose email
+   * failed is still retried until it goes out.
    */
   static async sendNoteDigest(): Promise<SendCounts> {
     const now = new Date();
-    const [pending, recent] = await Promise.all([
+    const [pending, recent, failedKeys] = await Promise.all([
       EventUpdateDAO.findUnnotifiedNotes(),
       EventUpdateDAO.findNotesNotifiedSince(
         addHours(now, -NOTE_DIGEST_INTERVAL_HOURS)
       ),
+      NotificationLogDAO.findFailedKeys(
+        "note-digest:",
+        addHours(now, -NOTE_DIGEST_RETRY_DAYS * 24)
+      ),
     ]);
     const counts = emptyCounts();
 
-    // Each event's latest batch within the interval.
-    const batches = new Map<string, { at: Date; notes: Doc<EventUpdate>[] }>();
+    // Each event's latest batch within the interval, deleted notes included
+    // so deleting a sent digest's notes does not let another go out early.
+    const batches = new Map<string, Batch>();
     for (const note of recent) {
       const id = note.eventId.toString();
       const at = note.notifiedAt!;
       const batch = batches.get(id);
-      if (!batch || at > batch.at) batches.set(id, { at, notes: [note] });
+      if (!batch || at > batch.at)
+        batches.set(id, { eventId: note.eventId, at, notes: [note] });
       else if (+at === +batch.at) batch.notes.push(note);
     }
+    for (const batch of batches.values())
+      batch.notes = batch.notes.filter((n) => !n.deletedAt);
+
     // Events with new notes and no batch in the interval start one now.
     const started = pending.filter((n) => !batches.has(n.eventId.toString()));
     for (const note of started) {
       const id = note.eventId.toString();
-      const batch = batches.get(id) ?? { at: now, notes: [] };
+      const batch = batches.get(id) ?? {
+        eventId: note.eventId,
+        at: now,
+        notes: [],
+      };
       batch.notes.push(note);
       batches.set(id, batch);
     }
@@ -204,24 +231,58 @@ export default class EventUpdateService {
         started.map((n) => n._id),
         now
       );
-    if (!batches.size) return counts;
 
+    // Older batches go only to the recipients whose email failed.
+    const older = new Map<string, Batch & { userIds: Set<string> }>();
+    for (const key of failedKeys) {
+      const match = DIGEST_KEY.exec(key);
+      if (!match) continue;
+      const [, eventId, iso, userId] = match;
+      if (batches.get(eventId)?.at.toISOString() === iso) continue;
+      const batch = older.get(`${eventId}:${iso}`) ?? {
+        eventId: new Types.ObjectId(eventId),
+        at: new Date(iso),
+        notes: [],
+        userIds: new Set<string>(),
+      };
+      batch.userIds.add(userId);
+      older.set(`${eventId}:${iso}`, batch);
+    }
+    const olderNotes = await EventUpdateDAO.findNotesInBatches([
+      ...older.values(),
+    ]);
+    for (const batch of older.values())
+      batch.notes = olderNotes.filter(
+        (n) => sameId(n.eventId, batch.eventId) && +n.notifiedAt! === +batch.at
+      );
+
+    const all = [
+      ...[...batches.values()].map((b) => ({ ...b, userIds: null })),
+      ...older.values(),
+    ].filter((b) => b.notes.length);
+    if (!all.length) return counts;
+
+    const eventIds = [...new Set(all.map((b) => b.eventId.toString()))];
     const [events, org] = await Promise.all([
-      EventDAO.findByIds([...batches.keys()]),
+      EventDAO.findByIds(eventIds),
       NotificationService.org(),
     ]);
-    for (const event of events) {
-      if (event.status !== "published") continue;
-      const batch = batches.get(event._id.toString())!;
+    for (const batch of all) {
+      const event = events.find((e) => sameId(e._id, batch.eventId));
+      if (!event || event.status !== "published") continue;
       const notes = await EventUpdateService.withAuthors(batch.notes);
-      // Only volunteers who were on the event when the batch went out.
+      // Only volunteers still on the event who were on it when the batch went out.
       const signups = (
         await SignupDAO.findByEvent(event._id, [
           "pending",
           "confirmed",
           "waitlisted",
         ])
-      ).filter((s) => s.signedUpAt <= batch.at);
+      ).filter(
+        (s) =>
+          s.signedUpAt <= batch.at &&
+          (!batch.userIds || batch.userIds.has(s.volunteerId.toString()))
+      );
       const users = await UserDAO.findByIds([
         ...new Set(signups.map((s) => s.volunteerId.toString())),
       ]);

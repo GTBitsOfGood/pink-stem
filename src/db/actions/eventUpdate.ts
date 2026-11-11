@@ -62,15 +62,30 @@ export default class EventUpdateDAO {
       .lean<Doc<EventUpdate>[]>();
   }
 
-  /** Notes sent out in a digest at or after `since`, oldest first. */
+  /**
+   * Notes sent out in a digest at or after `since`, oldest first. Deleted
+   * notes are included: a digest that went out still counts toward the
+   * digest interval after its notes are deleted.
+   */
   static async findNotesNotifiedSince(
     since: Date
   ): Promise<Doc<EventUpdate>[]> {
     await dbConnect();
+    return EventUpdateModel.find({ kind: "note", notifiedAt: { $gte: since } })
+      .sort({ postedAt: 1 })
+      .lean<Doc<EventUpdate>[]>();
+  }
+
+  /** The undeleted notes of the given digest batches, oldest first. */
+  static async findNotesInBatches(
+    batches: { eventId: Types.ObjectId; at: Date }[]
+  ): Promise<Doc<EventUpdate>[]> {
+    if (!batches.length) return [];
+    await dbConnect();
     return EventUpdateModel.find({
       kind: "note",
-      notifiedAt: { $gte: since },
       deletedAt: null,
+      $or: batches.map((b) => ({ eventId: b.eventId, notifiedAt: b.at })),
     })
       .sort({ postedAt: 1 })
       .lean<Doc<EventUpdate>[]>();
