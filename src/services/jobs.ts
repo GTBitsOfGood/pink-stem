@@ -22,6 +22,7 @@ import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
 import ScreeningService from "@/services/screening";
 import SignupService from "@/services/signup";
+import type { Shift } from "@/types/event";
 import type { Doc } from "@/types/models";
 import type { SendCounts } from "@/types/notification";
 import type { Signup } from "@/types/signup";
@@ -136,7 +137,9 @@ export default class JobService {
     const signupsByShift = new Map<string, Doc<Signup>[]>();
     for (const signup of signups) {
       const id = signup.shiftId.toString();
-      signupsByShift.set(id, [...(signupsByShift.get(id) ?? []), signup]);
+      const grouped = signupsByShift.get(id);
+      if (grouped) grouped.push(signup);
+      else signupsByShift.set(id, [signup]);
     }
 
     for (const [i, window] of windows.entries()) {
@@ -170,29 +173,66 @@ export default class JobService {
     return counts;
   }
 
-  /** Shifts under minimum staffing at the 72-hour mark alert their organizer. */
+  /**
+   * Shifts under minimum staffing at the 72-hour mark alert their organizer.
+   * An alert that failed is retried for as long as its shifts are still
+   * upcoming and under-staffed, even after they leave the 48-72 hour window.
+   */
   static async lowFillAlerts(): Promise<SendCounts> {
     const now = new Date();
-    const shifts = (
+    const isLow = (s: Doc<Shift>) => s.filledCount < s.minStaffing;
+    const keyFor = (eventId: Types.ObjectId, shifts: Doc<Shift>[]) =>
+      `low-fill:${eventId}:${shifts.map((s) => s._id).join(",")}`;
+    const shiftIdsOf = (key: string) => key.split(":")[2]?.split(",") ?? [];
+
+    // One alert per event, keyed by the event and its low shifts.
+    const alerts = new Map<string, Doc<Shift>[]>();
+    const inWindow = (
       await ShiftDAO.findStartingBetween(
         addHours(now, LOW_FILL_ALERT_HOURS - 24),
         addHours(now, LOW_FILL_ALERT_HOURS)
       )
-    ).filter((s) => s.filledCount < s.minStaffing);
+    ).filter(isLow);
+    for (const eventId of new Set(inWindow.map((s) => s.eventId.toString()))) {
+      const low = inWindow.filter((s) => s.eventId.toString() === eventId);
+      alerts.set(keyFor(low[0].eventId, low), low);
+    }
+
+    const retry = (
+      await NotificationLogDAO.findFailedKeys(
+        "low-fill:",
+        addHours(now, -LOW_FILL_ALERT_HOURS)
+      )
+    ).filter((key) => !alerts.has(key));
+    if (retry.length) {
+      const shifts = await ShiftDAO.findByIds(retry.flatMap(shiftIdsOf));
+      for (const key of retry) {
+        const ids = shiftIdsOf(key);
+        const low = shifts.filter(
+          (s) => ids.includes(s._id.toString()) && s.startsAt > now && isLow(s)
+        );
+        if (low.length) alerts.set(key, low);
+      }
+    }
+
     const counts = emptyCounts();
-    if (!shifts.length) return counts;
-    const events = await EventDAO.findByIds([
-      ...new Set(shifts.map((s) => s.eventId.toString())),
+    if (!alerts.size) return counts;
+    const [events, org] = await Promise.all([
+      EventDAO.findByIds([
+        ...new Set(
+          [...alerts.values()].map((low) => low[0].eventId.toString())
+        ),
+      ]),
+      NotificationService.org(),
     ]);
-    const org = await NotificationService.org();
-    for (const event of events) {
-      if (event.status !== "published") continue;
+    for (const [key, low] of alerts) {
+      const event = events.find((e) => sameId(e._id, low[0].eventId));
+      if (!event || event.status !== "published") continue;
       const organizer = await UserDAO.findById(event.organizerId);
       if (!organizer) {
         counts.skipped += 1;
         continue;
       }
-      const low = shifts.filter((s) => sameId(s.eventId, event._id));
       const outcome = await NotificationService.send(
         organizer,
         NotificationService.templates.lowFill(org, {
@@ -205,9 +245,7 @@ export default class JobService {
             min: s.minStaffing,
           })),
         }),
-        {
-          dedupeKey: `low-fill:${event._id}:${low.map((s) => s._id).join(",")}`,
-        }
+        { dedupeKey: key }
       );
       counts[outcome] += 1;
     }

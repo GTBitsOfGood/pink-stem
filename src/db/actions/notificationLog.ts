@@ -2,6 +2,7 @@ import { mongo } from "mongoose";
 import { NOTIFICATION_CLAIM_TTL_MS } from "@/constants/limits";
 import dbConnect from "@/db/dbConnect";
 import { ensureIndexes } from "@/db/defineModel";
+import { escapeRegex } from "@/lib/utils";
 import NotificationLogModel from "@/db/models/notificationLog";
 import type { MailFailure } from "@/types/notification";
 
@@ -53,6 +54,23 @@ export default class NotificationLogDAO {
       if (isDuplicateKey(error)) return null;
       throw error;
     }
+  }
+
+  /**
+   * Keys starting with `prefix` that failed at or after `since`. For jobs
+   * whose time window moves on, so a failed email can be retried after the
+   * thing it is about has left the window.
+   */
+  static async findFailedKeys(prefix: string, since: Date): Promise<string[]> {
+    await dbConnect();
+    const rows = await NotificationLogModel.find({
+      key: { $regex: `^${escapeRegex(prefix)}` },
+      status: "failed",
+      failedAt: { $gte: since },
+    })
+      .select("key")
+      .lean<{ key: string }[]>();
+    return rows.map((r) => r.key);
   }
 
   /** Records the send, if this holder's claim is still the current one. */
