@@ -30,7 +30,11 @@ export default async function dbConnect(): Promise<Mongoose> {
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI, { bufferCommands: false });
+    // Keep Mongoose's default command buffering. Models build their indexes
+    // as soon as they are first imported, and on a cold start that can happen
+    // while this connection is still opening. Without buffering, that build
+    // fails instead of waiting, and the first request after a restart errors.
+    cached.promise = mongoose.connect(MONGODB_URI);
   }
 
   try {
