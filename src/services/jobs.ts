@@ -13,7 +13,7 @@ import {
   ROSTER_ADMIN_ESCALATION_DAYS,
   ROSTER_NUDGE_HOURS,
 } from "@/constants/limits";
-import { addHours, toDateInput } from "@/lib/dates";
+import { addHours, calendarDaysBetween, toDateInput } from "@/lib/dates";
 import { addCounts, emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import ClearanceService from "@/services/clearance";
@@ -159,7 +159,7 @@ export default class JobService {
               name: user.firstName,
               event: details,
               role: shift.roleName,
-              hoursOut: window.hours,
+              daysOut: calendarDaysBetween(now, shift.startsAt),
             }),
             {
               category: "reminders",

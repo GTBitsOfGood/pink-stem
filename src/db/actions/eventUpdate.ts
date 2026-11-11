@@ -62,6 +62,20 @@ export default class EventUpdateDAO {
       .lean<Doc<EventUpdate>[]>();
   }
 
+  /** Notes sent out in a digest at or after `since`, oldest first. */
+  static async findNotesNotifiedSince(
+    since: Date
+  ): Promise<Doc<EventUpdate>[]> {
+    await dbConnect();
+    return EventUpdateModel.find({
+      kind: "note",
+      notifiedAt: { $gte: since },
+      deletedAt: null,
+    })
+      .sort({ postedAt: 1 })
+      .lean<Doc<EventUpdate>[]>();
+  }
+
   static async markNotified(ids: Types.ObjectId[], at: Date): Promise<void> {
     await dbConnect();
     await EventUpdateModel.updateMany(

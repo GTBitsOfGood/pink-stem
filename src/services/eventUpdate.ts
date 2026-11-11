@@ -3,6 +3,9 @@ import EventUpdateDAO from "@/db/actions/eventUpdate";
 import EventDAO from "@/db/actions/event";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
+import { NOTE_DIGEST_INTERVAL_HOURS } from "@/constants/limits";
+import { addHours } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import NotificationService from "@/services/notification";
 import type { UpdateWithAuthor } from "@/types/api";
@@ -17,7 +20,6 @@ import {
   editUpdateSchema,
   eventUpdateInputSchema,
 } from "@/utils/validation/event";
-import { emptyCounts } from "@/lib/sendCounts";
 
 /**
  * Short posts attached to an event. Notes collect into a daily digest;
@@ -162,25 +164,64 @@ export default class EventUpdateService {
     });
   }
 
-  /** Scheduled daily: one email per event per volunteer with every new note. */
+  /**
+   * At most one digest per event per NOTE_DIGEST_INTERVAL_HOURS, though the
+   * job runs hourly. A digest is a batch: its notes are marked notified with
+   * one timestamp before anything is sent, and each recipient's email is
+   * keyed on that timestamp. Until the interval passes, every run re-sends
+   * the batch to anyone whose email failed or was never attempted (a crash
+   * mid-run), and new notes wait for the next batch.
+   */
   static async sendNoteDigest(): Promise<SendCounts> {
-    const notes = await EventUpdateDAO.findUnnotifiedNotes();
+    const now = new Date();
+    const [pending, recent] = await Promise.all([
+      EventUpdateDAO.findUnnotifiedNotes(),
+      EventUpdateDAO.findNotesNotifiedSince(
+        addHours(now, -NOTE_DIGEST_INTERVAL_HOURS)
+      ),
+    ]);
     const counts = emptyCounts();
-    if (!notes.length) return counts;
-    const eventIds = [...new Set(notes.map((n) => n.eventId.toString()))];
-    const events = await EventDAO.findByIds(eventIds);
-    const org = await NotificationService.org();
 
+    // Each event's latest batch within the interval.
+    const batches = new Map<string, { at: Date; notes: Doc<EventUpdate>[] }>();
+    for (const note of recent) {
+      const id = note.eventId.toString();
+      const at = note.notifiedAt!;
+      const batch = batches.get(id);
+      if (!batch || at > batch.at) batches.set(id, { at, notes: [note] });
+      else if (+at === +batch.at) batch.notes.push(note);
+    }
+    // Events with new notes and no batch in the interval start one now.
+    const started = pending.filter((n) => !batches.has(n.eventId.toString()));
+    for (const note of started) {
+      const id = note.eventId.toString();
+      const batch = batches.get(id) ?? { at: now, notes: [] };
+      batch.notes.push(note);
+      batches.set(id, batch);
+    }
+    if (started.length)
+      await EventUpdateDAO.markNotified(
+        started.map((n) => n._id),
+        now
+      );
+    if (!batches.size) return counts;
+
+    const [events, org] = await Promise.all([
+      EventDAO.findByIds([...batches.keys()]),
+      NotificationService.org(),
+    ]);
     for (const event of events) {
       if (event.status !== "published") continue;
-      const eventNotes = await EventUpdateService.withAuthors(
-        notes.filter((n) => sameId(n.eventId, event._id))
-      );
-      const signups = await SignupDAO.findByEvent(event._id, [
-        "pending",
-        "confirmed",
-        "waitlisted",
-      ]);
+      const batch = batches.get(event._id.toString())!;
+      const notes = await EventUpdateService.withAuthors(batch.notes);
+      // Only volunteers who were on the event when the batch went out.
+      const signups = (
+        await SignupDAO.findByEvent(event._id, [
+          "pending",
+          "confirmed",
+          "waitlisted",
+        ])
+      ).filter((s) => s.signedUpAt <= batch.at);
       const users = await UserDAO.findByIds([
         ...new Set(signups.map((s) => s.volunteerId.toString())),
       ]);
@@ -191,20 +232,16 @@ export default class EventUpdateService {
             name: user.firstName,
             eventTitle: event.title,
             url: appUrl(`/events/${event._id}`),
-            notes: eventNotes.map((n) => ({
-              author: n.authorName,
-              body: n.body,
-            })),
+            notes: notes.map((n) => ({ author: n.authorName, body: n.body })),
           }),
-          { category: "updates" }
+          {
+            category: "updates",
+            dedupeKey: `note-digest:${event._id}:${batch.at.toISOString()}:${user._id}`,
+          }
         );
         counts[outcome] += 1;
       }
     }
-    await EventUpdateDAO.markNotified(
-      notes.map((n) => n._id),
-      new Date()
-    );
     return counts;
   }
 }

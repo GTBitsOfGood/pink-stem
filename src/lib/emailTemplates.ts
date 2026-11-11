@@ -214,19 +214,27 @@ export const emailTemplates = {
 
   reminder: (
     org: Org,
-    p: { name: string; event: EventDetails; role: string; hoursOut: number }
-  ) =>
-    build(
+    /** Calendar days until the shift in the org zone; 0 is today. */
+    p: { name: string; event: EventDetails; role: string; daysOut: number }
+  ) => {
+    const when =
+      p.daysOut <= 0
+        ? "today"
+        : p.daysOut === 1
+          ? "tomorrow"
+          : `in ${p.daysOut} days`;
+    return build(
       org,
-      `${p.hoursOut === 24 ? "Tomorrow" : "In three days"}: ${p.event.title}`,
-      `Your shift is ${p.hoursOut === 24 ? "tomorrow" : "in three days"}`,
+      `${when[0].toUpperCase()}${when.slice(1)}: ${p.event.title}`,
+      `Your shift is ${when}`,
       `Hi ${p.name},\n\nA reminder that you are confirmed as ${p.role}. Please arrive a few minutes early and check in with the site contact.`,
       {
         event: p.event,
         cta: { label: "View your shift", url: p.event.url },
         footerNote: PREFS_NOTE,
       }
-    ),
+    );
+  },
 
   importantChange: (
     org: Org,
@@ -363,6 +371,18 @@ export const emailTemplates = {
       "Time to renew your clearance",
       `Hi ${p.name},\n\nYour background screening clearance expires on ${p.expiresOn}. Once it lapses, confirmed spots on events that require clearance go on hold. Contact Pink STEM staff to renew before then.`,
       { cta: { label: "View your profile", url: p.url } }
+    ),
+
+  clearanceExpiringAdmin: (
+    org: Org,
+    p: { name: string; volunteerName: string; expiresOn: string; url: string }
+  ) =>
+    build(
+      org,
+      `Clearance expiring: ${p.volunteerName}`,
+      `${p.volunteerName}'s clearance expires soon`,
+      `Hi ${p.name},\n\n${p.volunteerName}'s background screening clearance expires on ${p.expiresOn}. Once it lapses, their confirmed spots on events that require clearance go on hold. They have been emailed a reminder to renew.`,
+      { cta: { label: "View their record", url: p.url } }
     ),
 
   clearanceRecorded: (

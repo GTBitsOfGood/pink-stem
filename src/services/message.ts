@@ -312,17 +312,22 @@ export default class MessageService {
     if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
     if (!MessageService.isParticipant(actor, thread))
       throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
-    if (thread.status !== "open")
-      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
     return MessageService.deliver(actor, thread, body);
   }
 
+  /**
+   * The one place a message is posted, so a closed thread is refused however
+   * it was reached: a reply, a new conversation that resolves to the same
+   * thread, or a broadcast.
+   */
   private static async deliver(
     actor: Actor,
     thread: Doc<MessageThread>,
     body: string,
     event?: Doc<Event> | null
   ) {
+    if (thread.status !== "open")
+      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
     const recent = await MessageDAO.countBySenderSince(
       actor.id,
       new Date(Date.now() - HOUR)
