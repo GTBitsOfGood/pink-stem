@@ -679,10 +679,17 @@ export default class SignupService {
     return drift;
   }
 
-  /** Pending sign-ups on an event whose requirements changed, re-checked and confirmed if nothing blocks them now. */
+  /** Pending sign-ups on upcoming shifts of an event whose requirements changed, re-checked and confirmed if nothing blocks them now. */
   static async reevaluateForEvent(event: Doc<Event>): Promise<void> {
-    const pending = await SignupDAO.findByEvent(event._id, ["pending"]);
-    for (const signup of pending) await SignupService.reevaluate(signup);
+    const [pending, shifts] = await Promise.all([
+      SignupDAO.findByEvent(event._id, ["pending"]),
+      ShiftDAO.findByEvent(event._id),
+    ]);
+    const now = new Date();
+    for (const signup of pending) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      if (shift && shift.startsAt > now) await SignupService.reevaluate(signup);
+    }
   }
 
   /**

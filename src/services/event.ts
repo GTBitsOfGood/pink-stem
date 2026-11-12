@@ -344,9 +344,9 @@ export default class EventService {
   }
 
   /**
-   * Refuses to raise the minimum age past someone already signed up, judged
-   * on their shift's (possibly moved) day. Other edits are never blocked by
-   * an older sign-up.
+   * Refuses to raise the minimum age past someone signed up for an upcoming
+   * shift, judged on that shift's (possibly moved) day. Other edits are never
+   * blocked by an older sign-up.
    */
   private static async assertMinAgeFits(
     event: Doc<Event>,
@@ -365,12 +365,13 @@ export default class EventService {
       )
     );
     const under = new Set<string>();
+    const now = new Date();
     for (const signup of signups) {
       const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
       const volunteer = volunteers.find(
         (v) => v && sameId(v._id, signup.volunteerId)
       );
-      if (!shift || !volunteer) continue;
+      if (!shift || !volunteer || shift.startsAt <= now) continue;
       if (
         !volunteer.dateOfBirth ||
         ageOn(volunteer.dateOfBirth, shift.startsAt) < minAge
