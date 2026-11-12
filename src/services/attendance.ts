@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
+import HoursLedgerDAO from "@/db/actions/hoursLedger";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
@@ -104,52 +105,110 @@ export default class AttendanceService {
       NotificationService.org(),
     ]);
 
+    // No-shows are finalized immediately; attended signups stay as "confirmed"
+    // until their certificate is committed so a retry can resume from here if
+    // issuance fails partway through.
     for (const signup of confirmed) {
       const attendance = signup.attendance!;
-      const attended = attendance.status === "attended";
-      await SignupDAO.updateById(signup._id, {
-        status: attended ? "attended" : "no_show",
-      });
-      if (!attended) {
-        await AttendanceService.reviewNoShows(
-          actor,
-          signup.volunteerId,
-          settings.noShowThreshold,
-          settings.noShowWindowDays
-        );
-        continue;
-      }
-      totalHours += attendance.hours;
-      await HoursService.post({
-        volunteerId: signup.volunteerId,
-        eventId: event._id,
-        signupId: signup._id,
-        hours: attendance.hours,
-        approvedBy: approver,
-        approvedAt: now,
-        reason: attendance.adjustmentReason,
-      });
-      const volunteer = volunteers.find((v) =>
-        sameId(v._id, signup.volunteerId)
+      if (attendance.status === "attended") continue;
+      await SignupDAO.updateById(signup._id, { status: "no_show" });
+      await AttendanceService.reviewNoShows(
+        actor,
+        signup.volunteerId,
+        settings.noShowThreshold,
+        settings.noShowWindowDays
       );
-      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
-      if (!volunteer || !shift) continue;
+    }
+
+    // Group attended signups by volunteer so each volunteer gets one
+    // certificate and one notification covering all their shifts at this event.
+    const attendedByVolunteer = new Map<string, typeof confirmed>();
+    for (const signup of confirmed) {
+      if (signup.attendance?.status !== "attended") continue;
+      const key = signup.volunteerId.toString();
+      const group = attendedByVolunteer.get(key) ?? [];
+      group.push(signup);
+      attendedByVolunteer.set(key, group);
+    }
+
+    // Issue all certificates before sending any notifications so a failed email
+    // cannot prevent a subsequent volunteer from receiving their certificate.
+    type NotificationPayload = {
+      volunteer: (typeof volunteers)[number];
+      firstShift: (typeof shifts)[number];
+      eventHours: number;
+    };
+    const notifications: NotificationPayload[] = [];
+
+    for (const group of attendedByVolunteer.values()) {
+      const volunteer = volunteers.find((v) =>
+        sameId(v._id, group[0].volunteerId)
+      );
+      if (!volunteer) continue;
+      const eventHours = group.reduce((sum, s) => sum + s.attendance!.hours, 0);
+      const roles =
+        [
+          ...new Set(
+            group
+              .map(
+                (s) => shifts.find((sh) => sameId(sh._id, s.shiftId))?.roleName
+              )
+              .filter((r): r is string => !!r)
+          ),
+        ].join(", ") || "Volunteer";
+
+      // A retry after a failed issuance must not post the same signup twice.
+      const posted = await HoursLedgerDAO.findByVolunteerAndEvent(
+        volunteer._id,
+        event._id
+      );
+      for (const signup of group) {
+        totalHours += signup.attendance!.hours;
+        if (posted.some((e) => sameId(e.signupId, signup._id))) continue;
+        await HoursService.post({
+          volunteerId: signup.volunteerId,
+          eventId: event._id,
+          signupId: signup._id,
+          hours: signup.attendance!.hours,
+          approvedBy: approver,
+          approvedAt: now,
+          reason: signup.attendance!.adjustmentReason,
+        });
+      }
+
       await CertificateService.issueEventCertificate(
         volunteer,
         event,
-        shift.roleName,
-        attendance.hours,
+        roles,
+        eventHours,
         actor
       );
-      await NotificationService.send(
-        volunteer,
-        NotificationService.templates.hoursApproved(org, {
-          name: volunteer.firstName,
-          event: NotificationService.eventDetails(event, shift),
-          hours: formatHours(attendance.hours),
-          certificateUrl: appUrl("/hours"),
-        })
-      );
+
+      // Mark attended only after certificate is committed so a failed
+      // issuance leaves signups as "confirmed" and the roster can be retried.
+      for (const signup of group) {
+        await SignupDAO.updateById(signup._id, { status: "attended" });
+      }
+
+      const firstShift = shifts.find((s) => sameId(s._id, group[0].shiftId));
+      if (!firstShift) continue;
+      notifications.push({ volunteer, firstShift, eventHours });
+    }
+
+    for (const { volunteer, firstShift, eventHours } of notifications) {
+      try {
+        await NotificationService.send(
+          volunteer,
+          NotificationService.templates.hoursApproved(org, {
+            name: volunteer.firstName,
+            event: NotificationService.eventDetails(event, firstShift),
+            hours: formatHours(eventHours),
+            certificateUrl: appUrl("/hours"),
+          })
+        );
+      } catch {
+        // Email failure is non-fatal; certificate is already committed.
+      }
     }
 
     // Whoever never reached confirmed is quietly closed out with the event.

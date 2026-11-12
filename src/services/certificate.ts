@@ -257,7 +257,7 @@ export default class CertificateService {
     return revoked;
   }
 
-  /** After an hours correction: revoke every certificate covering the event and issue replacements. */
+  /** After an hours correction: revoke every certificate covering the event and issue one replacement per type. */
   static async reissueAfterAdjustment(
     volunteer: Doc<SafeUser>,
     event: Doc<Event>,
@@ -269,47 +269,88 @@ export default class CertificateService {
     );
     if (!affected.length) return;
 
-    for (const old of affected) {
-      const revoked = await CertificateService.revoke(
-        admin,
-        old._id.toString(),
-        { reason: "Hours corrected; replacement issued" }
+    const eventCerts = affected.filter((c) => c.type === "event");
+    const serviceRecordPeriods = [
+      ...new Map(
+        affected
+          .filter((c) => c.type === "service_record")
+          .map((c) => [
+            `${c.periodStart.getTime()}-${c.periodEnd.getTime()}`,
+            { periodStart: c.periodStart, periodEnd: c.periodEnd },
+          ])
+      ).values(),
+    ];
+
+    // Issue all replacements before revoking so the volunteer is never left
+    // with zero valid certificates if issuance fails. Track a replacement per
+    // type+period so each original is linked to its correct successor.
+    // NOTE: a concurrent adjustment can still create a second replacement before
+    // either request revokes the shared original. Closing that window requires a
+    // MongoDB transaction wrapping the ledger write and certificate replacement.
+    const replacementByKey = new Map<string, Doc<Certificate>>();
+
+    if (eventCerts.length) {
+      const items = await CertificateService.buildServiceItems(
+        volunteer._id,
+        event.eventDate,
+        event.eventDate
       );
-      let replacement: Doc<Certificate> | null = null;
-      if (old.type === "event") {
-        const items = await CertificateService.buildServiceItems(
-          volunteer._id,
-          event.eventDate,
-          event.eventDate
+      const item = items.find((i) => sameId(i.eventId, event._id));
+      if (item) {
+        const r = await CertificateService.issueEventCertificate(
+          volunteer,
+          event,
+          item.roleName,
+          item.hours,
+          admin
         );
-        const item = items.find((i) => sameId(i.eventId, event._id));
-        if (item)
-          replacement = await CertificateService.issueEventCertificate(
-            volunteer,
-            event,
-            item.roleName,
-            item.hours,
-            admin
-          );
-      } else {
-        const items = await CertificateService.buildServiceItems(
-          volunteer._id,
-          old.periodStart,
-          old.periodEnd
-        );
-        if (items.length)
-          replacement = await CertificateService.issueServiceRecord(
-            volunteer,
-            old.periodStart,
-            old.periodEnd,
-            admin
-          );
+        replacementByKey.set("event", r);
       }
-      if (replacement)
-        await CertificateDAO.updateById(revoked._id, {
+    }
+
+    for (const { periodStart, periodEnd } of serviceRecordPeriods) {
+      const items = await CertificateService.buildServiceItems(
+        volunteer._id,
+        periodStart,
+        periodEnd
+      );
+      if (items.length) {
+        const r = await CertificateService.issueServiceRecord(
+          volunteer,
+          periodStart,
+          periodEnd,
+          admin
+        );
+        replacementByKey.set(
+          `sr:${periodStart.getTime()}-${periodEnd.getTime()}`,
+          r
+        );
+      }
+    }
+
+    // Replacements exist — now safe to revoke all old certificates.
+    const revoked = await Promise.all(
+      affected.map((old) =>
+        CertificateService.revoke(admin, old._id.toString(), {
+          reason: "Hours corrected; replacement issued",
+        })
+      )
+    );
+
+    // Link each revoked certificate to its type-matched replacement.
+    await Promise.all(
+      affected.map((old, i) => {
+        const key =
+          old.type === "event"
+            ? "event"
+            : `sr:${old.periodStart.getTime()}-${old.periodEnd.getTime()}`;
+        const replacement = replacementByKey.get(key);
+        if (!replacement) return Promise.resolve();
+        return CertificateDAO.updateById(revoked[i]._id, {
           supersededBy: replacement._id,
         });
-    }
+      })
+    );
 
     const org = await NotificationService.org();
     await NotificationService.send(

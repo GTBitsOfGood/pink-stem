@@ -11,7 +11,7 @@ import AuditService from "@/services/audit";
 import CertificateService from "@/services/certificate";
 import type { HoursSummary, LedgerEntryWithEvent, Report } from "@/types/api";
 import type { Actor } from "@/types/auth";
-import { NotFoundError } from "@/types/exceptions";
+import { InvalidArgumentsError, NotFoundError } from "@/types/exceptions";
 import type { HoursLedgerEntry } from "@/types/signup";
 import { sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
@@ -79,6 +79,8 @@ export default class HoursService {
       event._id
     );
     const before = existing.reduce((sum, e) => sum + e.hours, 0);
+    if (before + data.hours < 0)
+      throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
     const entry = await HoursLedgerDAO.create({
       volunteerId: volunteer._id,
       eventId: event._id,
@@ -89,10 +91,32 @@ export default class HoursService {
       reason: data.reason,
       reversalOf: existing[0]?._id ?? null,
     });
+
+    // Two overlapping corrections can both pass the check above. Re-read, and
+    // if the total went negative, reverse this correction in full.
+    const afterEntries = await HoursLedgerDAO.findByVolunteerAndEvent(
+      volunteer._id,
+      event._id
+    );
+    const afterTotal = afterEntries.reduce((sum, e) => sum + e.hours, 0);
+    if (afterTotal < 0) {
+      await HoursLedgerDAO.create({
+        volunteerId: volunteer._id,
+        eventId: event._id,
+        signupId: existing[0]?.signupId ?? null,
+        hours: -data.hours,
+        approvedBy: new Types.ObjectId(admin.id),
+        approvedAt: new Date(),
+        reason: "Reverted: overlapping correction would go below zero",
+        reversalOf: entry._id,
+      });
+      throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
+    }
+
     await AuditService.record(admin, "hours.adjusted", "ledger", entry._id, {
       before: { eventHours: before },
       after: {
-        eventHours: before + data.hours,
+        eventHours: afterTotal,
         delta: data.hours,
         reason: data.reason,
       },

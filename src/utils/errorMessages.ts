@@ -101,6 +101,9 @@ const ERRORS = Object.freeze({
     ALREADY_REVOKED: "That certificate has already been revoked.",
     PERIOD: "The period end must be after the period start.",
   },
+  HOURS: {
+    BELOW_ZERO: "This adjustment would take the volunteer's hours below zero.",
+  },
   JOBS: {
     UNAUTHORIZED: "Invalid job runner secret.",
   },
