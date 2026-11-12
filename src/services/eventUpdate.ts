@@ -11,6 +11,7 @@ import {
 import { addHours } from "@/lib/dates";
 import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
+import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
 import type { UpdateWithAuthor } from "@/types/api";
 import type { Actor } from "@/types/auth";
@@ -92,8 +93,9 @@ export default class EventUpdateService {
     });
 
     // Drafts are invisible to volunteers and produce no notifications.
-    if (important && event.status === "published") {
-      await EventUpdateService.emailImportant(event, update);
+    if (event.status === "published") {
+      if (important) await EventUpdateService.emailImportant(event, update);
+      await MessageService.postEventUpdate(event, update);
     }
     const [withAuthor] = await EventUpdateService.withAuthors([update]);
     return withAuthor;

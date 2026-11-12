@@ -1,4 +1,4 @@
-import { QueryFilter, Types } from "mongoose";
+import { mongo, QueryFilter, Types } from "mongoose";
 import EventDAO from "@/db/actions/event";
 import MessageDAO from "@/db/actions/message";
 import MessageThreadDAO from "@/db/actions/messageThread";
@@ -17,7 +17,7 @@ import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
 import type { Paginated, ThreadDetail, ThreadSummary } from "@/types/api";
 import type { Actor } from "@/types/auth";
-import type { Event } from "@/types/event";
+import type { Event, EventUpdate } from "@/types/event";
 import {
   ForbiddenError,
   IllegalOperationError,
@@ -42,6 +42,9 @@ import {
 } from "@/utils/validation/message";
 
 const HOUR = 3_600_000;
+
+const isDuplicateKey = (error: unknown) =>
+  error instanceof mongo.MongoServerError && error.code === 11000;
 
 /**
  * Event-scoped messaging between one volunteer and that event's organizer.
@@ -243,17 +246,29 @@ export default class MessageService {
           })) as Doc<MessageThread>);
     }
     const minor = isMinor(volunteer.dateOfBirth);
-    return MessageThreadDAO.create({
-      eventId: event._id,
-      volunteerId: volunteer._id,
-      organizerId: event.organizerId,
-      status: "open",
-      involvesMinor: minor,
-      lastMessageAt: new Date(),
-      // Threads with minors are flagged for periodic admin review at creation.
-      flaggedAt: minor ? new Date() : null,
-      flagReason: minor ? "Involves a volunteer under 18" : undefined,
-    });
+    try {
+      return await MessageThreadDAO.create({
+        eventId: event._id,
+        volunteerId: volunteer._id,
+        organizerId: event.organizerId,
+        status: "open",
+        involvesMinor: minor,
+        lastMessageAt: new Date(),
+        // Threads with minors are flagged for periodic admin review at creation.
+        flaggedAt: minor ? new Date() : null,
+        flagReason: minor ? "Involves a volunteer under 18" : undefined,
+      });
+    } catch (error) {
+      // Another request opened the same thread between the lookup and the
+      // insert; the unique index kept one, so use it.
+      if (!isDuplicateKey(error)) throw error;
+      const raced = await MessageThreadDAO.findByEventAndVolunteer(
+        event._id,
+        volunteer._id
+      );
+      if (!raced) throw error;
+      return raced;
+    }
   }
 
   static async createThread(
@@ -324,16 +339,21 @@ export default class MessageService {
     actor: Actor,
     thread: Doc<MessageThread>,
     body: string,
-    event?: Doc<Event> | null
+    event?: Doc<Event> | null,
+    eventUpdate?: Doc<EventUpdate>
   ) {
     if (thread.status !== "open")
       throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
-    const recent = await MessageDAO.countBySenderSince(
-      actor.id,
-      new Date(Date.now() - HOUR)
-    );
-    if (recent >= MAX_MESSAGES_PER_HOUR)
-      throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+    // An event update goes to the whole roster at once, so it is not one
+    // person sending messages and is not held to the hourly limit.
+    if (!eventUpdate) {
+      const recent = await MessageDAO.countBySenderSince(
+        actor.id,
+        new Date(Date.now() - HOUR)
+      );
+      if (recent >= MAX_MESSAGES_PER_HOUR)
+        throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+    }
 
     const now = new Date();
     const recipientId = sameId(actor.id, thread.volunteerId)
@@ -345,16 +365,23 @@ export default class MessageService {
       senderId: new Types.ObjectId(actor.id),
       body,
       sentAt: now,
+      eventUpdateId: eventUpdate?._id ?? null,
     });
     await MessageThreadDAO.updateById(thread._id, {
       lastMessageAt: now,
-      [`lastReadAt.${actor.id}`]: now,
+      // Posting an update is not the organizer reading each thread, so it
+      // must not hide a volunteer's unread question from them.
+      ...(eventUpdate ? {} : { [`lastReadAt.${actor.id}`]: now }),
     });
 
     if (!recipient || recipient.status !== "active") {
       await MessageDAO.updateById(message._id, { notifiedAt: now });
       return { message, notice: ERRORS.THREAD.RECIPIENT_INACTIVE };
     }
+
+    // Update messages are left to the hourly digest, which only emails about
+    // them if they are still unread; the update has its own emails.
+    if (eventUpdate) return { message };
 
     // One email per message, collapsing into an hourly digest for a busy thread.
     const lastNotified = await MessageDAO.lastNotifiedAt(thread._id, actor.id);
@@ -408,6 +435,50 @@ export default class MessageService {
       sent += 1;
     }
     return { sent };
+  }
+
+  /**
+   * Delivers an event update into each confirmed volunteer's thread with the
+   * organizer, opening the thread if there isn't one yet. It is sent as the
+   * organizer, since that is who the volunteer's reply goes to.
+   */
+  static async postEventUpdate(
+    event: Doc<Event>,
+    update: Doc<EventUpdate>
+  ): Promise<void> {
+    const organizer = await UserDAO.findById(event.organizerId);
+    if (!organizer) return;
+    const sender: Actor = {
+      id: organizer._id.toString(),
+      role: organizer.role,
+      email: organizer.email,
+      name: `${organizer.firstName} ${organizer.lastName}`,
+    };
+    const signups = await SignupDAO.findByEvent(event._id, ["confirmed"]);
+    for (const volunteerId of new Set(
+      signups.map((s) => s.volunteerId.toString())
+    )) {
+      // The update itself is already saved, so one volunteer's failure is
+      // logged and the rest of the roster still gets it.
+      try {
+        const volunteer = await UserDAO.findById(volunteerId);
+        if (!volunteer) continue;
+        const thread = await MessageService.threadFor(event, volunteer);
+        if (thread.status !== "open") continue;
+        await MessageService.deliver(
+          sender,
+          thread,
+          update.body,
+          event,
+          update
+        );
+      } catch (error) {
+        console.error(
+          `[messages] event update ${update._id} not delivered to ${volunteerId}`,
+          error
+        );
+      }
+    }
   }
 
   static async report(
@@ -560,6 +631,9 @@ export default class MessageService {
           : thread.volunteerId
       ).toString();
       recipientOf.set(message._id.toString(), recipientId);
+      // Already read in the app, so there is nothing to tell them.
+      const readAt = thread.lastReadAt?.[recipientId];
+      if (readAt && readAt >= message.sentAt) continue;
       const perThread = byRecipient.get(recipientId) ?? new Map();
       const entry = perThread.get(thread._id.toString()) ?? {
         senderId: message.senderId,
