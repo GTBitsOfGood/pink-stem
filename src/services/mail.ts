@@ -21,6 +21,8 @@ export class MailError extends Error {
   }
 }
 
+/** Replies are not read, so the default sender says so. */
+export const DEFAULT_FROM = "Pink STEM <no-reply@pinkstem.org>";
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 /** Well under the notification claim TTL, so a hung send cannot outlive its claim. */
 const SEND_TIMEOUT_MS = 15_000;
@@ -53,13 +55,11 @@ function allowed(to: string): boolean {
 export default class MailService {
   static async send(email: OutgoingEmail): Promise<void> {
     const apiKey = process.env.RESEND_API_KEY;
-    const from =
-      process.env.EMAIL_FROM ??
-      "Pink STEM Volunteer Hub <volunteer@pinkstem.org>";
+    const from = process.env.EMAIL_FROM || DEFAULT_FROM;
 
     if (!apiKey || !allowed(email.to)) {
       console.info(
-        `[mail] To: ${email.to}\n[mail] Subject: ${email.subject}\n${email.text}\n`
+        `[mail] From: ${from}\n[mail] To: ${email.to}\n[mail] Subject: ${email.subject}\n${email.text}\n`
       );
       return;
     }
