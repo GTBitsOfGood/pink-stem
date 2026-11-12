@@ -28,8 +28,8 @@ const ERRORS = Object.freeze({
     NO_SHIFTS: "Add at least one shift before publishing.",
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
-    VIRTUAL_LINK: "Virtual events need a join link.",
-    LOCATION_REQUIRED: "In-person events need a location.",
+    VIRTUAL_LINK: "Virtual events need a valid join link.",
+    LOCATION_REQUIRED: "In-person events need a host site and address.",
   },
   SHIFT: {
     NOT_FOUND: "That shift does not exist.",

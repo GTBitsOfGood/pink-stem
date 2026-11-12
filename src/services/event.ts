@@ -194,11 +194,8 @@ export default class EventService {
   private static validateInput(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
-    if (data.isVirtual) {
-      if (!data.virtualLink)
-        throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
-      if (!URL.canParse(data.virtualLink))
-        throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
+    if (data.isVirtual && !URL.canParse(data.virtualLink ?? "")) {
+      throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
     }
     if (!data.isVirtual && (!data.locationName || !data.address)) {
       throw new InvalidArgumentsError(ERRORS.EVENT.LOCATION_REQUIRED);

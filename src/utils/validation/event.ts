@@ -30,10 +30,9 @@ export const eventInputSchema = z.object({
   eventDate: dateSchema,
   region: z.enum(REGIONS),
   isVirtual: z.boolean().default(false),
-  // Accepted as a plain string here; URL format and requirement are enforced
-  // in validateInput so a junk link typed before switching to in-person is
-  // never rejected at parse time.
-  virtualLink: z.string().optional(),
+  // Checked as a URL in EventService only for virtual events, so a junk link
+  // left behind after switching to in-person doesn't fail the save.
+  virtualLink: z.string().trim().optional(),
   locationName: optionalText(120),
   address: optionalText(200),
   locationNote: optionalText(200),
