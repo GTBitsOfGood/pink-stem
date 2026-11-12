@@ -1,7 +1,7 @@
 import { QueryFilter, Types } from "mongoose";
 import dbConnect from "@/db/dbConnect";
 import AuditLogModel from "@/db/models/auditLog";
-import type { AuditLog } from "@/types/audit";
+import type { AuditEntityType, AuditLog } from "@/types/audit";
 import type { Doc } from "@/types/models";
 import { paginate } from "@/utils/validation/common";
 
@@ -40,13 +40,34 @@ export default class AuditLogDAO {
       .lean<Doc<AuditLog>[]>();
   }
 
+  /**
+   * Everything a person did, plus everything done to them. Rows about their
+   * clearance, hours, certificates and sign-ups are stored against those
+   * records rather than the user, so the caller passes those records' ids.
+   */
   static async findForUser(
     userId: string | Types.ObjectId,
+    related: Partial<
+      Record<
+        "clearance" | "ledger" | "certificate" | "signup",
+        Types.ObjectId[]
+      >
+    > = {},
     limit = 100
   ): Promise<Doc<AuditLog>[]> {
     await dbConnect();
+    const about = Object.entries(related)
+      .filter(([, ids]) => ids?.length)
+      .map(([entityType, ids]) => ({
+        entityType: entityType as AuditEntityType,
+        entityId: { $in: ids },
+      }));
     return AuditLogModel.find({
-      $or: [{ actorId: userId }, { entityType: "user", entityId: userId }],
+      $or: [
+        { actorId: userId },
+        { entityType: "user", entityId: userId },
+        ...about,
+      ],
     })
       .sort({ createdAt: -1 })
       .limit(limit)
