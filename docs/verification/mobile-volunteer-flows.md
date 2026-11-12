@@ -5,6 +5,14 @@ Verified November 9, 2026 with Chromium component fixtures at 320 × 568,
 with synthetic API responses; no production accounts, messages, or sign-ups are
 created.
 
+## How to repeat
+
+1. `npm run seed -- demo`, then `npm run dev`.
+2. In Chrome DevTools device mode at 320, 390 and 768 px wide, check each flow
+   below signed out and as `maya@example.com` (password `PinkStem!2026`).
+3. For overflow, run `document.scrollingElement.scrollWidth > innerWidth` in
+   the console on each page; it should be `false`.
+
 ## Results
 
 | Flow                     | Checks                                                                                                | Result                                                                                                                                            |
