@@ -92,8 +92,8 @@ as an edge function and reads `JWT_SECRET`, so do not narrow the scopes.
 | `JWT_SECRET`               | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out              |
 | `APP_URL`                  | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files     |
 | `CRON_SECRET`              | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                       |
-| `RESEND_API_KEY`           | Prod     | Staging Resend key; see [Email](#email) | Sends email through Resend; unset, emails go to the server log  |
-| `EMAIL_FROM`               | Prod     | `Pink STEM <no-reply@pinkstem.org>`     | Sender on every email; the domain must be verified in Resend    |
+| `JUNO_API_KEY`             | Prod     | Staging Juno key; see [Email](#email)   | Sends email through Juno; unset, emails go to the server log    |
+| `EMAIL_FROM`               | Prod     | `Pink STEM <no-reply@pinkstem.org>`     | Sender on every email; must be a verified sender in Juno        |
 | `EMAIL_ALLOWED_RECIPIENTS` | Staging  | Team domains and tester addresses       | Only these get real email; everyone else goes to the server log |
 
 Deploy previews link to the staging URL in emails, not to the preview URL.
@@ -104,9 +104,16 @@ only by the seed script on your machine. They do not belong in Netlify.
 
 ## Email
 
-Staging sends real email, but only to the team. Set `RESEND_API_KEY`,
-`EMAIL_FROM` on a domain verified in Resend, and `EMAIL_ALLOWED_RECIPIENTS` to
-a comma list of domains and addresses, for example
+Email goes through [Juno](https://github.com/GTBitsOfGood/juno), Bits of
+Good's shared infrastructure API, which sends it with SendGrid. One-time setup
+in the [Juno dashboard](https://juno.bitsofgood.org) for each environment:
+create the project, set up email with the project's SendGrid key, register
+`no-reply@pinkstem.org` as a sender (and authenticate `pinkstem.org` as a
+domain), then issue an API key and set it as `JUNO_API_KEY`.
+
+Staging sends real email, but only to the team. Set `JUNO_API_KEY`,
+`EMAIL_FROM` to the registered sender, and `EMAIL_ALLOWED_RECIPIENTS` to a comma
+list of domains and addresses, for example
 `pinkstem.org,gatech.edu,tester@gmail.com`. Testers who register or reset a
 password with an allowed address get the email in their inbox. Every other
 recipient, including the demo accounts and any real volunteer address, is
@@ -117,7 +124,7 @@ To read a logged email, such as a verification link for a demo account, open
 `[mail]`. Failed sends are logged there too, as `[mail] unavailable` or
 `[mail] rejected`.
 
-Leave `EMAIL_ALLOWED_RECIPIENTS` unset in production. With `RESEND_API_KEY`
+Leave `EMAIL_ALLOWED_RECIPIENTS` unset in production. With `JUNO_API_KEY`
 unset, every email goes to the log.
 
 ## Seeding staging
@@ -171,7 +178,7 @@ When the domain is decided:
 2. Create a second Netlify site from the same repo with production branch
    `production`. Turn off branch deploys and deploy previews there, so no PR
    builds with production secrets.
-3. Set the variables above with production values, including `RESEND_API_KEY`
+3. Set the variables above with production values, including `JUNO_API_KEY`
    and `EMAIL_FROM` from a verified sending domain.
 4. Seed it with `npm run seed`, without `demo`.
 

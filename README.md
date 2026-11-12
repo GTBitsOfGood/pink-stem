@@ -50,7 +50,7 @@ cp .env.local.example .env.local   # then fill in the required values below
 `MONGODB_URI` and `JWT_SECRET` are required to run the app. `npm run seed`
 also needs `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, and `npm run jobs`
 needs `CRON_SECRET`, so fill in all five before you start. Without
-`RESEND_API_KEY`, every email is printed to the server console instead of
+`JUNO_API_KEY`, every email is printed to the server console instead of
 being sent, including the invitation and email verification links.
 
 ### Seed data

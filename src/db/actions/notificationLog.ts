@@ -14,7 +14,7 @@ function isDuplicateKey(error: unknown): boolean {
 /**
  * Keyed emails move through sending → sent, or sending → failed → sending on
  * the next run. Only one sender can hold a key at a time, so two runs at once
- * never both send it. The one gap: a sender that dies after Resend accepted
+ * never both send it. The one gap: a sender that dies after Juno accepted
  * the email but before `markSent` leaves a claim that lapses after
  * NOTIFICATION_CLAIM_TTL_MS, and the email goes out a second time.
  */
