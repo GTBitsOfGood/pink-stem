@@ -25,6 +25,11 @@ export function useEvent(eventId: string) {
     queryKey: QUERY_KEYS.event(eventId),
     queryFn: () => EventHTTPClient.get(eventId),
     enabled: !!eventId,
+    // Verifying happens in another tab, which confirms these sign-ups server-side.
+    refetchOnWindowFocus: (q) =>
+      !!q.state.data?.mySignups.some((s) =>
+        s.pendingReasons.includes("email_verification")
+      ),
   });
 }
 

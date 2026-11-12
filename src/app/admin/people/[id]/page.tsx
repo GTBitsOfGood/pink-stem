@@ -82,14 +82,14 @@ export default function PersonPage() {
               <Badge tone="danger">Inactive</Badge>
             ) : null}
             {u.flaggedForReviewAt ? (
-              <Badge tone="warning">Flagged for review</Badge>
+              <Badge tone="warning">Too many no-shows</Badge>
             ) : null}
           </span>
         }
         back={{ href: "/admin/people", label: "People" }}
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="grid content-start gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid grid-cols-1 content-start gap-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat
               label="Approved hours"
@@ -309,7 +309,7 @@ export default function PersonPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        <div className="grid grid-cols-1 content-start gap-4">
           <Card>
             <CardHeader
               title="Background clearance"
@@ -440,11 +440,11 @@ export default function PersonPage() {
                         actions.updateUser.mutateAsync({
                           clearReviewFlag: true,
                         }),
-                      "Review flag cleared."
+                      "No-show flag cleared."
                     )
                   }
                 >
-                  Clear review flag
+                  Clear no-show flag
                 </Button>
               ) : null}
               <p className="text-[12px] text-ink-500">

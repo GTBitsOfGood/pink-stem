@@ -52,8 +52,8 @@ export interface OrganizerOption {
 type Filters = Record<string, string | undefined>;
 
 export default class AdminHTTPClient {
-  static approvals(): Promise<ClientApprovals> {
-    return fetchHTTPClient("/admin/approvals");
+  static approvals(filters: Filters): Promise<ClientApprovals> {
+    return fetchHTTPClient(`/admin/approvals${toQuery(filters)}`);
   }
 
   static people(filters: Filters): Promise<Paginated<ClientPersonRow>> {

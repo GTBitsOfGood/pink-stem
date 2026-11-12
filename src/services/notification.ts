@@ -5,9 +5,11 @@ import UserDAO from "@/db/actions/user";
 import { formatLongDate, formatTimeRange } from "@/lib/dates";
 import { EventDetails, emailTemplates } from "@/lib/emailTemplates";
 import { appUrl } from "@/lib/urls";
-import MailService, { EmailContent } from "@/services/mail";
+import { countOutcomes } from "@/lib/sendCounts";
+import MailService, { EmailContent, MailError } from "@/services/mail";
 import type { Event, Shift } from "@/types/event";
 import type { Doc } from "@/types/models";
+import type { SendCounts, SendOutcome } from "@/types/notification";
 import type { NotificationCategory, SafeUser } from "@/types/user";
 
 type Recipient = Pick<SafeUser, "email" | "firstName" | "status"> &
@@ -18,7 +20,10 @@ type Org = { name: string; address: string; phone: string };
 interface SendOptions {
   /** Which preference governs the email; confirmations are always sent. */
   category?: NotificationCategory;
-  /** Idempotency key: the same key is never sent twice. */
+  /**
+   * Idempotency key: once sent, the key is never sent again. A failed send
+   * frees the key, so the next run retries it.
+   */
   dedupeKey?: string;
 }
 
@@ -68,26 +73,51 @@ export default class NotificationService {
     };
   }
 
+  /**
+   * Sends one email and reports what happened. A mail failure is logged and
+   * returned as "failed", never thrown, so a Resend outage cannot fail the
+   * request or job that triggered the email.
+   */
   static async send(
     recipient: Recipient,
     content: EmailContent,
     options: SendOptions = {}
-  ): Promise<boolean> {
-    if (recipient.status !== "active") return false;
+  ): Promise<SendOutcome> {
+    if (recipient.status !== "active") return "skipped";
     if (
       options.category &&
       recipient.notificationPreferences?.[options.category] === false
     )
-      return false;
-    if (
-      options.dedupeKey &&
-      !(await NotificationLogDAO.claim(options.dedupeKey))
-    )
-      return false;
-    await MailService.send({ to: recipient.email, ...content });
-    return true;
+      return "skipped";
+
+    const key = options.dedupeKey;
+    const claimedAt = key ? await NotificationLogDAO.claim(key) : null;
+    if (key && !claimedAt) return "skipped";
+
+    try {
+      await MailService.send({ to: recipient.email, ...content });
+    } catch (error) {
+      if (!(error instanceof MailError)) throw error;
+      console.error(
+        `[mail] ${error.kind}: "${content.subject}" to ${recipient.email}: ${error.message}`
+      );
+      if (key && claimedAt)
+        await NotificationLogDAO.markFailed(
+          key,
+          claimedAt,
+          error.kind,
+          error.message
+        );
+      return "failed";
+    }
+    if (key && claimedAt) await NotificationLogDAO.markSent(key, claimedAt);
+    return "sent";
   }
 
+  /**
+   * Sends to an address that may have no account yet. Throws `MailError` on
+   * failure, since the caller is waiting on it and can try again.
+   */
   static async sendRaw(to: string, content: EmailContent): Promise<void> {
     await MailService.send({ to, ...content });
   }
@@ -95,16 +125,20 @@ export default class NotificationService {
   static async toAdmins(
     build: (org: Org, admin: Doc<SafeUser>) => EmailContent,
     dedupePrefix?: string
-  ): Promise<void> {
+  ): Promise<SendCounts> {
     const [org, admins] = await Promise.all([
       NotificationService.org(),
       UserDAO.listByRole("admin"),
     ]);
-    await Promise.all(
-      admins.map((admin) =>
-        NotificationService.send(admin, build(org, admin), {
-          dedupeKey: dedupePrefix ? `${dedupePrefix}:${admin._id}` : undefined,
-        })
+    return countOutcomes(
+      await Promise.all(
+        admins.map((admin) =>
+          NotificationService.send(admin, build(org, admin), {
+            dedupeKey: dedupePrefix
+              ? `${dedupePrefix}:${admin._id}`
+              : undefined,
+          })
+        )
       )
     );
   }

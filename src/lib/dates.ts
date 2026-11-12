@@ -151,6 +151,15 @@ export const fromDateTimeLocal = (value: string): Date => {
   return new Date(guess - zoneOffsetMs(new Date(utc)));
 };
 
+/**
+ * Calendar days from `from` to `to` in the org zone: 0 for later today, 1 for
+ * tomorrow, however many hours apart the two instants are.
+ */
+export const calendarDaysBetween = (from: DateLike, to: DateLike) =>
+  Math.round(
+    (Date.parse(toDateInput(to)) - Date.parse(toDateInput(from))) / 86_400_000
+  );
+
 /** Start of the org-zone day containing the instant. */
 export const startOfDay = (value: DateLike) =>
   fromDateTimeLocal(toDateInput(value));

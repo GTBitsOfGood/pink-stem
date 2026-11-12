@@ -10,14 +10,25 @@ import type {
   ResetPasswordInput,
 } from "@/utils/validation/auth";
 
-/** Sign-in and password flows. Sign-ins land the user on `next` and reload the session. */
+/** `href` if it is a path on this site (one leading `/`); `//host` and `/\host` resolve elsewhere. */
+function sameOriginUrl(href: string) {
+  const { origin } = window.location;
+  try {
+    const url = new URL(href, origin);
+    return href.startsWith("/") && url.origin === origin ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Sign-in and password flows. Sign-ins land the user on `next` if it is on this site, and reload the session. */
 export function useAuthActions(next = "/dashboard") {
   const queryClient = useQueryClient();
   const router = useRouter();
 
   const onSignedIn = async () => {
     await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session });
-    router.push(next);
+    router.push(sameOriginUrl(next) ?? "/dashboard");
     router.refresh();
   };
 
@@ -28,7 +39,9 @@ export function useAuthActions(next = "/dashboard") {
     }),
     register: useMutation({
       mutationFn: (body: RegisterBody) => AuthHTTPClient.register(body),
-      onSuccess: onSignedIn,
+      // Stay on the page so it can explain email verification.
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session }),
     }),
     resetPassword: useMutation({
       mutationFn: (body: ResetPasswordInput) =>
