@@ -18,6 +18,11 @@ export function useSession() {
     queryFn: () => AuthHTTPClient.me(),
     staleTime: 60_000,
     refetchInterval: 60_000,
+    // Picks up a verification done in another tab as soon as the user is back.
+    refetchOnWindowFocus: (q) =>
+      q.state.data?.outstanding.includes("email_verification")
+        ? "always"
+        : false,
   });
 
   const logout = useMutation({
