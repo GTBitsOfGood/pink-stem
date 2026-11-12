@@ -1,10 +1,10 @@
+import ActionTokenDAO from "@/db/actions/actionToken";
+import UserDAO from "@/db/actions/user";
 import {
   EMAIL_VERIFICATION_DAYS,
   RATE_LIMITS,
   RESET_PASSWORD_TOKEN_MINUTES,
 } from "@/constants/limits";
-import ActionTokenDAO from "@/db/actions/actionToken";
-import UserDAO from "@/db/actions/user";
 import { assertRateLimit } from "@/lib/rateLimit";
 import { signSession } from "@/lib/session";
 import { appUrl } from "@/lib/urls";
@@ -245,6 +245,8 @@ export default class AuthService {
     const invite = await ActionTokenDAO.findValid(token, "organizer_invite");
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const existing = await UserDAO.findByEmail(invite.email);
+    if (existing && existing.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     return {
       email: invite.email,
       role: invite.role,
@@ -259,10 +261,8 @@ export default class AuthService {
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
 
     const existing = await UserDAO.findAuthByEmail(invite.email);
-
-    if (existing && existing.status !== "active") {
+    if (existing && existing.status !== "active")
       throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
-    }
 
     const passwordHash = await HashingService.hash(data.password);
     let user: Doc<User>;

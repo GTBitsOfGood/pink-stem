@@ -10,11 +10,12 @@ import type {
   ResetPasswordInput,
 } from "@/utils/validation/auth";
 
+/** `href` if it is a path on this site (one leading `/`); `//host` and `/\host` resolve elsewhere. */
 function sameOriginUrl(href: string) {
   const { origin } = window.location;
   try {
     const url = new URL(href, origin);
-    return url.origin === origin ? url.href : undefined;
+    return href.startsWith("/") && url.origin === origin ? url.href : undefined;
   } catch {
     return undefined;
   }
