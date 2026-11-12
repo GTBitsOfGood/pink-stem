@@ -17,8 +17,7 @@
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "seed:staging": "tsx --env-file=.env.staging.local scripts/seed.ts demo",
     "jobs": "tsx --env-file=.env.local scripts/jobs.ts",
-    "screening:check": "tsx scripts/screening-check.ts",
-    "test": "vitest run"
+    "screening:check": "tsx scripts/screening-check.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.2",
@@ -51,8 +50,7 @@
     "prettier": "^3.8.1",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.13",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "typescript": "^5.9.3"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --cache --fix",
