@@ -30,7 +30,9 @@ export const eventInputSchema = z.object({
   eventDate: dateSchema,
   region: z.enum(REGIONS),
   isVirtual: z.boolean().default(false),
-  virtualLink: z.url().optional().or(z.literal("")),
+  // Checked as a URL in EventService only for virtual events, so a junk link
+  // left behind after switching to in-person doesn't fail the save.
+  virtualLink: z.string().trim().optional(),
   locationName: optionalText(120),
   address: optionalText(200),
   locationNote: optionalText(200),

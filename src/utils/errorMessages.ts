@@ -15,6 +15,8 @@ const ERRORS = Object.freeze({
     NOT_FOUND: "That account does not exist.",
     CANNOT_CHANGE_OWN_ROLE: "You cannot change your own role.",
     CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account.",
+    DEACTIVATED:
+      "This account is deactivated. Reactivate it before inviting it.",
   },
   CLEARANCE: {
     EXPIRY_REQUIRED: "A cleared record needs an expiry date.",
@@ -24,12 +26,14 @@ const ERRORS = Object.freeze({
     NOT_FOUND: "That event does not exist.",
     NOT_PUBLISHED: "This event is not open for sign-ups.",
     NOT_EDITABLE: "Completed and cancelled events cannot be edited.",
+    MIN_AGE_RAISED: (minAge: number, names: string[]) =>
+      `The minimum age can't be raised to ${minAge} while ${names.join(", ")} ${names.length === 1 ? "is" : "are"} signed up and under it. Cancel ${names.length === 1 ? "that sign-up" : "those sign-ups"} first.`,
     ALREADY_PUBLISHED: "This event is already published.",
     NO_SHIFTS: "Add at least one shift before publishing.",
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
-    VIRTUAL_LINK: "Virtual events need a join link.",
-    LOCATION_REQUIRED: "In-person events need a location.",
+    VIRTUAL_LINK: "Virtual events need a valid join link.",
+    LOCATION_REQUIRED: "In-person events need a host site and address.",
   },
   SHIFT: {
     NOT_FOUND: "That shift does not exist.",
@@ -42,6 +46,10 @@ const ERRORS = Object.freeze({
     TOO_MANY: "An event cannot have more than twenty shifts.",
     HAS_SIGNUPS:
       "A shift with sign-ups cannot be deleted. Cancel the event instead.",
+    LAST_SHIFT:
+      "A published event needs at least one shift. Add another shift first, or cancel the event.",
+    DELETE_IN_PROGRESS:
+      "Another shift on this event is being deleted. Try again in a moment.",
     IN_PAST: "This shift has already started.",
     FULL_SHIFT: "This shift is currently full.",
   },
@@ -58,6 +66,8 @@ const ERRORS = Object.freeze({
       'The cancellation window has closed. Use "Can\'t make it" on your dashboard to let the organizer know.',
     NOT_CANCELLABLE: "This sign-up can no longer be cancelled.",
     MIN_AGE: "You do not meet the minimum age for this event.",
+    DATE_OF_BIRTH_REQUIRED:
+      "Add your date of birth to your profile to sign up for this event.",
     NOT_APPROVABLE: "Only pending sign-ups awaiting approval can be approved.",
     NOT_ON_ROSTER: "Only confirmed volunteers can be marked.",
     ADJUSTMENT_REASON: "A reason is required when changing the hours.",

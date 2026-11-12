@@ -119,6 +119,14 @@ export default function ThreadView({
                 {m.body}
               </div>
               <div className="flex items-center gap-2 text-[11px] text-ink-400">
+                {m.eventUpdateId ? (
+                  <Link
+                    href={`/events/${detail.eventId}`}
+                    className="hover:text-brand-700"
+                  >
+                    <Badge tone="info">Event update</Badge>
+                  </Link>
+                ) : null}
                 <span>
                   {nameOf(m.senderId)} · {formatDateTime(m.sentAt)}
                 </span>

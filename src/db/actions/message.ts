@@ -61,7 +61,13 @@ export default class MessageDAO {
     since: Date
   ): Promise<number> {
     await dbConnect();
-    return MessageModel.countDocuments({ senderId, sentAt: { $gte: since } });
+    // Event updates fan out to the whole roster as the organizer, so their
+    // copies are not messages the organizer typed and do not count.
+    return MessageModel.countDocuments({
+      senderId,
+      sentAt: { $gte: since },
+      eventUpdateId: null,
+    });
   }
 
   static async updateById(

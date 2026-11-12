@@ -96,6 +96,13 @@ export default class AttendanceService {
 
     const approver = new Types.ObjectId(actor.id);
     let totalHours = 0;
+    const attendedIds = confirmed
+      .filter((s) => s.attendance!.status === "attended")
+      .map((s) => s.volunteerId);
+    const [volunteers, org] = await Promise.all([
+      UserDAO.findByIds(attendedIds),
+      NotificationService.org(),
+    ]);
 
     for (const signup of confirmed) {
       const attendance = signup.attendance!;
@@ -122,10 +129,10 @@ export default class AttendanceService {
         approvedAt: now,
         reason: attendance.adjustmentReason,
       });
-      const [volunteer, shift] = [
-        await UserDAO.findById(signup.volunteerId),
-        shifts.find((s) => sameId(s._id, signup.shiftId)),
-      ];
+      const volunteer = volunteers.find((v) =>
+        sameId(v._id, signup.volunteerId)
+      );
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
       if (!volunteer || !shift) continue;
       await CertificateService.issueEventCertificate(
         volunteer,
@@ -134,7 +141,6 @@ export default class AttendanceService {
         attendance.hours,
         actor
       );
-      const org = await NotificationService.org();
       await NotificationService.send(
         volunteer,
         NotificationService.templates.hoursApproved(org, {

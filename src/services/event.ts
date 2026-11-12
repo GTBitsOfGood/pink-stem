@@ -2,6 +2,7 @@ import { QueryFilter, Types } from "mongoose";
 import { z } from "zod";
 import EventDAO from "@/db/actions/event";
 import MessageThreadDAO from "@/db/actions/messageThread";
+import NotificationLogDAO from "@/db/actions/notificationLog";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
@@ -10,14 +11,17 @@ import {
   MAX_SHIFT_HOURS,
   MAX_SHIFTS_PER_EVENT,
   PAGE_SIZE,
+  SHIFT_DELETE_LOCK_TTL_MS,
 } from "@/constants/limits";
 import {
+  ageOn,
   hoursBetween,
   moveShiftDates,
   startOfDay,
   toDateInput,
   toDateTimeLocal,
 } from "@/lib/dates";
+import { withoutJoinLink, canSeeJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -120,7 +124,10 @@ export default class EventService {
     // Spot availability lives on shifts, so filter after the join. Upcoming
     // events number in the dozens, not thousands, which keeps this cheap.
     const { items } = await EventDAO.list(filter, { limit: 500 });
-    let withShifts = await EventService.attachShifts(items);
+    // Public listing: nobody here has been checked, so no join links.
+    let withShifts = (await EventService.attachShifts(items)).map(
+      withoutJoinLink
+    );
     if (filters.hasSpots) {
       withShifts = withShifts.filter((e) =>
         e.shifts.some((s) => s.filledCount < s.capacity)
@@ -154,8 +161,9 @@ export default class EventService {
       (ROSTER_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
+    const joinLink = manage || mySignups.some((s) => canSeeJoinLink(s.status));
     return {
-      ...withShifts,
+      ...(joinLink ? withShifts : withoutJoinLink(withShifts)),
       mySignups,
       waiverSigned: allMine.some((s) => s.waiverSignedAt),
       updates,
@@ -195,11 +203,40 @@ export default class EventService {
   private static validateInput(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
-    if (data.isVirtual && !data.virtualLink)
+    if (data.isVirtual && !URL.canParse(data.virtualLink ?? "")) {
       throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
-    if (!data.isVirtual && !data.locationName && !data.address) {
+    }
+    if (!data.isVirtual && (!data.locationName || !data.address)) {
       throw new InvalidArgumentsError(ERRORS.EVENT.LOCATION_REQUIRED);
     }
+  }
+
+  /**
+   * Returns the fields to $set and the fields to $unset for the active mode.
+   * On create, pass only `set` (no prior values to clear).
+   * On update, use both so stale fields from the previous mode are removed from the document.
+   * Mongoose strips undefined values from $set before sending to MongoDB,
+   * so there is no conflict between the two operators.
+   */
+  private static sanitizeByMode(
+    data: ReturnType<typeof eventInputSchema.parse>
+  ) {
+    if (data.isVirtual) {
+      return {
+        set: {
+          ...data,
+          locationName: undefined,
+          address: undefined,
+          locationNote: undefined,
+          city: undefined,
+        },
+        unset: { locationName: "", address: "", locationNote: "", city: "" },
+      };
+    }
+    return {
+      set: { ...data, virtualLink: undefined },
+      unset: { virtualLink: "" },
+    };
   }
 
   /** Events can only be owned by an active organizer or admin. */
@@ -240,12 +277,13 @@ export default class EventService {
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized } = EventService.sanitizeByMode(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
       : null;
     const event = await EventDAO.create({
-      ...data,
-      minAge: data.minAge ?? undefined,
+      ...sanitized,
+      minAge: sanitized.minAge ?? undefined,
       organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
     if (organizer && !sameId(organizer._id, actor.id)) {
@@ -280,6 +318,7 @@ export default class EventService {
     const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized, unset } = EventService.sanitizeByMode(data);
     const oldDay = toDateInput(event.eventDate);
     const newDay = toDateInput(data.eventDate);
     const shifts = await ShiftDAO.findByEvent(event._id);
@@ -316,6 +355,16 @@ export default class EventService {
         })
       : [];
 
+    await EventService.assertMinAgeFits(
+      event,
+      data.minAge ?? null,
+      shifts.map((s) => ({
+        _id: s._id,
+        startsAt:
+          movedShifts.find((m) => sameId(m.id, s._id))?.startsAt ?? s.startsAt,
+      }))
+    );
+
     if (movedShifts.length > 0) {
       await Promise.all(
         movedShifts.map((s) =>
@@ -325,11 +374,69 @@ export default class EventService {
     }
 
     const updated = (await EventDAO.updateById(eventId, {
-      ...data,
-      minAge: data.minAge ?? null,
+      $set: { ...sanitized, minAge: sanitized.minAge ?? null },
+      $unset: unset,
     })) as Doc<Event>;
+    await EventService.recheckSignups(updated);
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
+  }
+
+  /**
+   * Refuses to raise the minimum age past someone signed up for an upcoming
+   * shift, judged on that shift's (possibly moved) day. Other edits are never
+   * blocked by an older sign-up.
+   */
+  private static async assertMinAgeFits(
+    event: Doc<Event>,
+    minAge: number | null,
+    shifts: Pick<Doc<Shift>, "_id" | "startsAt">[]
+  ) {
+    if (!minAge || minAge <= (event.minAge ?? 0)) return;
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      LIVE_SIGNUP_STATUSES
+    );
+    if (!signups.length) return;
+    const volunteers = await Promise.all(
+      [...new Set(signups.map((s) => s.volunteerId.toString()))].map((id) =>
+        UserDAO.findById(id)
+      )
+    );
+    const under = new Set<string>();
+    const now = new Date();
+    for (const signup of signups) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      const volunteer = volunteers.find(
+        (v) => v && sameId(v._id, signup.volunteerId)
+      );
+      if (!shift || !volunteer || shift.startsAt <= now) continue;
+      if (
+        !volunteer.dateOfBirth ||
+        ageOn(volunteer.dateOfBirth, shift.startsAt) < minAge
+      ) {
+        under.add(`${volunteer.firstName} ${volunteer.lastName}`);
+      }
+    }
+    if (under.size) {
+      throw new IllegalOperationError(
+        ERRORS.EVENT.MIN_AGE_RAISED(minAge, [...under])
+      );
+    }
+  }
+
+  /**
+   * Sign-ups were checked against the requirements in force when they were
+   * made, so clearance and approval are re-checked against the saved event.
+   * This runs on every save, not only when a flag flips: both steps are
+   * no-ops once the roster matches, and a recheck cut short by a failure is
+   * finished by the organizer's next save. Newly requiring approval leaves
+   * confirmed volunteers alone; pending ones pick it up.
+   */
+  private static async recheckSignups(event: Doc<Event>) {
+    if (event.status !== "published") return;
+    await SignupService.reevaluateForEvent(event);
+    if (event.requiresClearance) await SignupService.lapseForEvent(event);
   }
 
   static async publish(
@@ -469,11 +576,14 @@ export default class EventService {
       eventDate: targetDate,
       region: source.region,
       isVirtual: source.isVirtual,
-      virtualLink: source.virtualLink,
-      locationName: source.locationName,
-      address: source.address,
-      locationNote: source.locationNote,
-      city: source.city,
+      ...(source.isVirtual
+        ? { virtualLink: source.virtualLink }
+        : {
+            locationName: source.locationName,
+            address: source.address,
+            locationNote: source.locationNote,
+            city: source.city,
+          }),
       requiresClearance: source.requiresClearance,
       requiresApproval: source.requiresApproval,
       minAge: source.minAge,
@@ -585,12 +695,33 @@ export default class EventService {
   static async deleteShift(actor: Actor, shiftId: string): Promise<void> {
     const shift = await ShiftDAO.findById(shiftId);
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
-    await EventService.editable(actor, shift.eventId.toString());
-    const live = await SignupDAO.count({
-      shiftId: shift._id,
-      status: { $in: LIVE_SIGNUP_STATUSES },
-    });
-    if (live > 0) throw new IllegalOperationError(ERRORS.SHIFT.HAS_SIGNUPS);
-    await ShiftDAO.deleteById(shift._id);
+    // Two deletes on one event could each count two shifts and both proceed,
+    // so the checks and the delete run under a per-event lock.
+    const lockKey = `shift-delete:${shift.eventId}`;
+    const lock = await NotificationLogDAO.acquireLock(
+      lockKey,
+      SHIFT_DELETE_LOCK_TTL_MS
+    );
+    if (!lock) throw new ConflictError(ERRORS.SHIFT.DELETE_IN_PROGRESS);
+    try {
+      const event = await EventService.editable(
+        actor,
+        shift.eventId.toString()
+      );
+      const live = await SignupDAO.count({
+        shiftId: shift._id,
+        status: { $in: LIVE_SIGNUP_STATUSES },
+      });
+      if (live > 0) throw new IllegalOperationError(ERRORS.SHIFT.HAS_SIGNUPS);
+      // A published event with no shifts could never have its roster approved.
+      if (event.status === "published") {
+        const shifts = await ShiftDAO.findByEvent(event._id);
+        if (shifts.length <= 1)
+          throw new IllegalOperationError(ERRORS.SHIFT.LAST_SHIFT);
+      }
+      await ShiftDAO.deleteById(shift._id);
+    } finally {
+      await NotificationLogDAO.releaseLock(lockKey, lock);
+    }
   }
 }

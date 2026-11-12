@@ -195,6 +195,9 @@ export default class AuthService {
     const { token, password } = resetPasswordSchema.parse(input);
     const consumed = await ActionTokenDAO.consume(token, "reset_password");
     if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    const account = await UserDAO.findById(consumed.userId);
+    if (account && account.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const user = await UserDAO.setPassword(
       consumed.userId,
       await HashingService.hash(password)
@@ -242,6 +245,8 @@ export default class AuthService {
     const invite = await ActionTokenDAO.findValid(token, "organizer_invite");
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     const existing = await UserDAO.findByEmail(invite.email);
+    if (existing && existing.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
     return {
       email: invite.email,
       role: invite.role,
@@ -255,16 +260,17 @@ export default class AuthService {
     const invite = await ActionTokenDAO.consume(data.token, "organizer_invite");
     if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
 
-    const passwordHash = await HashingService.hash(data.password);
     const existing = await UserDAO.findAuthByEmail(invite.email);
+    if (existing && existing.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+
+    const passwordHash = await HashingService.hash(data.password);
     let user: Doc<User>;
 
     if (existing) {
       const before = { role: existing.role };
       await UserDAO.updateById(existing._id, {
         role: invite.role,
-        status: "active",
-        deactivatedAt: null,
         // The invite link was delivered to this address.
         emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
       });

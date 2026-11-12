@@ -1,4 +1,4 @@
-import { QueryFilter, Types } from "mongoose";
+import { mongo, QueryFilter, Types } from "mongoose";
 import EventDAO from "@/db/actions/event";
 import MessageDAO from "@/db/actions/message";
 import MessageThreadDAO from "@/db/actions/messageThread";
@@ -11,12 +11,13 @@ import {
   THREAD_READ_ONLY_AFTER_EVENT_DAYS,
 } from "@/constants/limits";
 import { addDays, isMinor } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
 import type { Paginated, ThreadDetail, ThreadSummary } from "@/types/api";
 import type { Actor } from "@/types/auth";
-import type { Event } from "@/types/event";
+import type { Event, EventUpdate } from "@/types/event";
 import {
   ForbiddenError,
   IllegalOperationError,
@@ -26,6 +27,7 @@ import {
 } from "@/types/exceptions";
 import type { Message, MessageThread } from "@/types/message";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import type { SafeUser } from "@/types/user";
 import { assertCanManageEvent, isAdmin, sameId } from "@/utils/authorization";
@@ -40,6 +42,9 @@ import {
 } from "@/utils/validation/message";
 
 const HOUR = 3_600_000;
+
+const isDuplicateKey = (error: unknown) =>
+  error instanceof mongo.MongoServerError && error.code === 11000;
 
 /**
  * Event-scoped messaging between one volunteer and that event's organizer.
@@ -86,18 +91,8 @@ export default class MessageService {
     };
   }
 
-  /** Admin only. Every thread with a report nobody has reviewed; unpaginated because it feeds the Approvals queue. */
-  static async reportedThreads(admin: Actor): Promise<ThreadSummary[]> {
-    const reportedIds = await MessageDAO.reportedThreadIds();
-    if (!reportedIds.length) return [];
-    const threads = await MessageThreadDAO.findAll({
-      _id: { $in: reportedIds },
-    });
-    return MessageService.summarize(admin, threads, reportedIds);
-  }
-
   /** Decorates threads with what a list row shows; `reportedIds` is looked up when the caller has not already. */
-  private static async summarize(
+  static async summarize(
     actor: Actor,
     items: Doc<MessageThread>[],
     reportedIds?: Types.ObjectId[]
@@ -251,17 +246,29 @@ export default class MessageService {
           })) as Doc<MessageThread>);
     }
     const minor = isMinor(volunteer.dateOfBirth);
-    return MessageThreadDAO.create({
-      eventId: event._id,
-      volunteerId: volunteer._id,
-      organizerId: event.organizerId,
-      status: "open",
-      involvesMinor: minor,
-      lastMessageAt: new Date(),
-      // Threads with minors are flagged for periodic admin review at creation.
-      flaggedAt: minor ? new Date() : null,
-      flagReason: minor ? "Involves a volunteer under 18" : undefined,
-    });
+    try {
+      return await MessageThreadDAO.create({
+        eventId: event._id,
+        volunteerId: volunteer._id,
+        organizerId: event.organizerId,
+        status: "open",
+        involvesMinor: minor,
+        lastMessageAt: new Date(),
+        // Threads with minors are flagged for periodic admin review at creation.
+        flaggedAt: minor ? new Date() : null,
+        flagReason: minor ? "Involves a volunteer under 18" : undefined,
+      });
+    } catch (error) {
+      // Another request opened the same thread between the lookup and the
+      // insert; the unique index kept one, so use it.
+      if (!isDuplicateKey(error)) throw error;
+      const raced = await MessageThreadDAO.findByEventAndVolunteer(
+        event._id,
+        volunteer._id
+      );
+      if (!raced) throw error;
+      return raced;
+    }
   }
 
   static async createThread(
@@ -320,23 +327,33 @@ export default class MessageService {
     if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
     if (!MessageService.isParticipant(actor, thread))
       throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
-    if (thread.status !== "open")
-      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
     return MessageService.deliver(actor, thread, body);
   }
 
+  /**
+   * The one place a message is posted, so a closed thread is refused however
+   * it was reached: a reply, a new conversation that resolves to the same
+   * thread, or a broadcast.
+   */
   private static async deliver(
     actor: Actor,
     thread: Doc<MessageThread>,
     body: string,
-    event?: Doc<Event> | null
+    event?: Doc<Event> | null,
+    eventUpdate?: Doc<EventUpdate>
   ) {
-    const recent = await MessageDAO.countBySenderSince(
-      actor.id,
-      new Date(Date.now() - HOUR)
-    );
-    if (recent >= MAX_MESSAGES_PER_HOUR)
-      throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+    if (thread.status !== "open")
+      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
+    // An event update goes to the whole roster at once, so it is not one
+    // person sending messages and is not held to the hourly limit.
+    if (!eventUpdate) {
+      const recent = await MessageDAO.countBySenderSince(
+        actor.id,
+        new Date(Date.now() - HOUR)
+      );
+      if (recent >= MAX_MESSAGES_PER_HOUR)
+        throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+    }
 
     const now = new Date();
     const recipientId = sameId(actor.id, thread.volunteerId)
@@ -348,16 +365,23 @@ export default class MessageService {
       senderId: new Types.ObjectId(actor.id),
       body,
       sentAt: now,
+      eventUpdateId: eventUpdate?._id ?? null,
     });
     await MessageThreadDAO.updateById(thread._id, {
       lastMessageAt: now,
-      [`lastReadAt.${actor.id}`]: now,
+      // Posting an update is not the organizer reading each thread, so it
+      // must not hide a volunteer's unread question from them.
+      ...(eventUpdate ? {} : { [`lastReadAt.${actor.id}`]: now }),
     });
 
     if (!recipient || recipient.status !== "active") {
       await MessageDAO.updateById(message._id, { notifiedAt: now });
       return { message, notice: ERRORS.THREAD.RECIPIENT_INACTIVE };
     }
+
+    // Update messages are left to the hourly digest, which only emails about
+    // them if they are still unread; the update has its own emails.
+    if (eventUpdate) return { message };
 
     // One email per message, collapsing into an hourly digest for a busy thread.
     const lastNotified = await MessageDAO.lastNotifiedAt(thread._id, actor.id);
@@ -366,7 +390,7 @@ export default class MessageService {
         (event ?? (await EventDAO.findById(thread.eventId)))?.title ??
         "your event";
       const org = await NotificationService.org();
-      await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.newMessage(org, {
           name: recipient.firstName,
@@ -377,7 +401,9 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      await MessageDAO.updateById(message._id, { notifiedAt: now });
+      // A failed email leaves the message for the hourly digest to retry.
+      if (outcome !== "failed")
+        await MessageDAO.updateById(message._id, { notifiedAt: now });
     }
     return { message };
   }
@@ -409,6 +435,50 @@ export default class MessageService {
       sent += 1;
     }
     return { sent };
+  }
+
+  /**
+   * Delivers an event update into each confirmed volunteer's thread with the
+   * organizer, opening the thread if there isn't one yet. It is sent as the
+   * organizer, since that is who the volunteer's reply goes to.
+   */
+  static async postEventUpdate(
+    event: Doc<Event>,
+    update: Doc<EventUpdate>
+  ): Promise<void> {
+    const organizer = await UserDAO.findById(event.organizerId);
+    if (!organizer) return;
+    const sender: Actor = {
+      id: organizer._id.toString(),
+      role: organizer.role,
+      email: organizer.email,
+      name: `${organizer.firstName} ${organizer.lastName}`,
+    };
+    const signups = await SignupDAO.findByEvent(event._id, ["confirmed"]);
+    for (const volunteerId of new Set(
+      signups.map((s) => s.volunteerId.toString())
+    )) {
+      // The update itself is already saved, so one volunteer's failure is
+      // logged and the rest of the roster still gets it.
+      try {
+        const volunteer = await UserDAO.findById(volunteerId);
+        if (!volunteer) continue;
+        const thread = await MessageService.threadFor(event, volunteer);
+        if (thread.status !== "open") continue;
+        await MessageService.deliver(
+          sender,
+          thread,
+          update.body,
+          event,
+          update
+        );
+      } catch (error) {
+        console.error(
+          `[messages] event update ${update._id} not delivered to ${volunteerId}`,
+          error
+        );
+      }
+    }
   }
 
   static async report(
@@ -474,11 +544,14 @@ export default class MessageService {
     );
   }
 
-  /** Scheduled: threads go read-only 30 days after an event ends, or 7 days after a volunteer leaves it. */
-  static async closeStale(): Promise<number> {
+  /**
+   * Scheduled: threads go read-only 30 days after an event ends, or 7 days
+   * after a volunteer leaves it. sent = threads closed, skipped = left open.
+   */
+  static async closeStale(): Promise<SendCounts> {
     const now = new Date();
     const open = await MessageThreadDAO.findAll({ status: "open" });
-    if (!open.length) return 0;
+    if (!open.length) return emptyCounts();
     const events = await EventDAO.findByIds([
       ...new Set(open.map((t) => t.eventId.toString())),
     ]);
@@ -520,15 +593,20 @@ export default class MessageService {
         { status: "read_only", readOnlyAt: now }
       );
     }
-    return toClose.length;
+    return {
+      sent: toClose.length,
+      skipped: open.length - toClose.length,
+      failed: 0,
+    };
   }
 
   /** Scheduled hourly: one digest per recipient for messages that were collapsed. */
-  static async sendDigests(): Promise<number> {
+  static async sendDigests(): Promise<SendCounts> {
     const pending = (await MessageDAO.findUnnotified()).filter(
       (m) => m.sentAt.getTime() < Date.now() - 5 * 60_000
     );
-    if (!pending.length) return 0;
+    const counts = emptyCounts();
+    if (!pending.length) return counts;
     const threads = await MessageThreadDAO.findAll({
       _id: { $in: [...new Set(pending.map((m) => m.threadId.toString()))] },
     });
@@ -542,6 +620,7 @@ export default class MessageService {
         { senderId: Types.ObjectId; count: number; thread: Doc<MessageThread> }
       >
     >();
+    const recipientOf = new Map<string, string>();
 
     for (const message of pending) {
       const thread = threads.find((t) => sameId(t._id, message.threadId));
@@ -551,6 +630,10 @@ export default class MessageService {
           ? thread.organizerId
           : thread.volunteerId
       ).toString();
+      recipientOf.set(message._id.toString(), recipientId);
+      // Already read in the app, so there is nothing to tell them.
+      const readAt = thread.lastReadAt?.[recipientId];
+      if (readAt && readAt >= message.sentAt) continue;
       const perThread = byRecipient.get(recipientId) ?? new Map();
       const entry = perThread.get(thread._id.toString()) ?? {
         senderId: message.senderId,
@@ -563,10 +646,13 @@ export default class MessageService {
     }
 
     const org = await NotificationService.org();
-    let sent = 0;
+    const failed = new Set<string>();
     for (const [recipientId, perThread] of byRecipient) {
       const recipient = await UserDAO.findById(recipientId);
-      if (!recipient) continue;
+      if (!recipient) {
+        counts.skipped += 1;
+        continue;
+      }
       const senders = await UserDAO.findSummaries(
         [...perThread.values()].map((e) => e.senderId)
       );
@@ -583,7 +669,7 @@ export default class MessageService {
           url: appUrl(`/messages/${e.thread._id}`),
         };
       });
-      const delivered = await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.messageDigest(org, {
           name: recipient.firstName,
@@ -591,12 +677,16 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      if (delivered) sent += 1;
+      counts[outcome] += 1;
+      if (outcome === "failed") failed.add(recipientId);
     }
+    // A failed digest's messages stay pending, so the next run retries it.
     await MessageDAO.markNotified(
-      pending.map((m) => m._id),
+      pending
+        .filter((m) => !failed.has(recipientOf.get(m._id.toString())!))
+        .map((m) => m._id),
       new Date()
     );
-    return sent;
+    return counts;
   }
 }

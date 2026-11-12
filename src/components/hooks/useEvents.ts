@@ -25,6 +25,11 @@ export function useEvent(eventId: string) {
     queryKey: QUERY_KEYS.event(eventId),
     queryFn: () => EventHTTPClient.get(eventId),
     enabled: !!eventId,
+    // Verifying happens in another tab, which confirms these sign-ups server-side.
+    refetchOnWindowFocus: (q) =>
+      !!q.state.data?.mySignups.some((s) =>
+        s.pendingReasons.includes("email_verification")
+      ),
   });
 }
 
@@ -72,7 +77,11 @@ export function useEventActions(eventId?: string) {
     reassign: useMutation({
       mutationFn: (organizerId: string) =>
         EventHTTPClient.reassign(id(), organizerId),
-      onSuccess: invalidate,
+      onSuccess: () => {
+        invalidate();
+        // Refresh the admin Events table on every page and filter.
+        queryClient.invalidateQueries({ queryKey: ["admin", "events"] });
+      },
     }),
     addShift: useMutation({
       mutationFn: (body: ShiftBody) => EventHTTPClient.addShift(id(), body),

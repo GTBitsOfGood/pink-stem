@@ -8,6 +8,7 @@ import { Menu, MessageSquare, X } from "lucide-react";
 import Container from "@/components/layout/Container";
 import { useSession } from "@/components/hooks/useSession";
 import { buttonClasses } from "@/components/ui/Button";
+import { homePath } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/types/user";
 
@@ -90,7 +91,8 @@ export default function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-ink-200 bg-white/95 backdrop-blur">
       <Container className="flex h-16 items-center justify-between gap-4">
         <Link
-          href="/"
+          // Until the session loads, "/" lets the proxy pick the landing page.
+          href={isLoading ? "/" : user ? homePath(user.role) : "/events"}
           className="flex shrink-0 items-center gap-3"
           aria-label="Pink STEM Volunteer Hub home"
         >

@@ -14,7 +14,7 @@ import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
 
 function RegisterForm() {
   const next = useSearchParams().get("next") ?? "/dashboard";
-  const { register } = useAuthActions(next);
+  const { register } = useAuthActions();
   const { values, set } = useFormValues({
     firstName: "",
     lastName: "",
@@ -31,6 +31,26 @@ function RegisterForm() {
       phone: values.phone || undefined,
     });
   };
+
+  if (register.isSuccess) {
+    return (
+      <AuthCard
+        title="Check your email"
+        description="One more step before you can get confirmed for shifts."
+      >
+        <Alert tone="info" title="Verification link sent">
+          We sent a link to <strong>{values.email}</strong>. Click it to confirm
+          your email address — sign-ups stay pending until you do.
+        </Alert>
+        <Link
+          href={next}
+          className="mt-4 block text-center text-sm font-semibold text-brand-700 hover:underline"
+        >
+          Continue →
+        </Link>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

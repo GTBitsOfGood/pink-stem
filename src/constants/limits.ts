@@ -12,6 +12,10 @@ export const EMAIL_VERIFICATION_DAYS = 7;
 export const ADULT_AGE = 18;
 
 export const REMINDER_HOURS = [72, 24] as const;
+/** Notes on an event are emailed as one digest at most this often. */
+export const NOTE_DIGEST_INTERVAL_HOURS = 24;
+/** How long a failed note digest email keeps being retried. */
+export const NOTE_DIGEST_RETRY_DAYS = 7;
 export const LOW_FILL_ALERT_HOURS = 72;
 export const ROSTER_NUDGE_HOURS = [24, 72] as const;
 export const ROSTER_ADMIN_ESCALATION_DAYS = 7;
@@ -40,6 +44,15 @@ export const PAGE_SIZE = 25;
 
 /** How long a crashed job run can hold the runner's lock before it lapses. */
 export const JOB_LOCK_TTL_MS = 10 * 60_000;
+
+/** How long a crashed shift delete can hold its event's lock before it lapses. */
+export const SHIFT_DELETE_LOCK_TTL_MS = 30_000;
+
+/**
+ * How long a keyed email stays claimed by a sender that never reported back.
+ * Past this, the sender is assumed dead and the next run sends it again.
+ */
+export const NOTIFICATION_CLAIM_TTL_MS = 15 * 60_000;
 
 /**
  * Rate limits, expressed as hits per fixed window. Login is limited per
