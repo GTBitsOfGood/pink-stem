@@ -194,26 +194,17 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
       </Card>
 
       <Card>
-        <CardHeader
-          title="Skills"
-          description="What you can lead or support. Shifts may list helpful skills."
-        />
+        <CardHeader title="Skills" />
         <CardBody>{skillGrid("skills")}</CardBody>
       </Card>
 
       <Card>
-        <CardHeader
-          title="Interests"
-          description="Program areas you would like to hear about."
-        />
+        <CardHeader title="Interests" />
         <CardBody>{skillGrid("interests")}</CardBody>
       </Card>
 
       <Card>
-        <CardHeader
-          title="Email preferences"
-          description="Confirmations for your own sign-ups and important changes are always sent."
-        />
+        <CardHeader title="Email preferences" />
         <CardBody className="grid gap-2 sm:grid-cols-2">
           {NOTIFICATION_CATEGORIES.filter(
             (c) => c !== "digests" || user.role !== "volunteer"

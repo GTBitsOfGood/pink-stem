@@ -159,7 +159,6 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="My shifts"
         title={user ? `Hi ${user.firstName}` : "My shifts"}
-        description="Everything you have signed up for, what is still outstanding, and your hours to date."
         action={
           <ButtonLink href="/events" variant="secondary">
             Browse event shifts

@@ -221,10 +221,7 @@ export default function EventForm({
       </Card>
 
       <Card>
-        <CardHeader
-          title="Requirements"
-          description="Screening is a gate in the sign-up flow, not a note in a spreadsheet."
-        />
+        <CardHeader title="Requirements" />
         <CardBody className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Checkbox

@@ -274,10 +274,7 @@ export default function PersonPage() {
             />
           </Card>
           <Card>
-            <CardHeader
-              title="Audit trail"
-              description="Actions by and about this account."
-            />
+            <CardHeader title="Audit trail" />
             {p.audit.length ? (
               <Table className="rounded-none border-0 shadow-none">
                 <thead>
@@ -313,7 +310,7 @@ export default function PersonPage() {
           <Card>
             <CardHeader
               title="Background clearance"
-              description="Recorded outcome of a check run elsewhere. Organizers only ever see a cleared / not cleared flag."
+              description="Organizers only ever see a cleared / not cleared flag."
             />
             <CardBody>
               {p.clearance?.recordedBy ? (
@@ -327,7 +324,7 @@ export default function PersonPage() {
           <Card>
             <CardHeader
               title="Registry pre-check"
-              description="Automated name search of public registries. It never changes clearance; you decide."
+              description="It never changes clearance; you decide."
               action={
                 <Button
                   size="sm"
