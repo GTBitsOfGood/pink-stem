@@ -25,7 +25,6 @@ export interface NotificationLog {
   status?: NotificationStatus;
   /** When the current or last attempt took the key; identifies its holder. */
   claimedAt?: Date;
-  attempts?: number;
   sentAt?: Date;
   failedAt?: Date;
   failureKind?: MailFailure;

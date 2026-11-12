@@ -99,12 +99,10 @@ export default class AttendanceService {
     const attendedIds = confirmed
       .filter((s) => s.attendance!.status === "attended")
       .map((s) => s.volunteerId);
-    const [volunteers, org] = attendedIds.length
-      ? await Promise.all([
-          UserDAO.findByIds(attendedIds),
-          NotificationService.org(),
-        ])
-      : [[], null];
+    const [volunteers, org] = await Promise.all([
+      UserDAO.findByIds(attendedIds),
+      NotificationService.org(),
+    ]);
 
     for (const signup of confirmed) {
       const attendance = signup.attendance!;
@@ -135,7 +133,7 @@ export default class AttendanceService {
         sameId(v._id, signup.volunteerId)
       );
       const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
-      if (!volunteer || !shift || !org) continue;
+      if (!volunteer || !shift) continue;
       await CertificateService.issueEventCertificate(
         volunteer,
         event,

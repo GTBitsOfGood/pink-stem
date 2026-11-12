@@ -119,8 +119,7 @@ export default class ClearanceService {
               expiresOn: `${expiresOn} (volunteer: ${user.firstName} ${user.lastName})`,
               url: appUrl(`/admin/people/${user._id}`),
             }),
-          key,
-          org
+          key
         );
         addCounts(counts, admins);
       }
@@ -128,8 +127,7 @@ export default class ClearanceService {
     return counts;
   }
 
-  /** Scheduled: flip lapsed clearances to expired and put affected spots on hold. */
-  /** sent = clearances expired (no email of its own; sign-up lapses email separately). */
+  /** Scheduled: flip lapsed clearances to expired and put affected spots on hold. sent = clearances expired. */
   static async expireLapsed(): Promise<SendCounts> {
     const lapsed = await ClearanceDAO.expireLapsed(new Date());
     for (const record of lapsed) {

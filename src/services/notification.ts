@@ -5,7 +5,7 @@ import UserDAO from "@/db/actions/user";
 import { formatLongDate, formatTimeRange } from "@/lib/dates";
 import { EventDetails, emailTemplates } from "@/lib/emailTemplates";
 import { appUrl } from "@/lib/urls";
-import { countOutcomes, emptyCounts } from "@/lib/sendCounts";
+import { countOutcomes } from "@/lib/sendCounts";
 import MailService, { EmailContent, MailError } from "@/services/mail";
 import type { Event, Shift } from "@/types/event";
 import type { Doc } from "@/types/models";
@@ -15,7 +15,7 @@ import type { NotificationCategory, SafeUser } from "@/types/user";
 type Recipient = Pick<SafeUser, "email" | "firstName" | "status"> &
   Partial<Pick<SafeUser, "notificationPreferences">>;
 
-export type Org = { name: string; address: string; phone: string };
+type Org = { name: string; address: string; phone: string };
 
 interface SendOptions {
   /** Which preference governs the email; confirmations are always sent. */
@@ -124,17 +124,16 @@ export default class NotificationService {
 
   static async toAdmins(
     build: (org: Org, admin: Doc<SafeUser>) => EmailContent,
-    dedupePrefix?: string,
-    org?: Org
+    dedupePrefix?: string
   ): Promise<SendCounts> {
-    const [resolvedOrg, admins] = await Promise.all([
-      org ?? NotificationService.org(),
+    const [org, admins] = await Promise.all([
+      NotificationService.org(),
       UserDAO.listByRole("admin"),
     ]);
     return countOutcomes(
       await Promise.all(
         admins.map((admin) =>
-          NotificationService.send(admin, build(resolvedOrg, admin), {
+          NotificationService.send(admin, build(org, admin), {
             dedupeKey: dedupePrefix
               ? `${dedupePrefix}:${admin._id}`
               : undefined,
@@ -148,15 +147,14 @@ export default class NotificationService {
     userIds: (string | Types.ObjectId)[],
     build: (org: Org, user: Doc<SafeUser>) => EmailContent,
     options: SendOptions = {}
-  ): Promise<SendCounts> {
-    if (!userIds.length) return emptyCounts();
-    const [org, users] = await Promise.all([
-      NotificationService.org(),
-      UserDAO.findByIds(userIds),
-    ]);
-    return countOutcomes(
-      await Promise.all(
-        users.map((user) =>
+  ): Promise<void> {
+    if (!userIds.length) return;
+    const org = await NotificationService.org();
+    const users = await Promise.all(userIds.map((id) => UserDAO.findById(id)));
+    await Promise.all(
+      users
+        .filter((user): user is Doc<SafeUser> => user !== null)
+        .map((user) =>
           NotificationService.send(user, build(org, user), {
             ...options,
             dedupeKey: options.dedupeKey
@@ -164,7 +162,6 @@ export default class NotificationService {
               : undefined,
           })
         )
-      )
     );
   }
 

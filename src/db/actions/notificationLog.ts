@@ -44,7 +44,7 @@ export default class NotificationLogDAO {
             },
           ],
         },
-        { $set: { status: "sending", claimedAt: now }, $inc: { attempts: 1 } },
+        { $set: { status: "sending", claimedAt: now } },
         { upsert: true }
       );
       return now;

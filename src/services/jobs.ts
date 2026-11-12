@@ -301,8 +301,7 @@ export default class JobService {
                 : "a former organizer",
               url,
             }),
-          `roster-escalation:${event._id}`,
-          org
+          `roster-escalation:${event._id}`
         );
         addCounts(counts, escalated);
       }

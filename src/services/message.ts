@@ -476,8 +476,10 @@ export default class MessageService {
     );
   }
 
-  /** Scheduled: threads go read-only 30 days after an event ends, or 7 days after a volunteer leaves it. */
-  /** sent = threads closed, skipped = open threads left open. */
+  /**
+   * Scheduled: threads go read-only 30 days after an event ends, or 7 days
+   * after a volunteer leaves it. sent = threads closed, skipped = left open.
+   */
   static async closeStale(): Promise<SendCounts> {
     const now = new Date();
     const open = await MessageThreadDAO.findAll({ status: "open" });

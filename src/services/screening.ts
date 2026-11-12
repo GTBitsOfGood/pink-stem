@@ -21,9 +21,6 @@ export default class ScreeningService {
    * That is anyone with a sign-up pending on clearance who has not been
    * checked since that sign-up or their profile last changed, or whose last
    * check hit a source error, plus anyone an admin queued for a rerun.
-   * Returns how many volunteers were checked.
-   */
-  /**
    * sent = volunteers checked, skipped = not due, failed = due but missing
    * from the registry results.
    */

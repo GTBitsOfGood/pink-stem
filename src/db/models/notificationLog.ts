@@ -11,7 +11,6 @@ const notificationLogSchema = new Schema<NotificationLog>(
     key: { type: String, required: true, unique: true },
     status: { type: String, enum: NOTIFICATION_STATUSES },
     claimedAt: { type: Date },
-    attempts: { type: Number },
     sentAt: { type: Date },
     failedAt: { type: Date },
     failureKind: { type: String, enum: MAIL_FAILURES },

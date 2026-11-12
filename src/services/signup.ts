@@ -733,8 +733,7 @@ export default class SignupService {
     }
   }
 
-  /** Scheduled: held spots that were never resolved return to the waitlist. */
-  /** Counts the release emails; a hold that did not expire counts as skipped. */
+  /** Scheduled: held spots that were never resolved return to the waitlist. Counts the release emails. */
   static async expireHolds(): Promise<SendCounts> {
     const expired = await SignupDAO.find({
       status: "pending",
