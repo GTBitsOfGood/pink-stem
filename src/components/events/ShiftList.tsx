@@ -10,6 +10,7 @@ import { SignupBadge } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
 import { errorMessage, useToast } from "@/components/ui/Toast";
+import ResendVerificationButton from "@/components/profile/ResendVerificationButton";
 import { PENDING_REASON_LABELS, SKILL_LABELS } from "@/constants/labels";
 import type {
   ClientEventDetail,
@@ -110,7 +111,15 @@ export default function ShiftList({ event }: { event: ClientEventDetail }) {
                 Still outstanding before you are confirmed:
               </li>
               {mine.pendingReasons.map((r) => (
-                <li key={r}>• {PENDING_REASON_LABELS[r]}</li>
+                <li
+                  key={r}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span>• {PENDING_REASON_LABELS[r]}</span>
+                  {r === "email_verification" ? (
+                    <ResendVerificationButton />
+                  ) : null}
+                </li>
               ))}
             </ul>
           ) : null}

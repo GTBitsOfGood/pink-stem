@@ -26,17 +26,20 @@ const ERRORS = Object.freeze({
     NOT_FOUND: "That event does not exist.",
     NOT_PUBLISHED: "This event is not open for sign-ups.",
     NOT_EDITABLE: "Completed and cancelled events cannot be edited.",
+    MIN_AGE_RAISED: (minAge: number, names: string[]) =>
+      `The minimum age can't be raised to ${minAge} while ${names.join(", ")} ${names.length === 1 ? "is" : "are"} signed up and under it. Cancel ${names.length === 1 ? "that sign-up" : "those sign-ups"} first.`,
     ALREADY_PUBLISHED: "This event is already published.",
     NO_SHIFTS: "Add at least one shift before publishing.",
     NOT_ORGANIZER: "Only the organizer of this event or an admin can do that.",
     ORGANIZER_ROLE: "Events can only be assigned to organizers or admins.",
-    VIRTUAL_LINK: "Virtual events need a join link.",
-    LOCATION_REQUIRED: "In-person events need a location.",
+    VIRTUAL_LINK: "Virtual events need a valid join link.",
+    LOCATION_REQUIRED: "In-person events need a host site and address.",
   },
   SHIFT: {
     NOT_FOUND: "That shift does not exist.",
     TIME_ORDER: "A shift must end after it starts.",
     TOO_LONG: "A shift cannot be longer than sixteen hours.",
+    DIFFERENT_DAY: "A shift cannot be on a different day from its event.",
     CAPACITY_BELOW_FILLED:
       "Capacity cannot be reduced below the number of volunteers already holding a spot.",
     MIN_STAFFING: "Minimum staffing cannot exceed capacity.",

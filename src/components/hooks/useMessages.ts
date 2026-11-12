@@ -64,7 +64,7 @@ export function useMessageActions(threadId?: string) {
       onSuccess: () => {
         invalidate();
         queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.admin.approvals,
+          queryKey: ["admin", "approvals"],
         });
       },
     }),
