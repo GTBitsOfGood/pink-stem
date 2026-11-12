@@ -97,10 +97,10 @@ export default function ApprovalsPage() {
     setPage(1);
   };
 
-  const moveTab = (index: number, direction: number) => {
-    const next = (index + direction + QUEUES.length) % QUEUES.length;
-    selectQueue(QUEUES[next].id);
-    document.getElementById(`approval-tab-${QUEUES[next].id}`)?.focus();
+  const focusTab = (index: number) => {
+    const next = QUEUES[(index + QUEUES.length) % QUEUES.length].id;
+    selectQueue(next);
+    document.getElementById(`approval-tab-${next}`)?.focus();
   };
 
   return (
@@ -125,11 +125,11 @@ export default function ApprovalsPage() {
             tabIndex={queue === item.id ? 0 : -1}
             onClick={() => selectQueue(item.id)}
             onKeyDown={(event) => {
-              const index = QUEUES.findIndex(
-                (candidate) => candidate.id === item.id
-              );
-              if (event.key === "ArrowRight") moveTab(index, 1);
-              else if (event.key === "ArrowLeft") moveTab(index, -1);
+              const index = QUEUES.indexOf(item);
+              if (event.key === "ArrowRight") focusTab(index + 1);
+              else if (event.key === "ArrowLeft") focusTab(index - 1);
+              else if (event.key === "Home") focusTab(0);
+              else if (event.key === "End") focusTab(QUEUES.length - 1);
               else return;
               event.preventDefault();
             }}
@@ -144,7 +144,7 @@ export default function ApprovalsPage() {
         id="approval-panel"
         role="tabpanel"
         aria-labelledby={`approval-tab-${queue}`}
-        aria-live="polite"
+        tabIndex={0}
       >
         <h2 className="mb-3 text-lg font-bold text-ink-900">{current.label}</h2>
         {approvals.isError ? (
