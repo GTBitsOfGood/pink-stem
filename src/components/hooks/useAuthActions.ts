@@ -28,7 +28,9 @@ export function useAuthActions(next = "/dashboard") {
     }),
     register: useMutation({
       mutationFn: (body: RegisterBody) => AuthHTTPClient.register(body),
-      onSuccess: onSignedIn,
+      // Stay on the page so it can explain email verification.
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session }),
     }),
     resetPassword: useMutation({
       mutationFn: (body: ResetPasswordInput) =>
