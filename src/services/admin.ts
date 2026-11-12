@@ -122,25 +122,23 @@ export default class AdminService {
   static async getPerson(userId: string): Promise<PersonDetail> {
     const user = await UserDAO.findById(userId);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
-    const [
-      clearance,
-      screening,
-      signups,
-      ledger,
-      certificates,
-      audit,
-      threadCount,
-    ] = await Promise.all([
-      ClearanceDAO.findByUser(user._id),
-      ScreeningCheckDAO.findByUser(user._id),
-      SignupDAO.findByVolunteer(user._id),
-      HoursLedgerDAO.findByVolunteer(user._id),
-      CertificateDAO.findByVolunteer(user._id),
-      AuditLogDAO.findForUser(user._id),
-      MessageThreadDAO.count({
-        $or: [{ volunteerId: user._id }, { organizerId: user._id }],
-      }),
-    ]);
+    const [clearance, screening, signups, ledger, certificates, threadCount] =
+      await Promise.all([
+        ClearanceDAO.findByUser(user._id),
+        ScreeningCheckDAO.findByUser(user._id),
+        SignupDAO.findByVolunteer(user._id),
+        HoursLedgerDAO.findByVolunteer(user._id),
+        CertificateDAO.findByVolunteer(user._id),
+        MessageThreadDAO.count({
+          $or: [{ volunteerId: user._id }, { organizerId: user._id }],
+        }),
+      ]);
+    const audit = await AuditLogDAO.findForUser(user._id, {
+      clearance: clearance ? [clearance._id] : [],
+      ledger: ledger.map((e) => e._id),
+      certificate: certificates.map((c) => c._id),
+      signup: signups.map((s) => s._id),
+    });
     return {
       user,
       clearance,
