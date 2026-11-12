@@ -14,7 +14,7 @@ created.
 | Event details            | Title, description, logistics, shifts, organizer updates and guest registration prompt                | Pass with known follow-up: content does not clip. Event logistics appear after sign-up content on narrow screens; #73 owns that placement change. |
 | Shift sign-up and waiver | Shift action, waiver dialog, required confirmation, cancel/submit actions and pending result          | Pass: the dialog stays inside the viewport, scrolls when needed, and both actions remain reachable.                                               |
 | My shifts                | Mobile menu, upcoming/past cards, status, pending reasons, details/calendar/cancel actions            | Pass with known follow-up: the page is reachable, but #69 owns moving My shifts to the first navigation position.                                 |
-| Hours                    | Summary cards, ledger overflow, service-record date fields and submit action                          | Pass: the ledger scrolls within its container and the form does not widen the page.                                                               |
+| Hours                    | Summary cards, ledger overflow, service-record date fields and submit action                          | Fail at 320 and 390 px: with ledger entries, the page widens to 658 px and the ledger can't scroll. Fixed by #100 (#90).                          |
 | Organizer messaging      | Updates, message entry point, disclosure, textarea, cancel/send actions                               | Pass with known follow-up: the flow is usable; #74 owns placing its entry point directly below organizer updates.                                 |
 
 ## Interaction checks
@@ -26,15 +26,19 @@ created.
   without submitting.
 - Long event titles, addresses, pending reasons, and organizer updates wrap
   instead of creating page-level horizontal scrolling.
-- The Hours ledger uses its own horizontal scrolling at 320 px, preserving the
-  page width and all columns.
 - Loading, empty, error, and populated states retain a visible heading and next
   action.
 
 ## Follow-up boundary
 
-This pass did not reproduce an additional application defect. It confirmed the
-three already-filed layout tasks above and did not change their implementation.
+Rechecked November 12, 2026 against the running app (demo seed, signed out and
+as a volunteer). One defect was reproduced: on `/hours` at 320 and 390 px, a
+ledger with entries widens the page to 658 px. Steps: sign in as a volunteer
+with hours, open Hours at 390 px, and scroll sideways. Expected: the page stays
+at the screen width and the ledger scrolls inside its card. `Card` didn't clip
+its content, so the 640 px table stretched its grid column; #100 fixes this
+by adding `overflow-hidden` to `Card`. The three already-filed layout tasks
+above are unchanged.
 Browser chrome and hosting overlays were excluded from the results.
 
 The component fixtures cover layout and client interactions with synthetic
