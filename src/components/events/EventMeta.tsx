@@ -1,7 +1,11 @@
+import type { ReactNode } from "react";
 import { CalendarDays, MapPin, Phone, ShieldCheck, Video } from "lucide-react";
 import type { ClientEvent } from "@/http/eventHTTPClient";
 import { formatLongDate, formatTimeRange } from "@/lib/dates";
 import { REGION_LABELS } from "@/constants/labels";
+
+/** Only http(s) links become clickable; the form accepts any URL scheme. */
+const isWebLink = (url: string) => /^https?:\/\//i.test(url);
 
 /** When, where, who to call. The same block the emails carry. */
 export default function EventMeta({
@@ -14,7 +18,7 @@ export default function EventMeta({
   const shifts = event.shifts;
   const first = shifts[0];
   const last = shifts[shifts.length - 1];
-  const rows = [
+  const rows: { icon: ReactNode; text: ReactNode }[] = [
     {
       icon: <CalendarDays className="h-4 w-4" />,
       text:
@@ -23,7 +27,27 @@ export default function EventMeta({
           : formatLongDate(event.eventDate),
     },
     event.isVirtual
-      ? { icon: <Video className="h-4 w-4" />, text: "Virtual event" }
+      ? {
+          icon: <Video className="h-4 w-4" />,
+          // The API only includes the link for confirmed volunteers, the
+          // organizer and admins.
+          text:
+            !compact && event.virtualLink && isWebLink(event.virtualLink) ? (
+              <>
+                Virtual event ·{" "}
+                <a
+                  href={event.virtualLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="break-all font-medium text-brand-700 underline"
+                >
+                  Join link
+                </a>
+              </>
+            ) : (
+              "Virtual event"
+            ),
+        }
       : {
           icon: <MapPin className="h-4 w-4" />,
           text:

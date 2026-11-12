@@ -41,14 +41,19 @@ export default class NotificationService {
     };
   }
 
-  /** Every event email states event, date, time, address, and site contact. */
+  /**
+   * Every event email states event, date, time, address, and site contact.
+   * A virtual event's join link is left out unless `joinLink` is set, which
+   * callers do only for a volunteer confirmed on the event (see joinLink.ts).
+   */
   static eventDetails(
     event: Doc<Event>,
     shift?: Pick<Shift, "startsAt" | "endsAt"> | null,
-    organizer?: { firstName: string; lastName: string } | null
+    organizer?: { firstName: string; lastName: string } | null,
+    { joinLink = false }: { joinLink?: boolean } = {}
   ): EventDetails {
     const where = event.isVirtual
-      ? `Virtual${event.virtualLink ? ` · ${event.virtualLink}` : ""}`
+      ? `Virtual${joinLink && event.virtualLink ? ` · ${event.virtualLink}` : ""}`
       : [
           event.locationName,
           event.address,

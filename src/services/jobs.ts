@@ -146,7 +146,10 @@ export default class JobService {
       for (const shift of shiftsByWindow[i]) {
         const event = events.find((e) => sameId(e._id, shift.eventId));
         if (!event || event.status !== "published") continue;
-        const details = NotificationService.eventDetails(event, shift);
+        // Reminders only go to confirmed sign-ups.
+        const details = NotificationService.eventDetails(event, shift, null, {
+          joinLink: true,
+        });
         for (const signup of signupsByShift.get(shift._id.toString()) ?? []) {
           const user = userById.get(signup.volunteerId.toString());
           if (!user) {
