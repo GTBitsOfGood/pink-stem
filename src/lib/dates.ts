@@ -133,8 +133,12 @@ export const toDateTimeLocal = (value: DateLike) => {
 };
 
 /** `YYYY-MM-DD` in the org zone, the value a date input expects. */
-export const toDateInput = (value: DateLike) =>
-  toDateTimeLocal(value).slice(0, 10);
+export const toDateInput = (value: DateLike) => {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return toDateTimeLocal(value).slice(0, 10);
+};
 
 /** Interprets a datetime-local (or date) string as wall-clock time in the org zone. */
 export const fromDateTimeLocal = (value: string): Date => {
@@ -150,3 +154,37 @@ export const fromDateTimeLocal = (value: string): Date => {
 /** Start of the org-zone day containing the instant. */
 export const startOfDay = (value: DateLike) =>
   fromDateTimeLocal(toDateInput(value));
+
+/**
+ * Moves shift start and end times to a target event date in the org time zone,
+ * preserving their original wall-clock times and any multi-day span without
+ * daylight-saving shifts.
+ */
+export const moveShiftDates = (
+  startsAt: DateLike,
+  endsAt: DateLike,
+  targetDate: DateLike
+): { startsAt: Date; endsAt: Date } => {
+  const startDay = toDateInput(startsAt);
+  const endDay = toDateInput(endsAt);
+  const targetDay = toDateInput(targetDate);
+  const startTime = toDateTimeLocal(startsAt).slice(11);
+  const newStartsAt = fromDateTimeLocal(`${targetDay}T${startTime}`);
+
+  if (startDay === endDay) {
+    const endTime = toDateTimeLocal(endsAt).slice(11);
+    const newEndsAt = fromDateTimeLocal(`${targetDay}T${endTime}`);
+    return { startsAt: newStartsAt, endsAt: newEndsAt };
+  }
+
+  const dayOffset = Math.round(
+    (startOfDay(endsAt).getTime() - startOfDay(startsAt).getTime()) / 86_400_000
+  );
+  const [y, m, d] = targetDay.split("-").map(Number);
+  const newEndDate = new Date(Date.UTC(y, m - 1, d + dayOffset, 12, 0, 0));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const newEndDay = `${newEndDate.getUTCFullYear()}-${pad(newEndDate.getUTCMonth() + 1)}-${pad(newEndDate.getUTCDate())}`;
+  const endTime = toDateTimeLocal(endsAt).slice(11);
+  const newEndsAt = fromDateTimeLocal(`${newEndDay}T${endTime}`);
+  return { startsAt: newStartsAt, endsAt: newEndsAt };
+};
