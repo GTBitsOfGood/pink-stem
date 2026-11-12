@@ -209,8 +209,10 @@ export default class AdminService {
         deactivatedAt: deactivating ? new Date() : null,
       });
       if (deactivating) {
-        // Login is blocked immediately; future rosters are released; history stays.
+        // Login, pending invites, and reset links are blocked immediately; future rosters are released; history stays.
         await UserDAO.bumpSessionVersion(user._id);
+        await ActionTokenDAO.revoke(user.email, "organizer_invite");
+        await ActionTokenDAO.revoke(user.email, "reset_password");
         await SignupService.releaseFutureForUser(
           user._id,
           "Account deactivated"
@@ -241,6 +243,8 @@ export default class AdminService {
   static async invite(admin: Actor, input: unknown): Promise<void> {
     const data = inviteSchema.parse(input);
     const existing = await UserDAO.findByEmail(data.email);
+    if (existing && existing.status !== "active")
+      throw new ConflictError(ERRORS.USER.DEACTIVATED);
     if (existing && existing.role === data.role)
       throw new ConflictError(ERRORS.AUTH.EMAIL_TAKEN);
 
