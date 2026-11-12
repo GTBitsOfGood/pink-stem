@@ -11,6 +11,11 @@ export function useMySignups(enabled = true) {
     queryKey: QUERY_KEYS.mySignups,
     queryFn: () => UserHTTPClient.mySignups(),
     enabled,
+    // Verifying happens in another tab, which confirms these sign-ups server-side.
+    refetchOnWindowFocus: (q) =>
+      !!q.state.data?.some((s) =>
+        s.signup.pendingReasons.includes("email_verification")
+      ),
   });
 }
 
