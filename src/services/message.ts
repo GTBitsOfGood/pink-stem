@@ -363,7 +363,7 @@ export default class MessageService {
         (event ?? (await EventDAO.findById(thread.eventId)))?.title ??
         "your event";
       const org = await NotificationService.org();
-      await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.newMessage(org, {
           name: recipient.firstName,
@@ -374,7 +374,9 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      await MessageDAO.updateById(message._id, { notifiedAt: now });
+      // A failed email leaves the message for the hourly digest to retry.
+      if (outcome !== "failed")
+        await MessageDAO.updateById(message._id, { notifiedAt: now });
     }
     return { message };
   }
@@ -547,6 +549,7 @@ export default class MessageService {
         { senderId: Types.ObjectId; count: number; thread: Doc<MessageThread> }
       >
     >();
+    const recipientOf = new Map<string, string>();
 
     for (const message of pending) {
       const thread = threads.find((t) => sameId(t._id, message.threadId));
@@ -556,6 +559,7 @@ export default class MessageService {
           ? thread.organizerId
           : thread.volunteerId
       ).toString();
+      recipientOf.set(message._id.toString(), recipientId);
       const perThread = byRecipient.get(recipientId) ?? new Map();
       const entry = perThread.get(thread._id.toString()) ?? {
         senderId: message.senderId,
@@ -568,6 +572,7 @@ export default class MessageService {
     }
 
     const org = await NotificationService.org();
+    const failed = new Set<string>();
     for (const [recipientId, perThread] of byRecipient) {
       const recipient = await UserDAO.findById(recipientId);
       if (!recipient) {
@@ -599,9 +604,13 @@ export default class MessageService {
         { category: "messages" }
       );
       counts[outcome] += 1;
+      if (outcome === "failed") failed.add(recipientId);
     }
+    // A failed digest's messages stay pending, so the next run retries it.
     await MessageDAO.markNotified(
-      pending.map((m) => m._id),
+      pending
+        .filter((m) => !failed.has(recipientOf.get(m._id.toString())!))
+        .map((m) => m._id),
       new Date()
     );
     return counts;
