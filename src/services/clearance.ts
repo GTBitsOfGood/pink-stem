@@ -114,9 +114,10 @@ export default class ClearanceService {
       if (user.status === "active" && outcome !== "failed") {
         const admins = await NotificationService.toAdmins(
           (o, admin) =>
-            NotificationService.templates.clearanceExpiring(o, {
+            NotificationService.templates.clearanceExpiringAdmin(o, {
               name: admin.firstName,
-              expiresOn: `${expiresOn} (volunteer: ${user.firstName} ${user.lastName})`,
+              volunteerName: `${user.firstName} ${user.lastName}`,
+              expiresOn,
               url: appUrl(`/admin/people/${user._id}`),
             }),
           key
