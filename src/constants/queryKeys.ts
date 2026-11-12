@@ -14,7 +14,8 @@ export const QUERY_KEYS = {
   settings: ["settings"] as const,
   publicSettings: ["settings", "public"] as const,
   admin: {
-    approvals: ["admin", "approvals"] as const,
+    approvals: (filters: Record<string, string>) =>
+      ["admin", "approvals", filters] as const,
     people: (filters: Record<string, string>) =>
       ["admin", "people", filters] as const,
     person: (id: string) => ["admin", "people", id] as const,

@@ -1,4 +1,5 @@
 import { QueryFilter, Types } from "mongoose";
+import { z } from "zod";
 import EventDAO from "@/db/actions/event";
 import MessageThreadDAO from "@/db/actions/messageThread";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
@@ -10,7 +11,14 @@ import {
   MAX_SHIFTS_PER_EVENT,
   PAGE_SIZE,
 } from "@/constants/limits";
-import { hoursBetween, startOfDay } from "@/lib/dates";
+import {
+  ageOn,
+  hoursBetween,
+  moveShiftDates,
+  startOfDay,
+  toDateInput,
+  toDateTimeLocal,
+} from "@/lib/dates";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -36,6 +44,7 @@ import {
   sameId,
 } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
+import { dateSchema } from "@/utils/validation/common";
 import {
   adminEventFiltersSchema,
   cancelEventSchema,
@@ -186,11 +195,40 @@ export default class EventService {
   private static validateInput(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
-    if (data.isVirtual && !data.virtualLink)
+    if (data.isVirtual && !URL.canParse(data.virtualLink ?? "")) {
       throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
-    if (!data.isVirtual && !data.locationName && !data.address) {
+    }
+    if (!data.isVirtual && (!data.locationName || !data.address)) {
       throw new InvalidArgumentsError(ERRORS.EVENT.LOCATION_REQUIRED);
     }
+  }
+
+  /**
+   * Returns the fields to $set and the fields to $unset for the active mode.
+   * On create, pass only `set` (no prior values to clear).
+   * On update, use both so stale fields from the previous mode are removed from the document.
+   * Mongoose strips undefined values from $set before sending to MongoDB,
+   * so there is no conflict between the two operators.
+   */
+  private static sanitizeByMode(
+    data: ReturnType<typeof eventInputSchema.parse>
+  ) {
+    if (data.isVirtual) {
+      return {
+        set: {
+          ...data,
+          locationName: undefined,
+          address: undefined,
+          locationNote: undefined,
+          city: undefined,
+        },
+        unset: { locationName: "", address: "", locationNote: "", city: "" },
+      };
+    }
+    return {
+      set: { ...data, virtualLink: undefined },
+      unset: { virtualLink: "" },
+    };
   }
 
   /** Events can only be owned by an active organizer or admin. */
@@ -231,12 +269,13 @@ export default class EventService {
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized } = EventService.sanitizeByMode(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
       : null;
     const event = await EventDAO.create({
-      ...data,
-      minAge: data.minAge ?? undefined,
+      ...sanitized,
+      minAge: sanitized.minAge ?? undefined,
       organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
     if (organizer && !sameId(organizer._id, actor.id)) {
@@ -268,15 +307,128 @@ export default class EventService {
     eventId: string,
     input: unknown
   ): Promise<EventWithShifts> {
-    await EventService.editable(actor, eventId);
+    const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized, unset } = EventService.sanitizeByMode(data);
+    const oldDay = toDateInput(event.eventDate);
+    const newDay = toDateInput(data.eventDate);
+    const shifts = await ShiftDAO.findByEvent(event._id);
+    const needsMove =
+      oldDay !== newDay ||
+      shifts.some((s) => toDateInput(s.startsAt) !== newDay);
+
+    const movedShifts = needsMove
+      ? shifts.map((shift) => {
+          const origStartTime = toDateTimeLocal(shift.startsAt).slice(11);
+          const origEndTime = toDateTimeLocal(shift.endsAt).slice(11);
+          const { startsAt, endsAt } = moveShiftDates(
+            shift.startsAt,
+            shift.endsAt,
+            newDay
+          );
+          if (
+            toDateTimeLocal(startsAt).slice(11) !== origStartTime ||
+            toDateTimeLocal(endsAt).slice(11) !== origEndTime
+          ) {
+            throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
+          }
+          EventService.validateShift(
+            { eventDate: data.eventDate },
+            {
+              startsAt,
+              endsAt,
+              capacity: shift.capacity,
+              minStaffing: shift.minStaffing,
+            },
+            shift.filledCount
+          );
+          return { id: shift._id, startsAt, endsAt };
+        })
+      : [];
+
+    await EventService.assertMinAgeFits(
+      event,
+      data.minAge ?? null,
+      shifts.map((s) => ({
+        _id: s._id,
+        startsAt:
+          movedShifts.find((m) => sameId(m.id, s._id))?.startsAt ?? s.startsAt,
+      }))
+    );
+
+    if (movedShifts.length > 0) {
+      await Promise.all(
+        movedShifts.map((s) =>
+          ShiftDAO.updateById(s.id, { startsAt: s.startsAt, endsAt: s.endsAt })
+        )
+      );
+    }
+
     const updated = (await EventDAO.updateById(eventId, {
-      ...data,
-      minAge: data.minAge ?? null,
+      $set: { ...sanitized, minAge: sanitized.minAge ?? null },
+      $unset: unset,
     })) as Doc<Event>;
+    await EventService.recheckSignups(updated);
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
+  }
+
+  /**
+   * Refuses to raise the minimum age past someone signed up for an upcoming
+   * shift, judged on that shift's (possibly moved) day. Other edits are never
+   * blocked by an older sign-up.
+   */
+  private static async assertMinAgeFits(
+    event: Doc<Event>,
+    minAge: number | null,
+    shifts: Pick<Doc<Shift>, "_id" | "startsAt">[]
+  ) {
+    if (!minAge || minAge <= (event.minAge ?? 0)) return;
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      LIVE_SIGNUP_STATUSES
+    );
+    if (!signups.length) return;
+    const volunteers = await Promise.all(
+      [...new Set(signups.map((s) => s.volunteerId.toString()))].map((id) =>
+        UserDAO.findById(id)
+      )
+    );
+    const under = new Set<string>();
+    const now = new Date();
+    for (const signup of signups) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      const volunteer = volunteers.find(
+        (v) => v && sameId(v._id, signup.volunteerId)
+      );
+      if (!shift || !volunteer || shift.startsAt <= now) continue;
+      if (
+        !volunteer.dateOfBirth ||
+        ageOn(volunteer.dateOfBirth, shift.startsAt) < minAge
+      ) {
+        under.add(`${volunteer.firstName} ${volunteer.lastName}`);
+      }
+    }
+    if (under.size) {
+      throw new IllegalOperationError(
+        ERRORS.EVENT.MIN_AGE_RAISED(minAge, [...under])
+      );
+    }
+  }
+
+  /**
+   * Sign-ups were checked against the requirements in force when they were
+   * made, so clearance and approval are re-checked against the saved event.
+   * This runs on every save, not only when a flag flips: both steps are
+   * no-ops once the roster matches, and a recheck cut short by a failure is
+   * finished by the organizer's next save. Newly requiring approval leaves
+   * confirmed volunteers alone; pending ones pick it up.
+   */
+  private static async recheckSignups(event: Doc<Event>) {
+    if (event.status !== "published") return;
+    await SignupService.reevaluateForEvent(event);
+    if (event.requiresClearance) await SignupService.lapseForEvent(event);
   }
 
   static async publish(
@@ -345,11 +497,65 @@ export default class EventService {
 
   static async duplicate(
     actor: Actor,
-    eventId: string
+    eventId: string,
+    input?: unknown
   ): Promise<EventWithShifts> {
     const source = await EventDAO.findById(eventId);
     if (!source) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     assertCanManageEvent(actor, source);
+    const data = input
+      ? z.object({ eventDate: dateSchema.optional() }).parse(input)
+      : undefined;
+    const targetDate = data?.eventDate ?? source.eventDate;
+    const oldDay = toDateInput(source.eventDate);
+    const newDay = toDateInput(targetDate);
+    const dateChanged = oldDay !== newDay;
+
+    const shifts = await ShiftDAO.findByEvent(source._id);
+    const preparedShifts = shifts.map(
+      ({
+        roleName,
+        description,
+        startsAt,
+        endsAt,
+        capacity,
+        minStaffing,
+        requiredSkills,
+      }) => {
+        const origStartTime = toDateTimeLocal(startsAt).slice(11);
+        const origEndTime = toDateTimeLocal(endsAt).slice(11);
+        const times = dateChanged
+          ? moveShiftDates(startsAt, endsAt, newDay)
+          : { startsAt, endsAt };
+        if (dateChanged) {
+          if (
+            toDateTimeLocal(times.startsAt).slice(11) !== origStartTime ||
+            toDateTimeLocal(times.endsAt).slice(11) !== origEndTime
+          ) {
+            throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
+          }
+          EventService.validateShift(
+            { eventDate: targetDate },
+            {
+              startsAt: times.startsAt,
+              endsAt: times.endsAt,
+              capacity,
+              minStaffing,
+            }
+          );
+        }
+        return {
+          roleName,
+          description,
+          startsAt: times.startsAt,
+          endsAt: times.endsAt,
+          capacity,
+          minStaffing,
+          requiredSkills,
+        };
+      }
+    );
+
     // The copy stays with whoever runs the original, even when an admin makes it.
     const organizer = await EventService.assignableOrganizer(
       source.organizerId.toString()
@@ -359,14 +565,17 @@ export default class EventService {
       description: source.description,
       programArea: source.programArea,
       visibility: source.visibility,
-      eventDate: source.eventDate,
+      eventDate: targetDate,
       region: source.region,
       isVirtual: source.isVirtual,
-      virtualLink: source.virtualLink,
-      locationName: source.locationName,
-      address: source.address,
-      locationNote: source.locationNote,
-      city: source.city,
+      ...(source.isVirtual
+        ? { virtualLink: source.virtualLink }
+        : {
+            locationName: source.locationName,
+            address: source.address,
+            locationNote: source.locationNote,
+            city: source.city,
+          }),
       requiresClearance: source.requiresClearance,
       requiresApproval: source.requiresApproval,
       minAge: source.minAge,
@@ -375,28 +584,8 @@ export default class EventService {
       coverImageUrl: source.coverImageUrl,
       organizerId: organizer._id,
     });
-    const shifts = await ShiftDAO.findByEvent(source._id);
     await ShiftDAO.createMany(
-      shifts.map(
-        ({
-          roleName,
-          description,
-          startsAt,
-          endsAt,
-          capacity,
-          minStaffing,
-          requiredSkills,
-        }) => ({
-          eventId: copy._id,
-          roleName,
-          description,
-          startsAt,
-          endsAt,
-          capacity,
-          minStaffing,
-          requiredSkills,
-        })
-      )
+      preparedShifts.map((s) => ({ ...s, eventId: copy._id }))
     );
     const [withShifts] = await EventService.attachShifts([copy]);
     return withShifts;
@@ -435,16 +624,28 @@ export default class EventService {
   // ---- Shifts -------------------------------------------------------------
 
   private static validateShift(
-    data: ReturnType<typeof shiftInputSchema.parse>,
+    event: Pick<Event, "eventDate">,
+    data: Pick<Shift, "startsAt" | "endsAt"> &
+      Partial<Pick<Shift, "capacity" | "minStaffing">>,
     filledCount = 0
   ) {
     if (data.endsAt <= data.startsAt)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TIME_ORDER);
     if (hoursBetween(data.startsAt, data.endsAt) > MAX_SHIFT_HOURS)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TOO_LONG);
-    if (data.minStaffing > data.capacity)
+    if (
+      toDateInput(data.startsAt) !== toDateInput(event.eventDate) ||
+      toDateInput(data.endsAt) !== toDateInput(event.eventDate)
+    ) {
+      throw new InvalidArgumentsError(ERRORS.SHIFT.DIFFERENT_DAY);
+    }
+    if (
+      data.minStaffing != null &&
+      data.capacity != null &&
+      data.minStaffing > data.capacity
+    )
       throw new InvalidArgumentsError(ERRORS.SHIFT.MIN_STAFFING);
-    if (data.capacity < filledCount)
+    if (data.capacity != null && data.capacity < filledCount)
       throw new InvalidArgumentsError(ERRORS.SHIFT.CAPACITY_BELOW_FILLED);
   }
 
@@ -455,7 +656,7 @@ export default class EventService {
   ): Promise<Doc<Shift>> {
     const event = await EventService.editable(actor, eventId);
     const data = shiftInputSchema.parse(input);
-    EventService.validateShift(data);
+    EventService.validateShift(event, data);
     const existing = await ShiftDAO.findByEvent(event._id);
     if (existing.length >= MAX_SHIFTS_PER_EVENT)
       throw new InvalidArgumentsError(ERRORS.SHIFT.TOO_MANY);
@@ -471,7 +672,7 @@ export default class EventService {
     if (!shift) throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
     const event = await EventService.editable(actor, shift.eventId.toString());
     const data = shiftInputSchema.parse(input);
-    EventService.validateShift(data, shift.filledCount);
+    EventService.validateShift(event, data, shift.filledCount);
     const updated = (await ShiftDAO.updateById(shift._id, data)) as Doc<Shift>;
     if (updated.capacity > shift.capacity && updated.waitlistCount > 0) {
       await SignupService.promoteWaitlist(

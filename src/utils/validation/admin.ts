@@ -12,6 +12,18 @@ import {
   text,
 } from "@/utils/validation/common";
 
+export const APPROVAL_QUEUES = [
+  "clearances",
+  "awaitingClearance",
+  "rosters",
+  "reportedThreads",
+] as const;
+export type ApprovalQueue = (typeof APPROVAL_QUEUES)[number];
+export const approvalFiltersSchema = z.object({
+  queue: z.enum(APPROVAL_QUEUES).default("clearances"),
+  page: pageSchema,
+});
+
 export const peopleFiltersSchema = z.object({
   q: z.string().trim().max(100).optional(),
   role: z.enum(ROLES).optional(),
