@@ -10,19 +10,13 @@ import type {
   ResetPasswordInput,
 } from "@/utils/validation/auth";
 
-/**
- * Sign-in and password flows. Sign-ins land the user on `next` and reload the
- * session; registering only reloads it, so the page can explain email
- * verification before the user moves on.
- */
+/** Sign-in and password flows. Sign-ins land the user on `next` and reload the session. */
 export function useAuthActions(next = "/dashboard") {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const reloadSession = () =>
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session });
   const onSignedIn = async () => {
-    await reloadSession();
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session });
     router.push(next);
     router.refresh();
   };
@@ -34,7 +28,9 @@ export function useAuthActions(next = "/dashboard") {
     }),
     register: useMutation({
       mutationFn: (body: RegisterBody) => AuthHTTPClient.register(body),
-      onSuccess: reloadSession,
+      // Stay on the page so it can explain email verification.
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session }),
     }),
     resetPassword: useMutation({
       mutationFn: (body: ResetPasswordInput) =>
