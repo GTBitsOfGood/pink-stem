@@ -39,7 +39,7 @@ export default function SiteFooter() {
             </li>
             <li>
               <Link href="/verify" className="hover:text-brand-700">
-                Verify a certificate
+                Check a volunteer certificate
               </Link>
             </li>
             <li>

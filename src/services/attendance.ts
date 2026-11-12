@@ -97,6 +97,13 @@ export default class AttendanceService {
 
     const approver = new Types.ObjectId(actor.id);
     let totalHours = 0;
+    const attendedIds = confirmed
+      .filter((s) => s.attendance!.status === "attended")
+      .map((s) => s.volunteerId);
+    const [volunteers, org] = await Promise.all([
+      UserDAO.findByIds(attendedIds),
+      NotificationService.org(),
+    ]);
 
     // No-shows are finalized immediately; attended signups stay as "confirmed"
     // until their certificate is committed so a retry can resume from here if
@@ -127,14 +134,16 @@ export default class AttendanceService {
     // Issue all certificates before sending any notifications so a failed email
     // cannot prevent a subsequent volunteer from receiving their certificate.
     type NotificationPayload = {
-      volunteer: Awaited<ReturnType<typeof UserDAO.findById>> & object;
+      volunteer: (typeof volunteers)[number];
       firstShift: (typeof shifts)[number];
       eventHours: number;
     };
     const notifications: NotificationPayload[] = [];
 
     for (const group of attendedByVolunteer.values()) {
-      const volunteer = await UserDAO.findById(group[0].volunteerId);
+      const volunteer = volunteers.find((v) =>
+        sameId(v._id, group[0].volunteerId)
+      );
       if (!volunteer) continue;
       const eventHours = group.reduce((sum, s) => sum + s.attendance!.hours, 0);
       const roles =
@@ -188,7 +197,6 @@ export default class AttendanceService {
 
     for (const { volunteer, firstShift, eventHours } of notifications) {
       try {
-        const org = await NotificationService.org();
         await NotificationService.send(
           volunteer,
           NotificationService.templates.hoursApproved(org, {

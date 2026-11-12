@@ -9,6 +9,7 @@ const messageSchema = new Schema<Message>(
     senderId: { type: Schema.ObjectId, ref: "User", required: true },
     body: { type: String, required: true, maxlength: MAX_MESSAGE_LENGTH },
     sentAt: { type: Date, required: true },
+    eventUpdateId: { type: Schema.ObjectId, ref: "EventUpdate", default: null },
     notifiedAt: { type: Date, default: null },
     reportedAt: { type: Date, default: null },
     reportedBy: { type: Schema.ObjectId, ref: "User", default: null },
@@ -21,5 +22,6 @@ const messageSchema = new Schema<Message>(
 
 messageSchema.index({ threadId: 1, sentAt: 1 });
 messageSchema.index({ senderId: 1, sentAt: -1 });
+messageSchema.index({ reviewedAt: 1, reportedAt: 1, threadId: 1 });
 
 export default defineModel<Message>("Message", messageSchema);

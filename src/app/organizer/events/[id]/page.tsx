@@ -155,7 +155,8 @@ export default function ManageEventPage() {
 
   const e = event.data;
   const editable = e.status === "draft" || e.status === "published";
-  const past = new Date(e.eventDate).getTime() < now;
+  // eventDate is stored as midnight, so go by shift start times like roster approval does.
+  const past = e.shifts.some((s) => new Date(s.startsAt).getTime() <= now);
   const entries = roster.data?.entries ?? [];
   const count = (status: string) =>
     entries.filter((x) => x.signup.status === status).length;
@@ -478,7 +479,7 @@ export default function ManageEventPage() {
               />
               <Checkbox
                 label="Roster only"
-                description="Hidden from signed-out visitors and anyone who cancelled. Use for door codes or a contact's mobile number."
+                description="Only confirmed volunteers see this, not anyone pending or on the waitlist. Use for door codes or a contact's mobile number."
                 checked={rosterOnly}
                 onChange={(ev) => setRosterOnly(ev.target.checked)}
               />

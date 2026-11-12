@@ -24,4 +24,6 @@ const clearanceSchema = new Schema<Clearance>(
   { timestamps: true }
 );
 
+clearanceSchema.index({ status: 1, userId: 1 });
+
 export default defineModel<Clearance>("Clearance", clearanceSchema);

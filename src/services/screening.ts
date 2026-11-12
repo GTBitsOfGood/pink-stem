@@ -6,6 +6,7 @@ import AuditService from "@/services/audit";
 import type { Actor } from "@/types/auth";
 import { NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import type { ScreeningCheck } from "@/types/screening";
 import ERRORS from "@/utils/errorMessages";
 
@@ -20,9 +21,10 @@ export default class ScreeningService {
    * That is anyone with a sign-up pending on clearance who has not been
    * checked since that sign-up or their profile last changed, or whose last
    * check hit a source error, plus anyone an admin queued for a rerun.
-   * Returns how many volunteers were checked.
+   * sent = volunteers checked, skipped = not due, failed = due but missing
+   * from the registry results.
    */
-  static async runDue(): Promise<number> {
+  static async runDue(): Promise<SendCounts> {
     const startedAt = new Date();
     const [pending, queued] = await Promise.all([
       SignupDAO.find({ status: "pending", pendingReasons: "clearance" }),
@@ -59,7 +61,8 @@ export default class ScreeningService {
       const checkedAt = Math.min(...results.map((r) => +r.checkedAt));
       return Math.max(+u.updatedAt, signupsChanged.get(id) ?? 0) > checkedAt;
     });
-    if (!due.length) return 0;
+    const notDue = users.length - due.length;
+    if (!due.length) return { sent: 0, skipped: notDue, failed: 0 };
 
     const results = await checkRegistries(
       due.map((u) => ({
@@ -74,7 +77,11 @@ export default class ScreeningService {
         ScreeningCheckDAO.saveResults(userId, found, startedAt)
       )
     );
-    return results.size;
+    return {
+      sent: results.size,
+      skipped: notDue,
+      failed: due.length - results.size,
+    };
   }
 
   /** Queues a fresh check for the next hourly run. */
