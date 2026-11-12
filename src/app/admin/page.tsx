@@ -105,10 +105,7 @@ export default function ApprovalsPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader
-        title="Approvals"
-        description="Everything waiting on a decision. Each row opens where the decision is made."
-      />
+      <PageHeader title="Approvals" />
       <div
         role="tablist"
         aria-label="Approval queues"

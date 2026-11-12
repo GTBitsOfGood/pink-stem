@@ -28,7 +28,7 @@ export default function OutstandingList() {
         description={
           items.length
             ? "Sign-ups stay pending until these are done."
-            : "Sign-ups confirm automatically, subject to each event's clearance rules."
+            : undefined
         }
       />
       <CardBody className="grid gap-3">

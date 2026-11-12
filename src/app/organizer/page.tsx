@@ -93,11 +93,6 @@ export default function OrganizerPage() {
     <Container className="py-8 sm:py-10">
       <PageHeader
         title={admin ? "Events" : "My events"}
-        description={
-          admin
-            ? "Every event across every organizer, including drafts. A new event goes to the organizer you pick."
-            : "Post shifts, watch them fill, mark attendance on the day, and approve hours before you leave the building."
-        }
         action={
           <ButtonLink
             href="/organizer/events/new"
