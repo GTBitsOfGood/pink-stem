@@ -12,6 +12,7 @@ import {
   PAGE_SIZE,
 } from "@/constants/limits";
 import {
+  ageOn,
   hoursBetween,
   moveShiftDates,
   startOfDay,
@@ -346,6 +347,16 @@ export default class EventService {
         })
       : [];
 
+    await EventService.assertMinAgeFits(
+      event,
+      data.minAge ?? null,
+      shifts.map((s) => ({
+        _id: s._id,
+        startsAt:
+          movedShifts.find((m) => sameId(m.id, s._id))?.startsAt ?? s.startsAt,
+      }))
+    );
+
     if (movedShifts.length > 0) {
       await Promise.all(
         movedShifts.map((s) =>
@@ -358,8 +369,66 @@ export default class EventService {
       $set: { ...sanitized, minAge: sanitized.minAge ?? null },
       $unset: unset,
     })) as Doc<Event>;
+    await EventService.recheckSignups(updated);
     const [withShifts] = await EventService.attachShifts([updated]);
     return withShifts;
+  }
+
+  /**
+   * Refuses to raise the minimum age past someone signed up for an upcoming
+   * shift, judged on that shift's (possibly moved) day. Other edits are never
+   * blocked by an older sign-up.
+   */
+  private static async assertMinAgeFits(
+    event: Doc<Event>,
+    minAge: number | null,
+    shifts: Pick<Doc<Shift>, "_id" | "startsAt">[]
+  ) {
+    if (!minAge || minAge <= (event.minAge ?? 0)) return;
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      LIVE_SIGNUP_STATUSES
+    );
+    if (!signups.length) return;
+    const volunteers = await Promise.all(
+      [...new Set(signups.map((s) => s.volunteerId.toString()))].map((id) =>
+        UserDAO.findById(id)
+      )
+    );
+    const under = new Set<string>();
+    const now = new Date();
+    for (const signup of signups) {
+      const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
+      const volunteer = volunteers.find(
+        (v) => v && sameId(v._id, signup.volunteerId)
+      );
+      if (!shift || !volunteer || shift.startsAt <= now) continue;
+      if (
+        !volunteer.dateOfBirth ||
+        ageOn(volunteer.dateOfBirth, shift.startsAt) < minAge
+      ) {
+        under.add(`${volunteer.firstName} ${volunteer.lastName}`);
+      }
+    }
+    if (under.size) {
+      throw new IllegalOperationError(
+        ERRORS.EVENT.MIN_AGE_RAISED(minAge, [...under])
+      );
+    }
+  }
+
+  /**
+   * Sign-ups were checked against the requirements in force when they were
+   * made, so clearance and approval are re-checked against the saved event.
+   * This runs on every save, not only when a flag flips: both steps are
+   * no-ops once the roster matches, and a recheck cut short by a failure is
+   * finished by the organizer's next save. Newly requiring approval leaves
+   * confirmed volunteers alone; pending ones pick it up.
+   */
+  private static async recheckSignups(event: Doc<Event>) {
+    if (event.status !== "published") return;
+    await SignupService.reevaluateForEvent(event);
+    if (event.requiresClearance) await SignupService.lapseForEvent(event);
   }
 
   static async publish(
