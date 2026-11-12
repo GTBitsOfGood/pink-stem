@@ -80,7 +80,7 @@ export default class NotificationService {
 
   /**
    * Sends one email and reports what happened. A mail failure is logged and
-   * returned as "failed", never thrown, so a Resend outage cannot fail the
+   * returned as "failed", never thrown, so an email outage cannot fail the
    * request or job that triggered the email.
    */
   static async send(

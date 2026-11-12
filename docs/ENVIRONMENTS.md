@@ -86,14 +86,15 @@ staging site. Use _Same value for all deploy contexts_ and _All scopes_:
 production (`main`) and deploy previews share them by design. `proxy.ts` runs
 as an edge function and reads `JWT_SECRET`, so do not narrow the scopes.
 
-| Variable         | Required | Staging value                           | Purpose                                                        |
-| ---------------- | -------- | --------------------------------------- | -------------------------------------------------------------- |
-| `MONGODB_URI`    | Yes      | Staging connection string above         | Connection string; one database per site                       |
-| `JWT_SECRET`     | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out             |
-| `APP_URL`        | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files    |
-| `CRON_SECRET`    | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                      |
-| `RESEND_API_KEY` | Prod     | **Unset**; see [Email](#email)          | Sends email through Resend; unset, emails go to the server log |
-| `EMAIL_FROM`     | Prod     | Unset                                   | Sender shown on every email                                    |
+| Variable                   | Required | Staging value                           | Purpose                                                         |
+| -------------------------- | -------- | --------------------------------------- | --------------------------------------------------------------- |
+| `MONGODB_URI`              | Yes      | Staging connection string above         | Connection string; one database per site                        |
+| `JWT_SECRET`               | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out              |
+| `APP_URL`                  | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files     |
+| `CRON_SECRET`              | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                       |
+| `JUNO_API_KEY`             | Prod     | Staging Juno key; see [Email](#email)   | Sends email through Juno; unset, emails go to the server log    |
+| `EMAIL_FROM`               | Prod     | `Pink STEM <no-reply@pinkstem.org>`     | Sender on every email; must be a verified sender in Juno        |
+| `EMAIL_ALLOWED_RECIPIENTS` | Staging  | Team domains and tester addresses       | Only these get real email; everyone else goes to the server log |
 
 Deploy previews link to the staging URL in emails, not to the preview URL.
 Both read the same database, so those links still work.
@@ -103,12 +104,28 @@ only by the seed script on your machine. They do not belong in Netlify.
 
 ## Email
 
-Staging uses the **console transport**: `RESEND_API_KEY` is unset, so every
-email is written to the function log instead of being sent and staging cannot
-email anyone. To read one, open **Logs & metrics → Functions →
-`___netlify-server-handler`** and search for `[mail]`. That is also where
-verification links land when you register a new account on
-staging.
+Email goes through [Juno](https://github.com/GTBitsOfGood/juno), Bits of
+Good's shared infrastructure API, which sends it with SendGrid. One-time setup
+in the [Juno dashboard](https://juno.bitsofgood.org) for each environment:
+create the project, set up email with the project's SendGrid key, register
+`no-reply@pinkstem.org` as a sender (and authenticate `pinkstem.org` as a
+domain), then issue an API key and set it as `JUNO_API_KEY`.
+
+Staging sends real email, but only to the team. Set `JUNO_API_KEY`,
+`EMAIL_FROM` to the registered sender, and `EMAIL_ALLOWED_RECIPIENTS` to a comma
+list of domains and addresses, for example
+`pinkstem.org,gatech.edu,tester@gmail.com`. Testers who register or reset a
+password with an allowed address get the email in their inbox. Every other
+recipient, including the demo accounts and any real volunteer address, is
+written to the function log instead, so staging never emails the public.
+
+To read a logged email, such as a verification link for a demo account, open
+**Logs & metrics → Functions → `___netlify-server-handler`** and search for
+`[mail]`. Failed sends are logged there too, as `[mail] unavailable` or
+`[mail] rejected`.
+
+Leave `EMAIL_ALLOWED_RECIPIENTS` unset in production. With `JUNO_API_KEY`
+unset, every email goes to the log.
 
 ## Seeding staging
 
@@ -161,7 +178,7 @@ When the domain is decided:
 2. Create a second Netlify site from the same repo with production branch
    `production`. Turn off branch deploys and deploy previews there, so no PR
    builds with production secrets.
-3. Set the variables above with production values, including `RESEND_API_KEY`
+3. Set the variables above with production values, including `JUNO_API_KEY`
    and `EMAIL_FROM` from a verified sending domain.
 4. Seed it with `npm run seed`, without `demo`.
 
