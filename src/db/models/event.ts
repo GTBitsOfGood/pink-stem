@@ -39,7 +39,7 @@ const eventSchema = new Schema<Event>(
   { timestamps: true }
 );
 
-eventSchema.index({ status: 1, eventDate: 1 });
+eventSchema.index({ status: 1, eventDate: 1, _id: 1 });
 eventSchema.index({ organizerId: 1, eventDate: -1 });
 
 export default defineModel<Event>("Event", eventSchema);

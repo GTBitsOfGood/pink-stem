@@ -22,5 +22,6 @@ const messageSchema = new Schema<Message>(
 
 messageSchema.index({ threadId: 1, sentAt: 1 });
 messageSchema.index({ senderId: 1, sentAt: -1 });
+messageSchema.index({ reviewedAt: 1, reportedAt: 1, threadId: 1 });
 
 export default defineModel<Message>("Message", messageSchema);

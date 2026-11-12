@@ -11,6 +11,7 @@ import {
   THREAD_READ_ONLY_AFTER_EVENT_DAYS,
 } from "@/constants/limits";
 import { addDays, isMinor } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
@@ -26,6 +27,7 @@ import {
 } from "@/types/exceptions";
 import type { Message, MessageThread } from "@/types/message";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import type { SafeUser } from "@/types/user";
 import { assertCanManageEvent, isAdmin, sameId } from "@/utils/authorization";
@@ -89,18 +91,8 @@ export default class MessageService {
     };
   }
 
-  /** Admin only. Every thread with a report nobody has reviewed; unpaginated because it feeds the Approvals queue. */
-  static async reportedThreads(admin: Actor): Promise<ThreadSummary[]> {
-    const reportedIds = await MessageDAO.reportedThreadIds();
-    if (!reportedIds.length) return [];
-    const threads = await MessageThreadDAO.findAll({
-      _id: { $in: reportedIds },
-    });
-    return MessageService.summarize(admin, threads, reportedIds);
-  }
-
   /** Decorates threads with what a list row shows; `reportedIds` is looked up when the caller has not already. */
-  private static async summarize(
+  static async summarize(
     actor: Actor,
     items: Doc<MessageThread>[],
     reportedIds?: Types.ObjectId[]
@@ -335,11 +327,14 @@ export default class MessageService {
     if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
     if (!MessageService.isParticipant(actor, thread))
       throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
-    if (thread.status !== "open")
-      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
     return MessageService.deliver(actor, thread, body);
   }
 
+  /**
+   * The one place a message is posted, so a closed thread is refused however
+   * it was reached: a reply, a new conversation that resolves to the same
+   * thread, or a broadcast.
+   */
   private static async deliver(
     actor: Actor,
     thread: Doc<MessageThread>,
@@ -347,6 +342,8 @@ export default class MessageService {
     event?: Doc<Event> | null,
     eventUpdate?: Doc<EventUpdate>
   ) {
+    if (thread.status !== "open")
+      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
     // An event update goes to the whole roster at once, so it is not one
     // person sending messages and is not held to the hourly limit.
     if (!eventUpdate) {
@@ -393,7 +390,7 @@ export default class MessageService {
         (event ?? (await EventDAO.findById(thread.eventId)))?.title ??
         "your event";
       const org = await NotificationService.org();
-      await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.newMessage(org, {
           name: recipient.firstName,
@@ -404,7 +401,9 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      await MessageDAO.updateById(message._id, { notifiedAt: now });
+      // A failed email leaves the message for the hourly digest to retry.
+      if (outcome !== "failed")
+        await MessageDAO.updateById(message._id, { notifiedAt: now });
     }
     return { message };
   }
@@ -545,11 +544,14 @@ export default class MessageService {
     );
   }
 
-  /** Scheduled: threads go read-only 30 days after an event ends, or 7 days after a volunteer leaves it. */
-  static async closeStale(): Promise<number> {
+  /**
+   * Scheduled: threads go read-only 30 days after an event ends, or 7 days
+   * after a volunteer leaves it. sent = threads closed, skipped = left open.
+   */
+  static async closeStale(): Promise<SendCounts> {
     const now = new Date();
     const open = await MessageThreadDAO.findAll({ status: "open" });
-    if (!open.length) return 0;
+    if (!open.length) return emptyCounts();
     const events = await EventDAO.findByIds([
       ...new Set(open.map((t) => t.eventId.toString())),
     ]);
@@ -591,15 +593,20 @@ export default class MessageService {
         { status: "read_only", readOnlyAt: now }
       );
     }
-    return toClose.length;
+    return {
+      sent: toClose.length,
+      skipped: open.length - toClose.length,
+      failed: 0,
+    };
   }
 
   /** Scheduled hourly: one digest per recipient for messages that were collapsed. */
-  static async sendDigests(): Promise<number> {
+  static async sendDigests(): Promise<SendCounts> {
     const pending = (await MessageDAO.findUnnotified()).filter(
       (m) => m.sentAt.getTime() < Date.now() - 5 * 60_000
     );
-    if (!pending.length) return 0;
+    const counts = emptyCounts();
+    if (!pending.length) return counts;
     const threads = await MessageThreadDAO.findAll({
       _id: { $in: [...new Set(pending.map((m) => m.threadId.toString()))] },
     });
@@ -613,6 +620,7 @@ export default class MessageService {
         { senderId: Types.ObjectId; count: number; thread: Doc<MessageThread> }
       >
     >();
+    const recipientOf = new Map<string, string>();
 
     for (const message of pending) {
       const thread = threads.find((t) => sameId(t._id, message.threadId));
@@ -622,6 +630,7 @@ export default class MessageService {
           ? thread.organizerId
           : thread.volunteerId
       ).toString();
+      recipientOf.set(message._id.toString(), recipientId);
       // Already read in the app, so there is nothing to tell them.
       const readAt = thread.lastReadAt?.[recipientId];
       if (readAt && readAt >= message.sentAt) continue;
@@ -637,10 +646,13 @@ export default class MessageService {
     }
 
     const org = await NotificationService.org();
-    let sent = 0;
+    const failed = new Set<string>();
     for (const [recipientId, perThread] of byRecipient) {
       const recipient = await UserDAO.findById(recipientId);
-      if (!recipient) continue;
+      if (!recipient) {
+        counts.skipped += 1;
+        continue;
+      }
       const senders = await UserDAO.findSummaries(
         [...perThread.values()].map((e) => e.senderId)
       );
@@ -657,7 +669,7 @@ export default class MessageService {
           url: appUrl(`/messages/${e.thread._id}`),
         };
       });
-      const delivered = await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.messageDigest(org, {
           name: recipient.firstName,
@@ -665,12 +677,16 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      if (delivered) sent += 1;
+      counts[outcome] += 1;
+      if (outcome === "failed") failed.add(recipientId);
     }
+    // A failed digest's messages stay pending, so the next run retries it.
     await MessageDAO.markNotified(
-      pending.map((m) => m._id),
+      pending
+        .filter((m) => !failed.has(recipientOf.get(m._id.toString())!))
+        .map((m) => m._id),
       new Date()
     );
-    return sent;
+    return counts;
   }
 }
