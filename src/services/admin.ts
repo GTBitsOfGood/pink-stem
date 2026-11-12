@@ -25,6 +25,7 @@ import type {
 } from "@/types/api";
 import type { Actor } from "@/types/auth";
 import type { Event } from "@/types/event";
+import type { MessageThread } from "@/types/message";
 import {
   ConflictError,
   IllegalOperationError,
@@ -60,48 +61,33 @@ export default class AdminService {
     admin: Actor,
     input: Record<string, string | undefined>
   ): Promise<AdminApprovals> {
-    const filters = approvalFiltersSchema.parse(input);
+    const { queue, page: requested } = approvalFiltersSchema.parse(input);
     const now = new Date();
     const counts = await ApprovalDAO.counts(now);
-    const total = counts[filters.queue];
-    const page = Math.min(
-      filters.page,
-      Math.max(1, Math.ceil(total / PAGE_SIZE))
-    );
-    const items = await ApprovalDAO.page(filters.queue, page, now);
+    const total = counts[queue];
+    const page = Math.min(requested, Math.max(1, Math.ceil(total / PAGE_SIZE)));
+    const items = await ApprovalDAO.page(queue, page, now);
+    // Another admin's decision can empty this page between the count and the read.
+    if (!items.length && page > 1)
+      return AdminService.approvals(admin, { queue, page: String(page - 1) });
     const common = { counts, total, page, pageSize: PAGE_SIZE };
+    const byId = (a: { _id: Types.ObjectId }, b: { _id: Types.ObjectId }) =>
+      a._id.toString().localeCompare(b._id.toString());
 
-    if (filters.queue === "clearances") {
-      const ids = items as Types.ObjectId[];
-      const users = await UserDAO.findSummaries(ids);
-      const order = new Map(ids.map((id, index) => [id.toString(), index]));
-      users.sort(
-        (a, b) =>
-          (order.get(a._id.toString()) ?? 0) -
-          (order.get(b._id.toString()) ?? 0)
-      );
-      return {
-        ...common,
-        queue: filters.queue,
-        items: users,
-      };
+    if (queue === "clearances") {
+      const users = await UserDAO.findSummaries(items as Types.ObjectId[]);
+      return { ...common, queue, items: users.sort(byId) };
     }
-    if (filters.queue === "awaitingClearance") {
+    if (queue === "awaitingClearance") {
       const ids = items as Types.ObjectId[];
       const [volunteers, screenings] = await Promise.all([
         UserDAO.findSummaries(ids),
         ScreeningCheckDAO.findByUsers(ids),
       ]);
-      const order = new Map(ids.map((id, index) => [id.toString(), index]));
-      volunteers.sort(
-        (a, b) =>
-          (order.get(a._id.toString()) ?? 0) -
-          (order.get(b._id.toString()) ?? 0)
-      );
       return {
         ...common,
-        queue: filters.queue,
-        items: volunteers.map((volunteer) => ({
+        queue,
+        items: volunteers.sort(byId).map((volunteer) => ({
           volunteer,
           screening:
             screenings.find((check) => sameId(check.userId, volunteer._id)) ??
@@ -109,18 +95,17 @@ export default class AdminService {
         })),
       };
     }
-    if (filters.queue === "rosters") {
-      return { ...common, queue: filters.queue, items: items as Doc<Event>[] };
+    if (queue === "rosters") {
+      return { ...common, queue, items: items as Doc<Event>[] };
     }
+    const threads = items as Doc<MessageThread>[];
     return {
       ...common,
-      queue: filters.queue,
+      queue,
       items: await MessageService.summarize(
         admin,
-        items as Doc<import("@/types/message").MessageThread>[],
-        (items as Doc<import("@/types/message").MessageThread>[]).map(
-          (thread) => thread._id
-        )
+        threads,
+        threads.map((thread) => thread._id)
       ),
     };
   }
