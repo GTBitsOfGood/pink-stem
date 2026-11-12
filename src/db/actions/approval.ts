@@ -53,7 +53,8 @@ export default class ApprovalDAO {
     const { skip, limit } = paginate(page);
     if (queue === "clearances") {
       const rows = await ClearanceModel.find({ status: "submitted" })
-        .sort({ userId: 1, _id: 1 })
+        // userId is unique per clearance, so it is already a stable tie-breaker.
+        .sort({ userId: 1 })
         .skip(skip)
         .limit(limit)
         .select("userId")
@@ -87,13 +88,10 @@ export default class ApprovalDAO {
       { $skip: skip },
       { $limit: limit },
     ]);
-    const order = new Map(ids.map((row, index) => [row._id.toString(), index]));
-    const threads = await MessageThreadModel.find({
+    return MessageThreadModel.find({
       _id: { $in: ids.map((row) => row._id) },
-    }).lean<Doc<MessageThread>[]>();
-    return threads.sort(
-      (a, b) =>
-        (order.get(a._id.toString()) ?? 0) - (order.get(b._id.toString()) ?? 0)
-    );
+    })
+      .sort({ _id: 1 })
+      .lean<Doc<MessageThread>[]>();
   }
 }
