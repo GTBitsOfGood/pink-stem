@@ -157,7 +157,7 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
             <Input
               label="Date of birth"
               type="date"
-              required
+              required={!!user.dateOfBirth}
               value={values.dateOfBirth}
               onChange={(e) => set("dateOfBirth", e.target.value)}
               hint="Used for age requirements only."

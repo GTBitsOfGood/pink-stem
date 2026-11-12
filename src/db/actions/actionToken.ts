@@ -15,12 +15,7 @@ export default class ActionTokenDAO {
     ttlMs,
     ...data
   }: NewToken): Promise<{ secret: string; id: Types.ObjectId }> {
-    await dbConnect();
-    await ActionTokenModel.deleteMany({
-      email: data.email,
-      purpose: data.purpose,
-      usedAt: null,
-    });
+    await ActionTokenDAO.revoke(data.email, data.purpose);
     const secret = generateSecret();
     const created = await ActionTokenModel.create({
       ...data,
@@ -28,6 +23,11 @@ export default class ActionTokenDAO {
       expiresAt: new Date(Date.now() + ttlMs),
     });
     return { secret, id: created._id };
+  }
+
+  static async revoke(email: string, purpose: TokenPurpose): Promise<void> {
+    await dbConnect();
+    await ActionTokenModel.deleteMany({ email, purpose, usedAt: null });
   }
 
   static async findValid(

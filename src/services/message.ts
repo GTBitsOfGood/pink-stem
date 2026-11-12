@@ -88,18 +88,8 @@ export default class MessageService {
     };
   }
 
-  /** Admin only. Every thread with a report nobody has reviewed; unpaginated because it feeds the Approvals queue. */
-  static async reportedThreads(admin: Actor): Promise<ThreadSummary[]> {
-    const reportedIds = await MessageDAO.reportedThreadIds();
-    if (!reportedIds.length) return [];
-    const threads = await MessageThreadDAO.findAll({
-      _id: { $in: reportedIds },
-    });
-    return MessageService.summarize(admin, threads, reportedIds);
-  }
-
   /** Decorates threads with what a list row shows; `reportedIds` is looked up when the caller has not already. */
-  private static async summarize(
+  static async summarize(
     actor: Actor,
     items: Doc<MessageThread>[],
     reportedIds?: Types.ObjectId[]

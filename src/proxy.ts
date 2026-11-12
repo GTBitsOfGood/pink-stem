@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { homePath } from "@/lib/urls";
 import type { Role } from "@/types/user";
 
 /**
@@ -26,14 +27,19 @@ const SIGNED_OUT_ONLY = ["/login", "/register"];
  */
 const PARTICIPANT_ONLY = ["/dashboard", "/hours", "/messages"];
 
-const home = (role: Role) => (role === "admin" ? "/admin" : "/dashboard");
-
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const claims = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
 
+  // pinkstem.org explains Pink STEM, so the Hub has no home page of its own.
+  if (pathname === "/") {
+    return NextResponse.redirect(
+      new URL(claims ? homePath(claims.role) : "/events", req.url)
+    );
+  }
+
   if (claims && SIGNED_OUT_ONLY.includes(pathname)) {
-    return NextResponse.redirect(new URL(home(claims.role), req.url));
+    return NextResponse.redirect(new URL(homePath(claims.role), req.url));
   }
 
   if (
@@ -55,7 +61,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(login);
   }
   if (rule.roles && !rule.roles.includes(claims.role)) {
-    return NextResponse.redirect(new URL(home(claims.role), req.url));
+    return NextResponse.redirect(new URL(homePath(claims.role), req.url));
   }
   return NextResponse.next();
 }

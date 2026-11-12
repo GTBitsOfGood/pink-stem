@@ -141,9 +141,28 @@ export interface AwaitingClearance {
   screening: Doc<ScreeningCheck> | null;
 }
 
-export interface AdminApprovals {
-  clearances: UserSummary[];
-  awaitingClearance: AwaitingClearance[];
-  rosters: Doc<Event>[];
-  reportedThreads: ThreadSummary[];
+export interface ApprovalCounts {
+  clearances: number;
+  awaitingClearance: number;
+  rosters: number;
+  reportedThreads: number;
 }
+
+interface ApprovalPage {
+  counts: ApprovalCounts;
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type AdminApprovals =
+  | (ApprovalPage & { queue: "clearances"; items: UserSummary[] })
+  | (ApprovalPage & {
+      queue: "awaitingClearance";
+      items: AwaitingClearance[];
+    })
+  | (ApprovalPage & { queue: "rosters"; items: Doc<Event>[] })
+  | (ApprovalPage & {
+      queue: "reportedThreads";
+      items: ThreadSummary[];
+    });

@@ -92,10 +92,10 @@ export default function PeoplePage() {
           onChange={(e) => set("status", e.target.value)}
         />
         <Select
-          label="Flagged"
+          label="No-shows"
           className="[&>label]:sr-only"
-          placeholder="Flagged or not"
-          options={[{ value: "true", label: "Flagged for review" }]}
+          placeholder="Any no-show record"
+          options={[{ value: "true", label: "Too many no-shows" }]}
           value={filters.flagged}
           onChange={(e) => set("flagged", e.target.value)}
         />
@@ -130,7 +130,7 @@ export default function PeoplePage() {
                         <Badge tone="danger">Inactive</Badge>
                       ) : null}
                       {p.flaggedForReviewAt ? (
-                        <Badge tone="warning">Review</Badge>
+                        <Badge tone="warning">No-shows</Badge>
                       ) : null}
                     </div>
                   </td>
