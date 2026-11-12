@@ -62,22 +62,26 @@ export const CLEARANCE_LABELS: Record<ClearanceStatus, string> = {
   expired: "Expired",
 };
 
-/** Staff clearance is separate from an automated registry pre-check. */
+/**
+ * Badge help. Organizers and admins see these badges for other people too, so
+ * the copy describes the status rather than addressing "you". Clearance is a
+ * staff decision, separate from the automated registry pre-check.
+ */
 export const CLEARANCE_STATUS_HELP: Record<ClearanceStatus, string> = {
-  none: "Pink STEM staff have not recorded a background clearance. Contact staff about screening; an automated registry pre-check does not grant clearance.",
+  none: "Pink STEM staff have not recorded a background clearance. Sign-ups for events that require clearance stay pending until staff record one. An automated registry pre-check never counts as clearance.",
   submitted:
-    "A submitted screening record is waiting for Pink STEM staff review. You are not cleared yet; an automated registry pre-check does not grant clearance.",
+    "Screening is waiting for a Pink STEM staff decision. This is not clearance yet, and an automated registry pre-check never counts as clearance.",
   cleared:
-    "Pink STEM staff have recorded background clearance. This is a staff decision, not an automated registry pre-check. Other event requirements may still apply.",
+    "Pink STEM staff reviewed the screening and recorded clearance, valid until its expiry date. This is a staff decision, not an automated registry pre-check.",
   expired:
-    "Your recorded clearance has expired. Contact Pink STEM staff about renewal; an automated registry pre-check does not renew clearance.",
+    "The recorded clearance has expired. Sign-ups for events that require clearance stay pending until Pink STEM staff record a new one; a registry pre-check does not renew it.",
 };
 
 export const SIGNUP_STATUS_HELP: Partial<Record<SignupStatus, string>> = {
   pending:
-    "Your signup is not confirmed yet. Check its outstanding requirements for email verification, background clearance, or organizer approval.",
+    "This sign-up holds a spot but is not confirmed. It confirms automatically once its outstanding requirements, such as email verification, background clearance, or organizer approval, are met.",
   waitlisted:
-    "The shift is full and you are waiting for a place. Pink STEM will notify you if you are moved into the shift. Outstanding requirements still apply.",
+    "The shift is full. When a spot opens, waitlisted sign-ups move in by sign-up order and the volunteer is emailed; close to the start, the organizer decides. Requirements are checked on moving in.",
 };
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {

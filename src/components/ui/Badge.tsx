@@ -61,7 +61,7 @@ export function SignupBadge({ status }: { status: SignupStatus }) {
     <span className="inline-flex items-center">
       <Badge tone={SIGNUP_TONE[status]}>{SIGNUP_STATUS_LABELS[status]}</Badge>
       {help ? (
-        <LabelHelp label={`${SIGNUP_STATUS_LABELS[status]} signup`}>
+        <LabelHelp label={`${SIGNUP_STATUS_LABELS[status]} sign-up`}>
           {help}
         </LabelHelp>
       ) : null}
