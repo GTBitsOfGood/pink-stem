@@ -9,6 +9,8 @@ import {
   ValidationError,
 } from "@/types/exceptions";
 import { NextResponse } from "next/server";
+import { MailError } from "@/services/mail";
+import ERRORS from "@/utils/errorMessages";
 import { ZodError } from "zod";
 
 const STATUS_BY_ERROR: [new (...args: never[]) => Error, number][] = [
@@ -55,6 +57,15 @@ export const handleError = (error: unknown) => {
       }
       return response;
     }
+  }
+
+  // The provider's own message stays in the log, not the response.
+  if (error instanceof MailError) {
+    console.error("[mail]", error.message);
+    return NextResponse.json(
+      { error: ERRORS.MAIL.UNAVAILABLE },
+      { status: 503 }
+    );
   }
 
   console.error("Unhandled error:", error);

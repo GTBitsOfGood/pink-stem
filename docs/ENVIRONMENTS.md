@@ -86,14 +86,15 @@ staging site. Use _Same value for all deploy contexts_ and _All scopes_:
 production (`main`) and deploy previews share them by design. `proxy.ts` runs
 as an edge function and reads `JWT_SECRET`, so do not narrow the scopes.
 
-| Variable         | Required | Staging value                           | Purpose                                                        |
-| ---------------- | -------- | --------------------------------------- | -------------------------------------------------------------- |
-| `MONGODB_URI`    | Yes      | Staging connection string above         | Connection string; one database per site                       |
-| `JWT_SECRET`     | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out             |
-| `APP_URL`        | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files    |
-| `CRON_SECRET`    | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                      |
-| `RESEND_API_KEY` | Prod     | **Unset**; see [Email](#email)          | Sends email through Resend; unset, emails go to the server log |
-| `EMAIL_FROM`     | Prod     | Unset                                   | Sender shown on every email                                    |
+| Variable                   | Required | Staging value                           | Purpose                                                         |
+| -------------------------- | -------- | --------------------------------------- | --------------------------------------------------------------- |
+| `MONGODB_URI`              | Yes      | Staging connection string above         | Connection string; one database per site                        |
+| `JWT_SECRET`               | Yes      | `openssl rand -base64 48`               | Signs session cookies; rotate to sign everyone out              |
+| `APP_URL`                  | Yes      | `https://pink-stem-staging.netlify.app` | Absolute base for links in emails, PDFs, and calendar files     |
+| `CRON_SECRET`              | Yes      | `openssl rand -base64 48`               | Shared secret for `POST /api/v1/jobs/run`                       |
+| `RESEND_API_KEY`           | Prod     | Staging Resend key; see [Email](#email) | Sends email through Resend; unset, emails go to the server log  |
+| `EMAIL_FROM`               | Prod     | Address on a domain verified in Resend  | Sender shown on every email                                     |
+| `EMAIL_ALLOWED_RECIPIENTS` | Staging  | Team domains and tester addresses       | Only these get real email; everyone else goes to the server log |
 
 Deploy previews link to the staging URL in emails, not to the preview URL.
 Both read the same database, so those links still work.
@@ -103,12 +104,21 @@ only by the seed script on your machine. They do not belong in Netlify.
 
 ## Email
 
-Staging uses the **console transport**: `RESEND_API_KEY` is unset, so every
-email is written to the function log instead of being sent and staging cannot
-email anyone. To read one, open **Logs & metrics → Functions →
-`___netlify-server-handler`** and search for `[mail]`. That is also where
-verification links land when you register a new account on
-staging.
+Staging sends real email, but only to the team. Set `RESEND_API_KEY`,
+`EMAIL_FROM` on a domain verified in Resend, and `EMAIL_ALLOWED_RECIPIENTS` to
+a comma list of domains and addresses, for example
+`pinkstem.org,gatech.edu,tester@gmail.com`. Testers who register or reset a
+password with an allowed address get the email in their inbox. Every other
+recipient, including the demo accounts and any real volunteer address, is
+written to the function log instead, so staging never emails the public.
+
+To read a logged email, such as a verification link for a demo account, open
+**Logs & metrics → Functions → `___netlify-server-handler`** and search for
+`[mail]`. Failed sends are logged there too, as `[mail] unavailable` or
+`[mail] rejected`.
+
+Leave `EMAIL_ALLOWED_RECIPIENTS` unset in production. With `RESEND_API_KEY`
+unset, every email goes to the log.
 
 ## Seeding staging
 

@@ -28,9 +28,26 @@ const SEND_TIMEOUT_MS = 15_000;
 const REJECTED_STATUSES = new Set([400, 422]);
 
 /**
+ * Whether `to` may receive real email. `EMAIL_ALLOWED_RECIPIENTS` is a comma
+ * list of domains (`example.org`) or addresses; unset allows everyone. Staging
+ * sets it so testers get real email while public addresses never do.
+ */
+function allowed(to: string): boolean {
+  const list = process.env.EMAIL_ALLOWED_RECIPIENTS?.split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (!list?.length) return true;
+  const address = to.toLowerCase();
+  return list.some((entry) =>
+    entry.includes("@") ? address === entry : address.endsWith(`@${entry}`)
+  );
+}
+
+/**
  * Transactional email transport. Sends through Resend when configured and
  * otherwise prints the message to the server log, so local development and
- * preview deploys never email real people. Throws a `MailError` when the
+ * preview deploys never email real people. Recipients outside
+ * `EMAIL_ALLOWED_RECIPIENTS` are logged the same way. Throws a `MailError` when the
  * email did not go out.
  */
 export default class MailService {
@@ -40,7 +57,7 @@ export default class MailService {
       process.env.EMAIL_FROM ??
       "Pink STEM Volunteer Hub <volunteer@pinkstem.org>";
 
-    if (!apiKey) {
+    if (!apiKey || !allowed(email.to)) {
       console.info(
         `[mail] To: ${email.to}\n[mail] Subject: ${email.subject}\n${email.text}\n`
       );
