@@ -15,10 +15,12 @@ import type {
 
 type Filters = Record<string, string | undefined>;
 
-export function useAdminApprovals() {
+export function useAdminApprovals(filters: Filters) {
+  const f = clean(filters);
   return useQuery({
-    queryKey: QUERY_KEYS.admin.approvals,
-    queryFn: () => AdminHTTPClient.approvals(),
+    queryKey: QUERY_KEYS.admin.approvals(f),
+    queryFn: () => AdminHTTPClient.approvals(f),
+    placeholderData: (previous) => previous,
   });
 }
 

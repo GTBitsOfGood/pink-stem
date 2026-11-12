@@ -56,5 +56,6 @@ const signupSchema = new Schema<Signup>(
 signupSchema.index({ shiftId: 1, volunteerId: 1 }, { unique: true });
 signupSchema.index({ volunteerId: 1, status: 1 });
 signupSchema.index({ eventId: 1, status: 1 });
+signupSchema.index({ status: 1, pendingReasons: 1, volunteerId: 1 });
 
 export default defineModel<Signup>("Signup", signupSchema);

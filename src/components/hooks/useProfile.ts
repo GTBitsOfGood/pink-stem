@@ -5,6 +5,9 @@ import { QUERY_KEYS } from "@/constants/queryKeys";
 import UserHTTPClient, { ProfileBody } from "@/http/userHTTPClient";
 import type { Me } from "@/http/authHTTPClient";
 
+/** Shared by every resend button so they agree on loading and the rate limit. */
+export const RESEND_VERIFICATION_KEY = ["me", "verify-email", "resend"];
+
 /** Profile edits, verification resends, and the public org settings. */
 export function useProfile() {
   const queryClient = useQueryClient();
@@ -19,6 +22,7 @@ export function useProfile() {
       onSuccess: setMe,
     }),
     resendEmailVerification: useMutation({
+      mutationKey: RESEND_VERIFICATION_KEY,
       mutationFn: () => UserHTTPClient.resendEmailVerification(),
     }),
   };

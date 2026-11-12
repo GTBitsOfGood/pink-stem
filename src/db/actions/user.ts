@@ -62,6 +62,15 @@ export default class UserDAO {
     return UserModel.findById(id).lean<Doc<SafeUser>>();
   }
 
+  /** Batched `findById`: full safe users, including notification preferences. */
+  static async findByIds(
+    ids: (string | Types.ObjectId)[]
+  ): Promise<Doc<SafeUser>[]> {
+    if (!ids.length) return [];
+    await dbConnect();
+    return UserModel.find({ _id: { $in: ids } }).lean<Doc<SafeUser>[]>();
+  }
+
   static async findByEmail(email: string): Promise<Doc<SafeUser> | null> {
     await dbConnect();
     return UserModel.findOne({ email: email.toLowerCase() }).lean<
@@ -161,9 +170,13 @@ export default class UserDAO {
   ): Promise<{ items: Doc<SafeUser>[]; total: number }> {
     await dbConnect();
     const filter: QueryFilter<User> = {};
-    if (search.q) {
-      const re = new RegExp(escapeRegex(search.q), "i");
-      filter.$or = [{ firstName: re }, { lastName: re }, { email: re }];
+    // Every word must match some field, so "Maya Okafor" finds Maya Okafor.
+    const words = search.q?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (words.length) {
+      filter.$and = words.map((word) => {
+        const re = new RegExp(escapeRegex(word), "i");
+        return { $or: [{ firstName: re }, { lastName: re }, { email: re }] };
+      });
     }
     if (search.role) filter.role = search.role;
     if (search.status) filter.status = search.status;

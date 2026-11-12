@@ -179,6 +179,7 @@ export default function EventForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input
                   label="Host site"
+                  required
                   placeholder="Pink STEM Discovery Lab"
                   value={v.locationName}
                   onChange={(e) => set("locationName", e.target.value)}
@@ -191,6 +192,7 @@ export default function EventForm({
               </div>
               <Input
                 label="Address"
+                required
                 value={v.address}
                 onChange={(e) => set("address", e.target.value)}
               />

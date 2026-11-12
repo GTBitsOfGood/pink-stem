@@ -1,6 +1,7 @@
 import { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/** Clips its content to the rounded corners, so an embedded table's square edges stay inside. */
 export default function Card({
   className,
   ...props
@@ -8,7 +9,7 @@ export default function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-ink-200 bg-white shadow-card",
+        "overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-card",
         className
       )}
       {...props}
