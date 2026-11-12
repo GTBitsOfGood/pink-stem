@@ -380,7 +380,10 @@ export default class JobService {
           ),
         });
       }
-      const unapproved = events.filter((e) => e.eventDate < now);
+      // An event is ready for approval once its first shift has started, not at midnight.
+      const unapproved = events.filter((e) =>
+        shifts.some((s) => sameId(s.eventId, e._id) && s.startsAt <= now)
+      );
       if (unapproved.length) {
         sections.push({
           heading: "Rosters waiting for approval",

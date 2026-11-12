@@ -17,8 +17,8 @@ export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
 /**
  * A record of one keyed email, so scheduled jobs are idempotent: a 72-hour
  * reminder for a sign-up goes out once, and a failed send is retried rather
- * than lost. Also holds the job runner's lock, the only document with an
- * expiresAt.
+ * than lost. Also holds expiring locks (the job runner's, and per-event
+ * shift deletes), the only documents with an expiresAt.
  */
 export interface NotificationLog {
   key: string;

@@ -45,6 +45,9 @@ export const PAGE_SIZE = 25;
 /** How long a crashed job run can hold the runner's lock before it lapses. */
 export const JOB_LOCK_TTL_MS = 10 * 60_000;
 
+/** How long a crashed shift delete can hold its event's lock before it lapses. */
+export const SHIFT_DELETE_LOCK_TTL_MS = 30_000;
+
 /**
  * How long a keyed email stays claimed by a sender that never reported back.
  * Past this, the sender is assumed dead and the next run sends it again.
