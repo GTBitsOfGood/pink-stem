@@ -81,11 +81,6 @@ export default class HoursService {
     const before = existing.reduce((sum, e) => sum + e.hours, 0);
     if (before + data.hours < 0)
       throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
-    // NOTE: the pre-check and ledger insert are separate operations. Two
-    // concurrent corrections for the same volunteer and event can both pass
-    // the check and together write a negative total. The post-write re-read
-    // below compensates, but cannot perfectly reverse a concurrent write
-    // without a MongoDB transaction wrapping the entire check-write sequence.
     const entry = await HoursLedgerDAO.create({
       volunteerId: volunteer._id,
       eventId: event._id,
@@ -97,8 +92,8 @@ export default class HoursService {
       reversalOf: existing[0]?._id ?? null,
     });
 
-    // Re-read after write to catch concurrent adjustments that both passed the
-    // pre-check but together would take the total below zero.
+    // Two overlapping corrections can both pass the check above. Re-read, and
+    // if the total went negative, reverse this correction in full.
     const afterEntries = await HoursLedgerDAO.findByVolunteerAndEvent(
       volunteer._id,
       event._id
@@ -109,11 +104,10 @@ export default class HoursService {
         volunteerId: volunteer._id,
         eventId: event._id,
         signupId: existing[0]?.signupId ?? null,
-        hours: -afterTotal,
+        hours: -data.hours,
         approvedBy: new Types.ObjectId(admin.id),
         approvedAt: new Date(),
-        reason:
-          "Reverted: concurrent adjustment would have taken hours below zero",
+        reason: "Reverted: overlapping correction would go below zero",
         reversalOf: entry._id,
       });
       throw new InvalidArgumentsError(ERRORS.HOURS.BELOW_ZERO);
