@@ -72,7 +72,7 @@ export default function PersonPage() {
   };
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <div>
       <PageHeader
         title={`${u.firstName} ${u.lastName}`}
         description={
@@ -88,8 +88,8 @@ export default function PersonPage() {
         }
         back={{ href: "/admin/people", label: "People" }}
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="grid min-w-0 content-start gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid grid-cols-1 content-start gap-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat
               label="Approved hours"
@@ -309,7 +309,7 @@ export default function PersonPage() {
           </Card>
         </div>
 
-        <div className="grid min-w-0 content-start gap-4">
+        <div className="grid grid-cols-1 content-start gap-4">
           <Card>
             <CardHeader
               title="Background clearance"

@@ -39,7 +39,7 @@ export default function PeoplePage() {
     });
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <div>
       <PageHeader
         title="People"
         description="Every account, with clearance status and hours at a glance."
