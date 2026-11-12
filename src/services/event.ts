@@ -499,11 +499,14 @@ export default class EventService {
       eventDate: targetDate,
       region: source.region,
       isVirtual: source.isVirtual,
-      virtualLink: source.virtualLink,
-      locationName: source.locationName,
-      address: source.address,
-      locationNote: source.locationNote,
-      city: source.city,
+      ...(source.isVirtual
+        ? { virtualLink: source.virtualLink }
+        : {
+            locationName: source.locationName,
+            address: source.address,
+            locationNote: source.locationNote,
+            city: source.city,
+          }),
       requiresClearance: source.requiresClearance,
       requiresApproval: source.requiresApproval,
       minAge: source.minAge,
