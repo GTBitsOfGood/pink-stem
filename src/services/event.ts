@@ -195,11 +195,40 @@ export default class EventService {
   private static validateInput(
     data: ReturnType<typeof eventInputSchema.parse>
   ) {
-    if (data.isVirtual && !data.virtualLink)
+    if (data.isVirtual && !URL.canParse(data.virtualLink ?? "")) {
       throw new InvalidArgumentsError(ERRORS.EVENT.VIRTUAL_LINK);
-    if (!data.isVirtual && !data.locationName && !data.address) {
+    }
+    if (!data.isVirtual && (!data.locationName || !data.address)) {
       throw new InvalidArgumentsError(ERRORS.EVENT.LOCATION_REQUIRED);
     }
+  }
+
+  /**
+   * Returns the fields to $set and the fields to $unset for the active mode.
+   * On create, pass only `set` (no prior values to clear).
+   * On update, use both so stale fields from the previous mode are removed from the document.
+   * Mongoose strips undefined values from $set before sending to MongoDB,
+   * so there is no conflict between the two operators.
+   */
+  private static sanitizeByMode(
+    data: ReturnType<typeof eventInputSchema.parse>
+  ) {
+    if (data.isVirtual) {
+      return {
+        set: {
+          ...data,
+          locationName: undefined,
+          address: undefined,
+          locationNote: undefined,
+          city: undefined,
+        },
+        unset: { locationName: "", address: "", locationNote: "", city: "" },
+      };
+    }
+    return {
+      set: { ...data, virtualLink: undefined },
+      unset: { virtualLink: "" },
+    };
   }
 
   /** Events can only be owned by an active organizer or admin. */
@@ -240,12 +269,13 @@ export default class EventService {
   static async create(actor: Actor, input: unknown): Promise<EventWithShifts> {
     const { organizerId, ...data } = createEventSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized } = EventService.sanitizeByMode(data);
     const organizer = isAdmin(actor)
       ? await EventService.assignableOrganizer(organizerId)
       : null;
     const event = await EventDAO.create({
-      ...data,
-      minAge: data.minAge ?? undefined,
+      ...sanitized,
+      minAge: sanitized.minAge ?? undefined,
       organizerId: organizer?._id ?? new Types.ObjectId(actor.id),
     });
     if (organizer && !sameId(organizer._id, actor.id)) {
@@ -280,6 +310,7 @@ export default class EventService {
     const event = await EventService.editable(actor, eventId);
     const data = eventInputSchema.parse(input);
     EventService.validateInput(data);
+    const { set: sanitized, unset } = EventService.sanitizeByMode(data);
     const oldDay = toDateInput(event.eventDate);
     const newDay = toDateInput(data.eventDate);
     const shifts = await ShiftDAO.findByEvent(event._id);
@@ -335,8 +366,8 @@ export default class EventService {
     }
 
     const updated = (await EventDAO.updateById(eventId, {
-      ...data,
-      minAge: data.minAge ?? null,
+      $set: { ...sanitized, minAge: sanitized.minAge ?? null },
+      $unset: unset,
     })) as Doc<Event>;
     await EventService.recheckSignups(updated);
     const [withShifts] = await EventService.attachShifts([updated]);
@@ -537,11 +568,14 @@ export default class EventService {
       eventDate: targetDate,
       region: source.region,
       isVirtual: source.isVirtual,
-      virtualLink: source.virtualLink,
-      locationName: source.locationName,
-      address: source.address,
-      locationNote: source.locationNote,
-      city: source.city,
+      ...(source.isVirtual
+        ? { virtualLink: source.virtualLink }
+        : {
+            locationName: source.locationName,
+            address: source.address,
+            locationNote: source.locationNote,
+            city: source.city,
+          }),
       requiresClearance: source.requiresClearance,
       requiresApproval: source.requiresApproval,
       minAge: source.minAge,
