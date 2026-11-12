@@ -1,22 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { CircleAlert, Send } from "lucide-react";
-import { useProfile } from "@/components/hooks/useProfile";
+import { CircleAlert } from "lucide-react";
 import { useSession } from "@/components/hooks/useSession";
 import { ClearanceBadge } from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
-import { errorMessage, isRateLimited, useToast } from "@/components/ui/Toast";
 import { PENDING_REASON_LABELS } from "@/constants/labels";
-import { useState } from "react";
+import ResendVerificationButton from "@/components/profile/ResendVerificationButton";
 
 /** The account-level checklist that keeps sign-ups pending, with a fix for each item. */
 export default function OutstandingList() {
   const { me } = useSession();
-  const { resendEmailVerification } = useProfile();
-  const toast = useToast();
-  const [verifyResendBlocked, setVerifyResendBlocked] = useState(false);
 
   if (!me) return null;
   const items = me.outstanding;
@@ -48,31 +42,7 @@ export default function OutstandingList() {
               {PENDING_REASON_LABELS[reason]}
             </span>
             {reason === "email_verification" ? (
-              verifyResendBlocked ? (
-                <span className="text-[13px] text-amber-800">
-                  Resend limit reached. Try again in an hour, or use the link
-                  from an earlier email.
-                </span>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<Send className="h-3.5 w-3.5" />}
-                  loading={resendEmailVerification.isPending}
-                  onClick={() =>
-                    resendEmailVerification.mutate(undefined, {
-                      onSuccess: () =>
-                        toast("Verification link re-sent to your email."),
-                      onError: (error) =>
-                        isRateLimited(error)
-                          ? setVerifyResendBlocked(true)
-                          : toast(errorMessage(error), "error"),
-                    })
-                  }
-                >
-                  Resend verification link
-                </Button>
-              )
+              <ResendVerificationButton />
             ) : null}
           </div>
         ))}
