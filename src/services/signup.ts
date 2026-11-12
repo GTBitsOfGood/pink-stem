@@ -15,6 +15,7 @@ import {
 } from "@/constants/limits";
 import { isCleared } from "@/lib/clearance";
 import { addDays, ageOn } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
 import { buildIcs } from "@/lib/ics";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
@@ -29,6 +30,7 @@ import {
   NotFoundError,
 } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import type { OrgSettings } from "@/types/settings";
 import {
   ACTIVE_SIGNUP_STATUSES,
@@ -806,20 +808,28 @@ export default class SignupService {
     });
   }
 
-  /** Scheduled: held spots that were never resolved return to the waitlist. */
-  static async expireHolds(): Promise<number> {
+  /** Scheduled: held spots that were never resolved return to the waitlist. Counts the release emails. */
+  static async expireHolds(): Promise<SendCounts> {
     const expired = await SignupDAO.find({
       status: "pending",
       holdUntil: { $lt: new Date() },
     });
-    const settings = await OrgSettingsDAO.get();
+    const counts = emptyCounts();
+    if (!expired.length) return counts;
+    const [settings, org] = await Promise.all([
+      OrgSettingsDAO.get(),
+      NotificationService.org(),
+    ]);
     for (const signup of expired) {
       const [shift, event, user] = await Promise.all([
         ShiftDAO.findById(signup.shiftId),
         EventDAO.findById(signup.eventId),
         UserDAO.findById(signup.volunteerId),
       ]);
-      if (!shift || !event) continue;
+      if (!shift || !event) {
+        counts.skipped += 1;
+        continue;
+      }
       const released = await SignupService.release(
         signup,
         shift,
@@ -828,9 +838,11 @@ export default class SignupService {
         { by: null, reason: "Hold expired without clearance" }
       );
       // Resolved (or cancelled) since it was read, so it did not expire.
-      if (!released) continue;
-      if (user) {
-        const org = await NotificationService.org();
+      if (!released || !user) {
+        counts.skipped += 1;
+        continue;
+      }
+      counts[
         await NotificationService.send(
           user,
           NotificationService.templates.signupReleased(org, {
@@ -838,10 +850,10 @@ export default class SignupService {
             event: NotificationService.eventDetails(event, shift),
             reason: `The ${LAPSED_SPOT_HOLD_DAYS}-day hold on your ${shift.roleName} spot ended before your clearance was resolved, so the spot has been released.`,
           })
-        );
-      }
+        )
+      ] += 1;
     }
-    return expired.length;
+    return counts;
   }
 
   /** Deactivation releases every future spot; past hours and certificates are untouched. */

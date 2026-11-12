@@ -11,6 +11,7 @@ import {
   THREAD_READ_ONLY_AFTER_EVENT_DAYS,
 } from "@/constants/limits";
 import { addDays, isMinor } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
@@ -26,6 +27,7 @@ import {
 } from "@/types/exceptions";
 import type { Message, MessageThread } from "@/types/message";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import type { SafeUser } from "@/types/user";
 import { assertCanManageEvent, isAdmin, sameId } from "@/utils/authorization";
@@ -464,11 +466,14 @@ export default class MessageService {
     );
   }
 
-  /** Scheduled: threads go read-only 30 days after an event ends, or 7 days after a volunteer leaves it. */
-  static async closeStale(): Promise<number> {
+  /**
+   * Scheduled: threads go read-only 30 days after an event ends, or 7 days
+   * after a volunteer leaves it. sent = threads closed, skipped = left open.
+   */
+  static async closeStale(): Promise<SendCounts> {
     const now = new Date();
     const open = await MessageThreadDAO.findAll({ status: "open" });
-    if (!open.length) return 0;
+    if (!open.length) return emptyCounts();
     const events = await EventDAO.findByIds([
       ...new Set(open.map((t) => t.eventId.toString())),
     ]);
@@ -510,15 +515,20 @@ export default class MessageService {
         { status: "read_only", readOnlyAt: now }
       );
     }
-    return toClose.length;
+    return {
+      sent: toClose.length,
+      skipped: open.length - toClose.length,
+      failed: 0,
+    };
   }
 
   /** Scheduled hourly: one digest per recipient for messages that were collapsed. */
-  static async sendDigests(): Promise<number> {
+  static async sendDigests(): Promise<SendCounts> {
     const pending = (await MessageDAO.findUnnotified()).filter(
       (m) => m.sentAt.getTime() < Date.now() - 5 * 60_000
     );
-    if (!pending.length) return 0;
+    const counts = emptyCounts();
+    if (!pending.length) return counts;
     const threads = await MessageThreadDAO.findAll({
       _id: { $in: [...new Set(pending.map((m) => m.threadId.toString()))] },
     });
@@ -553,10 +563,12 @@ export default class MessageService {
     }
 
     const org = await NotificationService.org();
-    let sent = 0;
     for (const [recipientId, perThread] of byRecipient) {
       const recipient = await UserDAO.findById(recipientId);
-      if (!recipient) continue;
+      if (!recipient) {
+        counts.skipped += 1;
+        continue;
+      }
       const senders = await UserDAO.findSummaries(
         [...perThread.values()].map((e) => e.senderId)
       );
@@ -573,7 +585,7 @@ export default class MessageService {
           url: appUrl(`/messages/${e.thread._id}`),
         };
       });
-      const delivered = await NotificationService.send(
+      const outcome = await NotificationService.send(
         recipient,
         NotificationService.templates.messageDigest(org, {
           name: recipient.firstName,
@@ -581,12 +593,12 @@ export default class MessageService {
         }),
         { category: "messages" }
       );
-      if (delivered) sent += 1;
+      counts[outcome] += 1;
     }
     await MessageDAO.markNotified(
       pending.map((m) => m._id),
       new Date()
     );
-    return sent;
+    return counts;
   }
 }

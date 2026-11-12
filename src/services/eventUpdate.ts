@@ -10,12 +10,14 @@ import type { Actor } from "@/types/auth";
 import type { Event, EventUpdate } from "@/types/event";
 import { IllegalOperationError, NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
 import { assertCanManageEvent, sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
   editUpdateSchema,
   eventUpdateInputSchema,
 } from "@/utils/validation/event";
+import { emptyCounts } from "@/lib/sendCounts";
 
 /**
  * Short posts attached to an event. Notes collect into a daily digest;
@@ -161,13 +163,13 @@ export default class EventUpdateService {
   }
 
   /** Scheduled daily: one email per event per volunteer with every new note. */
-  static async sendNoteDigest(): Promise<number> {
+  static async sendNoteDigest(): Promise<SendCounts> {
     const notes = await EventUpdateDAO.findUnnotifiedNotes();
-    if (!notes.length) return 0;
+    const counts = emptyCounts();
+    if (!notes.length) return counts;
     const eventIds = [...new Set(notes.map((n) => n.eventId.toString()))];
     const events = await EventDAO.findByIds(eventIds);
     const org = await NotificationService.org();
-    let sent = 0;
 
     for (const event of events) {
       if (event.status !== "published") continue;
@@ -179,12 +181,11 @@ export default class EventUpdateService {
         "confirmed",
         "waitlisted",
       ]);
-      for (const volunteerId of new Set(
-        signups.map((s) => s.volunteerId.toString())
-      )) {
-        const user = await UserDAO.findById(volunteerId);
-        if (!user) continue;
-        const delivered = await NotificationService.send(
+      const users = await UserDAO.findByIds([
+        ...new Set(signups.map((s) => s.volunteerId.toString())),
+      ]);
+      for (const user of users) {
+        const outcome = await NotificationService.send(
           user,
           NotificationService.templates.noteDigest(org, {
             name: user.firstName,
@@ -197,13 +198,13 @@ export default class EventUpdateService {
           }),
           { category: "updates" }
         );
-        if (delivered) sent += 1;
+        counts[outcome] += 1;
       }
     }
     await EventUpdateDAO.markNotified(
       notes.map((n) => n._id),
       new Date()
     );
-    return sent;
+    return counts;
   }
 }
