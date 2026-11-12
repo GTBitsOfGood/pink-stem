@@ -1,27 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { FormEvent, Suspense } from "react";
 import AuthCard from "@/components/auth/AuthCard";
+import { useAuthActions } from "@/components/hooks/useAuthActions";
 import { useFormValues } from "@/components/hooks/useFormValues";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Primitives";
 import { errorMessage } from "@/components/ui/Toast";
 import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
-import { QUERY_KEYS } from "@/constants/queryKeys";
-import AuthHTTPClient from "@/http/authHTTPClient";
 
 function RegisterForm() {
   const next = useSearchParams().get("next") ?? "/dashboard";
-  const queryClient = useQueryClient();
-  const register = useMutation({
-    mutationFn: AuthHTTPClient.register,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.session }),
-  });
+  const { register } = useAuthActions();
   const { values, set } = useFormValues({
     firstName: "",
     lastName: "",
@@ -44,17 +37,6 @@ function RegisterForm() {
       <AuthCard
         title="Check your email"
         description="One more step before you can get confirmed for shifts."
-        footer={
-          <>
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="font-semibold text-brand-700 hover:underline"
-            >
-              Sign in
-            </Link>
-          </>
-        }
       >
         <Alert tone="info" title="Verification link sent">
           We sent a link to <strong>{values.email}</strong>. Click it to confirm
