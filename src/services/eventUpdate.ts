@@ -19,6 +19,7 @@ import type { Event, EventUpdate } from "@/types/event";
 import { IllegalOperationError, NotFoundError } from "@/types/exceptions";
 import type { Doc } from "@/types/models";
 import type { SendCounts } from "@/types/notification";
+import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
 import { assertCanManageEvent, sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import {
@@ -38,7 +39,8 @@ const DIGEST_KEY = /^note-digest:([0-9a-f]{24}):(.+):([0-9a-f]{24})$/;
 /**
  * Short posts attached to an event. Notes collect into a daily digest;
  * important changes email everyone signed up immediately and pin to the
- * top of the page until the event completes.
+ * top of the page until the event completes. Roster-only posts (door codes,
+ * a contact's mobile) reach confirmed volunteers only.
  */
 export default class EventUpdateService {
   private static async withAuthors(
@@ -124,10 +126,10 @@ export default class EventUpdateService {
     event: Doc<Event>,
     update: Doc<EventUpdate>
   ): Promise<void> {
-    const signups = await SignupDAO.findByEvent(event._id, [
-      "confirmed",
-      "waitlisted",
-    ]);
+    const signups = await SignupDAO.findByEvent(
+      event._id,
+      update.rosterOnly ? ["confirmed"] : LIVE_SIGNUP_STATUSES
+    );
     const recipients = [
       ...new Set(signups.map((s) => s.volunteerId.toString())),
     ];
@@ -275,11 +277,7 @@ export default class EventUpdateService {
       const notes = await EventUpdateService.withAuthors(batch.notes);
       // Only volunteers still on the event who were on it when the batch went out.
       const signups = (
-        await SignupDAO.findByEvent(event._id, [
-          "pending",
-          "confirmed",
-          "waitlisted",
-        ])
+        await SignupDAO.findByEvent(event._id, LIVE_SIGNUP_STATUSES)
       ).filter(
         (s) =>
           s.signedUpAt <= batch.at &&
@@ -288,14 +286,24 @@ export default class EventUpdateService {
       const users = await UserDAO.findByIds([
         ...new Set(signups.map((s) => s.volunteerId.toString())),
       ]);
+      // Roster-only notes go to confirmed volunteers only.
+      const confirmed = new Set(
+        signups
+          .filter((s) => s.status === "confirmed")
+          .map((s) => s.volunteerId.toString())
+      );
       for (const user of users) {
+        const visible = confirmed.has(user._id.toString())
+          ? notes
+          : notes.filter((n) => !n.rosterOnly);
+        if (!visible.length) continue;
         const outcome = await NotificationService.send(
           user,
           NotificationService.templates.noteDigest(org, {
             name: user.firstName,
             eventTitle: event.title,
             url: appUrl(`/events/${event._id}`),
-            notes: notes.map((n) => ({ author: n.authorName, body: n.body })),
+            notes: visible.map((n) => ({ author: n.authorName, body: n.body })),
           }),
           {
             category: "updates",
