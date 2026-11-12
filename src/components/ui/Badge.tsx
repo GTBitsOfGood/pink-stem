@@ -1,3 +1,4 @@
+import LabelHelp from "@/components/ui/LabelHelp";
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { ClearanceStatus } from "@/types/user";
@@ -5,8 +6,10 @@ import type { EventStatus } from "@/types/event";
 import type { SignupStatus } from "@/types/signup";
 import {
   CLEARANCE_LABELS,
+  CLEARANCE_STATUS_HELP,
   EVENT_STATUS_LABELS,
   SIGNUP_STATUS_LABELS,
+  SIGNUP_STATUS_HELP,
 } from "@/constants/labels";
 
 type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "info";
@@ -53,8 +56,16 @@ const SIGNUP_TONE: Record<SignupStatus, Tone> = {
 };
 
 export function SignupBadge({ status }: { status: SignupStatus }) {
+  const help = SIGNUP_STATUS_HELP[status];
   return (
-    <Badge tone={SIGNUP_TONE[status]}>{SIGNUP_STATUS_LABELS[status]}</Badge>
+    <span className="inline-flex items-center">
+      <Badge tone={SIGNUP_TONE[status]}>{SIGNUP_STATUS_LABELS[status]}</Badge>
+      {help ? (
+        <LabelHelp label={`${SIGNUP_STATUS_LABELS[status]} sign-up`}>
+          {help}
+        </LabelHelp>
+      ) : null}
+    </span>
   );
 }
 
@@ -78,6 +89,11 @@ const CLEARANCE_TONE: Record<ClearanceStatus, Tone> = {
 
 export function ClearanceBadge({ status }: { status: ClearanceStatus }) {
   return (
-    <Badge tone={CLEARANCE_TONE[status]}>{CLEARANCE_LABELS[status]}</Badge>
+    <span className="inline-flex items-center">
+      <Badge tone={CLEARANCE_TONE[status]}>{CLEARANCE_LABELS[status]}</Badge>
+      <LabelHelp label={`background clearance: ${CLEARANCE_LABELS[status]}`}>
+        {CLEARANCE_STATUS_HELP[status]}
+      </LabelHelp>
+    </span>
   );
 }
