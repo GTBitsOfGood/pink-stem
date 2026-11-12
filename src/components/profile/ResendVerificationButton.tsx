@@ -1,14 +1,27 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useProfile } from "@/components/hooks/useProfile";
+import { useMutationState } from "@tanstack/react-query";
+import {
+  RESEND_VERIFICATION_KEY,
+  useProfile,
+} from "@/components/hooks/useProfile";
 import Button from "@/components/ui/Button";
 import { errorMessage, isRateLimited, useToast } from "@/components/ui/Toast";
 
+/**
+ * Resends the email verification link. Every instance reads the same mutation
+ * history, so one rate-limited attempt blocks all of them on the page.
+ */
 export default function ResendVerificationButton() {
   const { resendEmailVerification } = useProfile();
   const toast = useToast();
-  const blocked = isRateLimited(resendEmailVerification.error);
+  const attempts = useMutationState({
+    filters: { mutationKey: RESEND_VERIFICATION_KEY },
+    select: (m) => m.state,
+  });
+  const blocked = attempts.some((a) => isRateLimited(a.error));
+  const pending = attempts.some((a) => a.status === "pending");
 
   if (blocked) {
     return (
@@ -24,7 +37,7 @@ export default function ResendVerificationButton() {
       size="sm"
       variant="secondary"
       icon={<Send className="h-3.5 w-3.5" />}
-      loading={resendEmailVerification.isPending}
+      loading={pending}
       onClick={() =>
         resendEmailVerification.mutate(undefined, {
           onSuccess: () => toast("Verification link re-sent to your email."),
