@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
+import HoursLedgerDAO from "@/db/actions/hoursLedger";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
@@ -147,8 +148,14 @@ export default class AttendanceService {
           ),
         ].join(", ") || "Volunteer";
 
+      // A retry after a failed issuance must not post the same signup twice.
+      const posted = await HoursLedgerDAO.findByVolunteerAndEvent(
+        volunteer._id,
+        event._id
+      );
       for (const signup of group) {
         totalHours += signup.attendance!.hours;
+        if (posted.some((e) => sameId(e.signupId, signup._id))) continue;
         await HoursService.post({
           volunteerId: signup.volunteerId,
           eventId: event._id,
