@@ -446,9 +446,9 @@ export default class MessageService {
   static async postEventUpdate(
     event: Doc<Event>,
     update: Doc<EventUpdate>
-  ): Promise<number> {
+  ): Promise<void> {
     const organizer = await UserDAO.findById(event.organizerId);
-    if (!organizer) return 0;
+    if (!organizer) return;
     const sender: Actor = {
       id: organizer._id.toString(),
       role: organizer.role,
@@ -456,7 +456,6 @@ export default class MessageService {
       name: `${organizer.firstName} ${organizer.lastName}`,
     };
     const signups = await SignupDAO.findByEvent(event._id, ["confirmed"]);
-    let sent = 0;
     for (const volunteerId of new Set(
       signups.map((s) => s.volunteerId.toString())
     )) {
@@ -474,7 +473,6 @@ export default class MessageService {
           event,
           update
         );
-        sent += 1;
       } catch (error) {
         console.error(
           `[messages] event update ${update._id} not delivered to ${volunteerId}`,
@@ -482,7 +480,6 @@ export default class MessageService {
         );
       }
     }
-    return sent;
   }
 
   static async report(
