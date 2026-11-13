@@ -1,8 +1,16 @@
-import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFFont,
+  PDFImage,
+  PDFPage,
+  rgb,
+  StandardFonts,
+} from "pdf-lib";
 import QRCode from "qrcode";
 import type { Certificate } from "@/types/certificate";
 import type { OrgSettings } from "@/types/settings";
 import { formatHours, formatLongDate, formatShortDate } from "@/lib/dates";
+import { LOGO_PNG_BASE64 } from "@/lib/pdf/logo";
 
 const PAGE = { width: 612, height: 792, margin: 56 };
 const MAGENTA = rgb(0.957, 0, 0.957);
@@ -13,6 +21,8 @@ const RULE = rgb(0.902, 0.878, 0.91);
 interface Fonts {
   regular: PDFFont;
   bold: PDFFont;
+  /** Letterhead logo, embedded once and reused on every page. */
+  logo: PDFImage;
 }
 
 /**
@@ -38,6 +48,7 @@ export async function renderCertificatePdf(
   const fonts: Fonts = {
     regular: await pdf.embedFont(StandardFonts.Helvetica),
     bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+    logo: await pdf.embedPng(LOGO_PNG_BASE64),
   };
 
   const qrPng = await QRCode.toBuffer(verifyUrl, {
@@ -210,19 +221,12 @@ function addPage(
     height: 10,
     color: MAGENTA,
   });
-  page.drawText(settings.orgName.toUpperCase(), {
+  const logo = fonts.logo.scaleToFit(200, 36);
+  page.drawImage(fonts.logo, {
     x: PAGE.margin,
-    y: PAGE.height - 52,
-    size: 13,
-    font: fonts.bold,
-    color: INK,
-  });
-  page.drawText("Breaking barriers for girls in STEM", {
-    x: PAGE.margin,
-    y: PAGE.height - 68,
-    size: 9,
-    font: fonts.regular,
-    color: MUTED,
+    y: PAGE.height - 76,
+    width: logo.width,
+    height: logo.height,
   });
   const address = [
     settings.addressLine1,
