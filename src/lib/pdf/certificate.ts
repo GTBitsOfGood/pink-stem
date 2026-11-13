@@ -7,10 +7,10 @@ import {
   StandardFonts,
 } from "pdf-lib";
 import QRCode from "qrcode";
+import { LOGO_PNG_BASE64 } from "@/lib/pdf/logo";
 import type { Certificate } from "@/types/certificate";
 import type { OrgSettings } from "@/types/settings";
 import { formatHours, formatLongDate, formatShortDate } from "@/lib/dates";
-import { LOGO_PNG_BASE64 } from "@/lib/pdf/logo";
 
 const PAGE = { width: 612, height: 792, margin: 56 };
 const MAGENTA = rgb(0.957, 0, 0.957);
