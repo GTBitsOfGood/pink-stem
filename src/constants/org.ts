@@ -2,13 +2,19 @@ import type { OrgSettings } from "@/types/settings";
 
 export const ORG_TIMEZONE = "America/New_York";
 
+/** Named on every certificate for requests beyond what the PDF shows. */
+export const CERTIFICATE_CONTACT = {
+  name: "Anna Joyce Reyes",
+  email: "annajoyce@pinksteminc.com",
+};
+
 /** Seeded on first run and editable by admins under Settings. */
 export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   orgName: "Pink STEM, Inc.",
   addressLine1: "260 Peachtree St. NW, Suite 2200",
   addressLine2: "Atlanta, GA 30303",
   phone: "(678) 833-6950",
-  email: "thead@pinksteminc.com",
+  email: "annajoyce@pinksteminc.com",
   website: "https://pinkstem.org",
   signatoryName: "Dr. Tamika Head-Ray",
   signatoryTitle: "Founder & Executive Director",
