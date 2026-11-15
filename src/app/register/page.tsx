@@ -34,10 +34,7 @@ function RegisterForm() {
 
   if (register.isSuccess) {
     return (
-      <AuthCard
-        title="Check your email"
-        description="One more step before you can get confirmed for shifts."
-      >
+      <AuthCard title="Check your email">
         <Alert tone="info" title="Verification link sent">
           We sent a link to <strong>{values.email}</strong>. Click it to confirm
           your email address — sign-ups stay pending until you do.
@@ -55,7 +52,6 @@ function RegisterForm() {
   return (
     <AuthCard
       title="Become a Pink STEM volunteer"
-      description="Mentor, coach, and cheer on girls exploring science, technology, engineering, and math."
       footer={
         <>
           Already have an account?{" "}

@@ -194,18 +194,12 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
       </Card>
 
       <Card>
-        <CardHeader
-          title="Skills"
-          description="What you can lead or support. Shifts may list helpful skills."
-        />
+        <CardHeader title="Skills" />
         <CardBody>{skillGrid("skills")}</CardBody>
       </Card>
 
       <Card>
-        <CardHeader
-          title="Interests"
-          description="Program areas you would like to hear about."
-        />
+        <CardHeader title="Interests" />
         <CardBody>{skillGrid("interests")}</CardBody>
       </Card>
 

@@ -58,10 +58,7 @@ function PendingAndWaitlist({ roster }: { roster: ClientRoster }) {
   };
   return (
     <Card>
-      <CardHeader
-        title="Pending and waitlisted"
-        description="Approve sign-ups you hold for review, or promote from the waitlist inside the auto-promotion window."
-      />
+      <CardHeader title="Pending and waitlisted" />
       <ul className="divide-y divide-ink-100">
         {rows.map(({ signup, volunteer, cleared }) => {
           const shift = roster.shifts.find((s) => s._id === signup.shiftId);
@@ -315,10 +312,7 @@ export default function ManageEventPage() {
           ) : null}
 
           <Card>
-            <CardHeader
-              title="Shifts"
-              description="Capacity is enforced at the database, so a shift can never be over-filled."
-            />
+            <CardHeader title="Shifts" />
             <CardBody>
               <ShiftEditor
                 shifts={e.shifts}
@@ -338,7 +332,6 @@ export default function ManageEventPage() {
           <Card>
             <CardHeader
               title="Updates"
-              description="Notes go out in a daily digest. Important changes email every confirmed and waitlisted volunteer immediately and pin to the top."
               action={
                 editable ? (
                   <Button
@@ -387,10 +380,7 @@ export default function ManageEventPage() {
           </Card>
           {e.status === "published" ? (
             <Card>
-              <CardHeader
-                title="Message the roster"
-                description="Lands as individual conversations so replies come back one to one."
-              />
+              <CardHeader title="Message the roster" />
               <CardBody className="grid gap-2">
                 <Button
                   variant="secondary"
@@ -410,10 +400,7 @@ export default function ManageEventPage() {
           ) : null}
           {editable ? (
             <Card>
-              <CardHeader
-                title="Cancel this event"
-                description="Requires a reason. Everyone signed up is released and emailed it."
-              />
+              <CardHeader title="Cancel this event" />
               <CardBody>
                 <Button
                   variant="danger"

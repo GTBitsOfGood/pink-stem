@@ -50,7 +50,6 @@ export default function EventsPage() {
     <Container className="py-8 sm:py-10">
       <PageHeader
         title="Event shifts"
-        description="Pick a role and a time that fits. Sign-up takes a minute; Pink STEM staff clear every volunteer before they work with students."
         action={
           <div className="flex gap-1 rounded-xl border border-ink-200 bg-white p-1">
             {viewButton("list", "List", <List className="h-4 w-4" />)}
