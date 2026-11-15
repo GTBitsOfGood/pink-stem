@@ -60,7 +60,6 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
     <form onSubmit={submit} className="grid gap-6">
       <PageHeader
         title="Settings"
-        description="Organization details appear on emails and certificates. Rules below drive the sign-up and roster flows."
         action={
           <ButtonLink href="/admin/settings/audit" variant="secondary">
             Audit log
@@ -111,10 +110,7 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
         </CardBody>
       </Card>
       <Card>
-        <CardHeader
-          title="Certificate signatory"
-          description="Printed on every certificate and service record with the organization's contact details."
-        />
+        <CardHeader title="Certificate signatory" />
         <CardBody className="grid gap-4 sm:grid-cols-2">
           <Input
             label="Name"

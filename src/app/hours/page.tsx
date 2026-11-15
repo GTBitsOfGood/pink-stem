@@ -33,11 +33,7 @@ export default function HoursPage() {
 
   return (
     <Container className="py-8 sm:py-10">
-      <PageHeader
-        eyebrow="Hours & certificates"
-        title="Your service record"
-        description="Hours enter this ledger only when an organizer approves the roster. Certificates are immutable and verify publicly."
-      />
+      <PageHeader eyebrow="Hours & certificates" title="Your service record" />
       {hours.isPending || !hours.data ? (
         <Spinner />
       ) : (
@@ -61,10 +57,7 @@ export default function HoursPage() {
               />
             </div>
             <Card>
-              <CardHeader
-                title="Ledger"
-                description="Every approval and correction, newest first."
-              />
+              <CardHeader title="Ledger" />
               {hours.data.entries.length ? (
                 <Table className="rounded-none border-0 shadow-none">
                   <thead>
@@ -115,7 +108,6 @@ export default function HoursPage() {
             <CardHeader
               eyebrow="For applications"
               title="Request a service record"
-              description="A signed letter on Pink STEM letterhead listing every event in the range, with a total and a verification code. Generated instantly."
             />
             <CardBody>
               <form onSubmit={submit} className="grid gap-3">

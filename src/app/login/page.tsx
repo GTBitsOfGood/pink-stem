@@ -24,7 +24,6 @@ function LoginForm() {
   return (
     <AuthCard
       title="Welcome back"
-      description="Sign in to see your shifts, hours, and messages."
       footer={
         <>
           New to Pink STEM?{" "}

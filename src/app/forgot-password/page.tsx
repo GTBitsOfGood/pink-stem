@@ -21,7 +21,6 @@ export default function ForgotPasswordPage() {
   return (
     <AuthCard
       title="Reset your password"
-      description="Enter your email and we will send a link that works for 30 minutes."
       footer={
         <Link
           href="/login"

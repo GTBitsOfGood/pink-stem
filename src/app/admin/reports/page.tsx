@@ -45,7 +45,6 @@ export default function ReportsPage() {
     <div>
       <PageHeader
         title="Reports"
-        description="Every report exports to CSV."
         action={
           <a
             href={AdminHTTPClient.reportCsvUrl(kind, range.from, range.to)}

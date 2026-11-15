@@ -42,7 +42,6 @@ export default function PeoplePage() {
     <div>
       <PageHeader
         title="People"
-        description="Every account, with clearance status and hours at a glance."
         action={
           <Button
             icon={<UserPlus className="h-4 w-4" />}

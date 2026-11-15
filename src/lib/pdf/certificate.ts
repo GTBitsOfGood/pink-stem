@@ -11,6 +11,7 @@ import { LOGO_PNG_BASE64 } from "@/lib/pdf/logo";
 import type { Certificate } from "@/types/certificate";
 import type { OrgSettings } from "@/types/settings";
 import { formatHours, formatLongDate, formatShortDate } from "@/lib/dates";
+import { CERTIFICATE_CONTACT } from "@/constants/org";
 
 const PAGE = { width: 612, height: 792, margin: 56 };
 const MAGENTA = rgb(0.957, 0, 0.957);
@@ -200,6 +201,16 @@ export async function renderCertificatePdf(
     MUTED,
     160,
     labelX
+  );
+
+  drawParagraph(
+    page,
+    fonts.regular,
+    `For additional documentation, contact ${CERTIFICATE_CONTACT.name} at ${CERTIFICATE_CONTACT.email}.`,
+    qrY - 28,
+    10,
+    14,
+    MUTED
   );
 
   return pdf.save();

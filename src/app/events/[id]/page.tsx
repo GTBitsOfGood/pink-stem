@@ -145,10 +145,7 @@ export default function EventPage() {
             <UpdatesFeed updates={e.updates} />
             {user && onRoster ? (
               <Card className="mt-4">
-                <CardHeader
-                  title="Questions?"
-                  description="Message the organizer. Conversations stay attached to this event and are visible to Pink STEM administrators."
-                />
+                <CardHeader title="Questions?" />
                 <CardBody>
                   <Button
                     variant="secondary"
