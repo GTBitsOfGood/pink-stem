@@ -1,6 +1,6 @@
 /**
- * Why a send failed. `rejected`: Resend refused this message (a bad address
- * or field). `unavailable`: Resend could not be reached or refused us (an
+ * Why a send failed. `rejected`: Juno refused this message (a bad address
+ * or field). `unavailable`: Juno could not be reached or refused us (an
  * outage, a rate limit, a bad API key), so the same email may go out later.
  */
 export const MAIL_FAILURES = ["rejected", "unavailable"] as const;

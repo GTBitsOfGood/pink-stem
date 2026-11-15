@@ -6,6 +6,7 @@ import { RATE_LIMITS } from "@/constants/limits";
 import { isMinor } from "@/lib/dates";
 import { assertRateLimit } from "@/lib/rateLimit";
 import AuthService from "@/services/auth";
+import { MailError } from "@/services/mail";
 import MessageService from "@/services/message";
 import SignupService from "@/services/signup";
 import type { MeResponse } from "@/types/api";
@@ -76,7 +77,9 @@ export default class UserService {
     const user = await UserDAO.findById(actor.id);
     if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
     if (user.emailVerifiedAt) return;
-    await AuthService.sendEmailVerification(user);
+    // Registration carries on if its email fails; a resend tells the user.
+    if ((await AuthService.sendEmailVerification(user)) === "failed")
+      throw new MailError("unavailable", "Verification email was not sent");
   }
 
   /** What the page shows before confirming. */

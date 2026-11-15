@@ -2,6 +2,10 @@ import { PASSWORD_MIN_LENGTH } from "@/constants/limits";
 
 /** Every user-facing error string, so copy is written once and reused. */
 const ERRORS = Object.freeze({
+  MAIL: {
+    UNAVAILABLE:
+      "We couldn't send the email right now. Please try again in a few minutes.",
+  },
   AUTH: {
     INVALID_CREDENTIALS: "That email and password combination is not right.",
     EMAIL_TAKEN: "An account with this email already exists.",

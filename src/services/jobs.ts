@@ -279,8 +279,9 @@ export default class JobService {
       const organizer = await UserDAO.findById(event.organizerId);
       const url = appUrl(`/organizer/events/${event._id}/roster`);
 
-      for (const stage of ROSTER_NUDGE_HOURS) {
-        if (hoursSince < stage || !organizer) continue;
+      // Only the latest stage reached, so a late first run sends one nudge.
+      const stage = ROSTER_NUDGE_HOURS.findLast((h) => hoursSince >= h);
+      if (stage && organizer) {
         const outcome = await NotificationService.send(
           organizer,
           NotificationService.templates.rosterNudge(org, {

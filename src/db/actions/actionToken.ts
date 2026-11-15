@@ -15,7 +15,11 @@ export default class ActionTokenDAO {
     ttlMs,
     ...data
   }: NewToken): Promise<{ secret: string; id: Types.ObjectId }> {
-    await ActionTokenDAO.revoke(data.email, data.purpose);
+    // Earlier verification links keep working, so a resend never breaks the
+    // first email. Reset and invite links are single-use, so a new one revokes
+    // the old.
+    if (data.purpose !== "verify_email")
+      await ActionTokenDAO.revoke(data.email, data.purpose);
     const secret = generateSecret();
     const created = await ActionTokenModel.create({
       ...data,

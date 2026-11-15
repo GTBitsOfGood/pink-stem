@@ -12,6 +12,7 @@ import AuditService from "@/services/audit";
 import HashingService from "@/services/hashing";
 import NotificationService from "@/services/notification";
 import SignupService from "@/services/signup";
+import type { SendOutcome } from "@/types/notification";
 import type { Actor } from "@/types/auth";
 import {
   ConflictError,
@@ -144,7 +145,7 @@ export default class AuthService {
 
   static async sendEmailVerification(
     user: Pick<Doc<SafeUser>, "_id" | "email" | "firstName" | "status">
-  ): Promise<void> {
+  ): Promise<SendOutcome> {
     const { secret } = await ActionTokenDAO.issue({
       purpose: "verify_email",
       email: user.email,
@@ -152,7 +153,7 @@ export default class AuthService {
       ttlMs: EMAIL_VERIFICATION_DAYS * DAY,
     });
     const org = await NotificationService.org();
-    await NotificationService.send(
+    return NotificationService.send(
       user,
       NotificationService.templates.verifyEmail(org, {
         name: user.firstName,
