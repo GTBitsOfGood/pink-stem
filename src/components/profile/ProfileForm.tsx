@@ -204,7 +204,10 @@ export default function ProfileForm({ user }: { user: ClientUser }) {
       </Card>
 
       <Card>
-        <CardHeader title="Email preferences" />
+        <CardHeader
+          title="Email preferences"
+          description="Confirmations for your own sign-ups and important changes are always sent."
+        />
         <CardBody className="grid gap-2 sm:grid-cols-2">
           {NOTIFICATION_CATEGORIES.filter(
             (c) => c !== "digests" || user.role !== "volunteer"
