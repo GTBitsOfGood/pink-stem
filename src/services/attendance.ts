@@ -1,7 +1,12 @@
 import { Types } from "mongoose";
+import {
+  ROSTER_APPROVAL_LOCK_TTL_MS,
+  ROSTER_MARK_LOCK_TTL_MS,
+} from "@/constants/limits";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
+import NotificationLogDAO from "@/db/actions/notificationLog";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
@@ -14,6 +19,7 @@ import HoursService from "@/services/hours";
 import NotificationService from "@/services/notification";
 import type { Actor } from "@/types/auth";
 import {
+  ConflictError,
   IllegalOperationError,
   InvalidArgumentsError,
   NotFoundError,
@@ -30,12 +36,55 @@ import { attendanceInputSchema } from "@/utils/validation/signup";
  * that posts hours to the ledger and issues certificates.
  */
 export default class AttendanceService {
+  /**
+   * Runs `fn` holding the event's roster lock. Approval posts the marks it
+   * read, so marks and approval never overlap, and neither do two approvals.
+   * The key comes from a loaded `_id`, so every spelling of an ID shares it.
+   */
+  private static async withRosterLock<T>(
+    eventId: Types.ObjectId,
+    ttlMs: number,
+    tries: number,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const key = `roster:${eventId.toString()}`;
+    for (let attempt = 1; ; attempt++) {
+      const lock = await NotificationLogDAO.acquireLock(key, ttlMs);
+      if (lock) {
+        try {
+          return await fn();
+        } finally {
+          await NotificationLogDAO.releaseLock(key, lock);
+        }
+      }
+      if (attempt >= tries) throw new ConflictError(ERRORS.ROSTER.BUSY);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
   static async mark(
     actor: Actor,
     signupId: string,
     input: unknown
   ): Promise<Doc<Signup>> {
     const data = attendanceInputSchema.parse(input);
+    const signup = await SignupDAO.findById(signupId);
+    if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
+    // Marks wait briefly for each other, since an organizer can tap quickly.
+    return AttendanceService.withRosterLock(
+      signup.eventId,
+      ROSTER_MARK_LOCK_TTL_MS,
+      10,
+      () => AttendanceService.saveMark(actor, signupId, data)
+    );
+  }
+
+  private static async saveMark(
+    actor: Actor,
+    signupId: string,
+    data: ReturnType<typeof attendanceInputSchema.parse>
+  ): Promise<Doc<Signup>> {
+    // Re-read under the lock, since approval may have run since.
     const signup = await SignupDAO.findById(signupId);
     if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
     const [event, shift] = await Promise.all([
@@ -72,6 +121,21 @@ export default class AttendanceService {
   }
 
   static async approveRoster(
+    actor: Actor,
+    eventId: string
+  ): Promise<{ approved: number; totalHours: number }> {
+    const event = await EventDAO.findById(eventId);
+    if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+    assertCanManageEvent(actor, event);
+    return AttendanceService.withRosterLock(
+      event._id,
+      ROSTER_APPROVAL_LOCK_TTL_MS,
+      1,
+      () => AttendanceService.approve(actor, eventId)
+    );
+  }
+
+  private static async approve(
     actor: Actor,
     eventId: string
   ): Promise<{ approved: number; totalHours: number }> {

@@ -17,7 +17,7 @@ import { isCleared } from "@/lib/clearance";
 import { addDays, ageOn } from "@/lib/dates";
 import { emptyCounts } from "@/lib/sendCounts";
 import { buildIcs } from "@/lib/ics";
-import { canSeeJoinLink, withoutJoinLink } from "@/lib/joinLink";
+import { canJoin, canSeeJoinLink, withoutJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
@@ -170,7 +170,9 @@ export default class SignupService {
         ? "pending"
         : "confirmed"
       : "waitlisted";
-    if (!claimed) await ShiftDAO.adjustWaitlist(shiftId, 1);
+    // The shift can be deleted after it was read; a claim fails then too.
+    if (!claimed && !(await ShiftDAO.adjustWaitlist(shiftId, 1)))
+      throw new NotFoundError(ERRORS.SHIFT.NOT_FOUND);
 
     const now = new Date();
     const fields = {
@@ -482,28 +484,38 @@ export default class SignupService {
         return;
       const next = await SignupDAO.firstWaitlisted(shiftId);
       if (!next) return;
-      if (!(await SignupService.promoteOne(next, shift, event))) return;
+      if ((await SignupService.promoteOne(next, shift, event)) === "full")
+        return;
     }
   }
 
+  /** "lost" means the sign-up stopped being waitlisted before it was promoted. */
   private static async promoteOne(
     signup: Doc<Signup>,
     shift: Doc<Shift>,
     event: Doc<Event>
-  ): Promise<boolean> {
+  ): Promise<"promoted" | "full" | "lost"> {
     const claimed = await ShiftDAO.claimSpot(shift._id);
-    if (!claimed) return false;
+    if (!claimed) return "full";
     const { user, reasons } = await SignupService.reasonsFor(
       signup.volunteerId,
       event,
       !!signup.approvedAt
     );
     const status = reasons.length ? "pending" : "confirmed";
-    const updated = (await SignupDAO.updateById(signup._id, {
-      status,
-      pendingReasons: reasons,
-      confirmedAt: status === "confirmed" ? new Date() : null,
-    })) as Doc<Signup>;
+    const updated = await SignupDAO.updateByIdIfStatus(
+      signup._id,
+      "waitlisted",
+      {
+        status,
+        pendingReasons: reasons,
+        confirmedAt: status === "confirmed" ? new Date() : null,
+      }
+    );
+    if (!updated) {
+      await ShiftDAO.releaseSpot(shift._id);
+      return "lost";
+    }
     await ShiftDAO.adjustWaitlist(shift._id, -1);
 
     const org = await NotificationService.org();
@@ -527,7 +539,7 @@ export default class SignupService {
             ),
           })
     );
-    return true;
+    return "promoted";
   }
 
   /** Organizer decides inside the auto-promotion window. */
@@ -542,9 +554,10 @@ export default class SignupService {
     assertCanManageEvent(actor, event);
     if (signup.status !== "waitlisted")
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
-    if (!(await SignupService.promoteOne(signup, shift, event))) {
-      throw new ConflictError(ERRORS.SHIFT.FULL_SHIFT);
-    }
+    const result = await SignupService.promoteOne(signup, shift, event);
+    if (result === "full") throw new ConflictError(ERRORS.SHIFT.FULL_SHIFT);
+    if (result === "lost")
+      throw new IllegalOperationError(ERRORS.SIGNUP.NOT_CANCELLABLE);
     return (await SignupDAO.findById(signupId)) as Doc<Signup>;
   }
 
@@ -581,20 +594,30 @@ export default class SignupService {
       event,
       !!signup.approvedAt
     );
+    // Conditional on pending, so a cancellation since the read is not undone.
+    const current = async () =>
+      (await SignupDAO.findById(signup._id)) ?? signup;
     if (reasons.length) {
-      return (await SignupDAO.updateById(signup._id, {
-        pendingReasons: reasons,
-        // A hold only waits on clearance, so it ends when clearance does,
-        // even if something else still blocks the spot.
-        ...(reasons.includes("clearance") ? {} : { holdUntil: null }),
-      })) as Doc<Signup>;
+      return (
+        (await SignupDAO.updateByIdIfStatus(signup._id, "pending", {
+          pendingReasons: reasons,
+          // A hold only waits on clearance, so it ends when clearance does,
+          // even if something else still blocks the spot.
+          ...(reasons.includes("clearance") ? {} : { holdUntil: null }),
+        })) ?? current()
+      );
     }
-    const confirmed = (await SignupDAO.updateById(signup._id, {
-      status: "confirmed",
-      pendingReasons: [],
-      confirmedAt: new Date(),
-      holdUntil: null,
-    })) as Doc<Signup>;
+    const confirmed = await SignupDAO.updateByIdIfStatus(
+      signup._id,
+      "pending",
+      {
+        status: "confirmed",
+        pendingReasons: [],
+        confirmedAt: new Date(),
+        holdUntil: null,
+      }
+    );
+    if (!confirmed) return current();
     await SignupService.notifySafely(() =>
       SignupService.notifyStatus(user, event, shift, confirmed)
     );
@@ -942,20 +965,24 @@ export default class SignupService {
     signups: Doc<Signup>[]
   ): Promise<SignupWithContext[]> {
     if (!signups.length) return [];
-    const [shifts, events] = await Promise.all([
+    const [shifts, events, clearances] = await Promise.all([
       ShiftDAO.findByIds(signups.map((s) => s.shiftId)),
       EventDAO.findByIds(signups.map((s) => s.eventId)),
+      ClearanceDAO.findByUsers(signups.map((s) => s.volunteerId)),
     ]);
     return signups
       .flatMap((signup) => {
         const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
         const event = events.find((e) => sameId(e._id, signup.eventId));
         if (!shift || !event) return [];
+        const clearance = clearances.find((c) =>
+          sameId(c.userId, signup.volunteerId)
+        );
         return [
           {
             signup,
             shift,
-            event: canSeeJoinLink(signup.status)
+            event: canJoin(signup.status, event, clearance)
               ? event
               : withoutJoinLink(event),
           },
@@ -1004,7 +1031,13 @@ export default class SignupService {
     ]);
     if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     const details = NotificationService.eventDetails(event, shift, null, {
-      joinLink: canSeeJoinLink(signup.status),
+      joinLink: canJoin(
+        signup.status,
+        event,
+        event.requiresClearance
+          ? await ClearanceDAO.findByUser(signup.volunteerId)
+          : null
+      ),
     });
     return buildIcs({
       uid: signup._id.toString(),

@@ -5,8 +5,10 @@ export interface CsvColumn<T> {
 
 const escape = (value: unknown) => {
   if (value == null) return "";
-  const text = value instanceof Date ? value.toISOString() : String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  // A spreadsheet runs text starting with these as a formula; numbers stay numbers.
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
 /** Serializes rows to RFC 4180 CSV with a header line. */

@@ -48,6 +48,12 @@ export const JOB_LOCK_TTL_MS = 10 * 60_000;
 /** How long a crashed shift delete can hold its event's lock before it lapses. */
 export const SHIFT_DELETE_LOCK_TTL_MS = 30_000;
 
+/** How long a crashed roster approval can hold its event's lock before it lapses. */
+export const ROSTER_APPROVAL_LOCK_TTL_MS = 10 * 60_000;
+
+/** How long a crashed attendance mark can hold its event's roster lock. */
+export const ROSTER_MARK_LOCK_TTL_MS = 30_000;
+
 /**
  * How long a keyed email stays claimed by a sender that never reported back.
  * Past this, the sender is assumed dead and the next run sends it again.
