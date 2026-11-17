@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader, Stat } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Field";
 import { PageHeader, Spinner, Table, td, th } from "@/components/ui/Primitives";
+import LoadError from "@/components/ui/LoadError";
 import { errorMessage, useToast } from "@/components/ui/Toast";
 import { formatHours, formatShortDate, toDateInput } from "@/lib/dates";
 
@@ -34,7 +35,9 @@ export default function HoursPage() {
   return (
     <Container className="py-8 sm:py-10">
       <PageHeader eyebrow="Hours & certificates" title="Your service record" />
-      {hours.isPending || !hours.data ? (
+      {hours.isError ? (
+        <LoadError title="Your hours could not be loaded" query={hours} />
+      ) : hours.isPending || !hours.data ? (
         <Spinner />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

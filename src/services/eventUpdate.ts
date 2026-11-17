@@ -5,11 +5,12 @@ import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import NotificationLogDAO from "@/db/actions/notificationLog";
 import {
+  IMPORTANT_CHANGE_RETRY_DAYS,
   NOTE_DIGEST_INTERVAL_HOURS,
   NOTE_DIGEST_RETRY_DAYS,
 } from "@/constants/limits";
 import { addHours } from "@/lib/dates";
-import { emptyCounts } from "@/lib/sendCounts";
+import { addCounts, countOutcomes, emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import MessageService from "@/services/message";
 import NotificationService from "@/services/notification";
@@ -125,7 +126,7 @@ export default class EventUpdateService {
   private static async emailImportant(
     event: Doc<Event>,
     update: Doc<EventUpdate>
-  ): Promise<void> {
+  ): Promise<SendCounts> {
     const signups = await SignupDAO.findByEvent(
       event._id,
       update.rosterOnly ? ["confirmed"] : LIVE_SIGNUP_STATUSES
@@ -134,14 +135,38 @@ export default class EventUpdateService {
       ...new Set(signups.map((s) => s.volunteerId.toString())),
     ];
     const details = NotificationService.eventDetails(event);
-    await NotificationService.toUsers(recipients, (org, user) =>
-      NotificationService.templates.importantChange(org, {
-        name: user.firstName,
-        event: details,
-        body: update.body,
-      })
+    const outcomes = await NotificationService.toUsers(
+      recipients,
+      (org, user) =>
+        NotificationService.templates.importantChange(org, {
+          name: user.firstName,
+          event: details,
+          body: update.body,
+        }),
+      // Keyed per recipient, so a retry skips everyone it already reached.
+      { dedupeKey: `important:${update._id}` }
     );
-    await EventUpdateDAO.updateById(update._id, { notifiedAt: new Date() });
+    // Left unset on a failure; retryImportant sends it again.
+    if (!outcomes.includes("failed"))
+      await EventUpdateDAO.updateById(update._id, { notifiedAt: new Date() });
+    return countOutcomes(outcomes);
+  }
+
+  /** Re-sends important changes whose email failed for anyone. */
+  static async retryImportant(): Promise<SendCounts> {
+    const failed = await NotificationLogDAO.findFailedKeys(
+      "important:",
+      addHours(new Date(), -IMPORTANT_CHANGE_RETRY_DAYS * 24)
+    );
+    const counts = emptyCounts();
+    for (const id of new Set(failed.map((key) => key.split(":")[1]))) {
+      const update = await EventUpdateDAO.findById(id);
+      if (!update || update.deletedAt || update.kind !== "important") continue;
+      const event = await EventDAO.findById(update.eventId);
+      if (event?.status !== "published") continue;
+      addCounts(counts, await EventUpdateService.emailImportant(event, update));
+    }
+    return counts;
   }
 
   private static async manageable(actor: Actor, updateId: string) {

@@ -72,6 +72,8 @@ export const eventFiltersSchema = dateRangeSchema.extend({
   hasSpots: queryBoolean.optional(),
   q: z.string().trim().max(100).optional(),
   page: pageSchema,
+  /** Every match on one page, for the calendar's month grid. */
+  all: queryBoolean.optional(),
 });
 
 export const adminEventFiltersSchema = eventFiltersSchema.extend({

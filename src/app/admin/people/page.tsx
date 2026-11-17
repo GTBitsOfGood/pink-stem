@@ -16,6 +16,7 @@ import {
   td,
   th,
 } from "@/components/ui/Primitives";
+import LoadError from "@/components/ui/LoadError";
 import { CLEARANCE_LABELS, ROLE_LABELS } from "@/constants/labels";
 import { formatHours, formatShortDate } from "@/lib/dates";
 import { CLEARANCE_STATUSES, ROLES } from "@/types/user";
@@ -99,7 +100,9 @@ export default function PeoplePage() {
           onChange={(e) => set("flagged", e.target.value)}
         />
       </div>
-      {people.isPending ? (
+      {people.isError ? (
+        <LoadError title="People could not be loaded" query={people} />
+      ) : people.isPending ? (
         <Spinner />
       ) : (
         <>

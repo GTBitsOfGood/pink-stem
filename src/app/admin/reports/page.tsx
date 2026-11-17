@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { useReport } from "@/components/hooks/useAdmin";
 import { Input } from "@/components/ui/Field";
 import { PageHeader, Spinner, Table, td, th } from "@/components/ui/Primitives";
+import LoadError from "@/components/ui/LoadError";
 import AdminHTTPClient from "@/http/adminHTTPClient";
 import { formatShortDate, toDateInput } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -89,7 +90,9 @@ export default function ReportsPage() {
           onChange={(e) => setRange({ ...range, to: e.target.value })}
         />
       </div>
-      {report.isPending || !report.data ? (
+      {report.isError ? (
+        <LoadError title="Report could not be loaded" query={report} />
+      ) : report.isPending || !report.data ? (
         <Spinner />
       ) : (
         <div className="grid gap-6">
