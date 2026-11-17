@@ -15,7 +15,7 @@ import {
   ROSTER_NUDGE_HOURS,
 } from "@/constants/limits";
 import { addHours, calendarDaysBetween, toDateInput } from "@/lib/dates";
-import { isCleared } from "@/lib/clearance";
+import { canJoin } from "@/lib/joinLink";
 import { addCounts, emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import ClearanceService from "@/services/clearance";
@@ -161,12 +161,13 @@ export default class JobService {
             counts.skipped += 1;
             continue;
           }
-          // Reminders only go to confirmed sign-ups, but a clearance can lapse
-          // before clearance expiry moves them off confirmed.
           const details = NotificationService.eventDetails(event, shift, null, {
-            joinLink:
-              !event.requiresClearance ||
-              isCleared(clearanceByUser.get(user._id.toString()), now),
+            joinLink: canJoin(
+              signup.status,
+              event,
+              clearanceByUser.get(user._id.toString()),
+              now
+            ),
           });
           const outcome = await NotificationService.send(
             user,

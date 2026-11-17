@@ -1,5 +1,8 @@
 import { Types } from "mongoose";
-import { ROSTER_APPROVAL_LOCK_TTL_MS } from "@/constants/limits";
+import {
+  ROSTER_APPROVAL_LOCK_TTL_MS,
+  ROSTER_MARK_LOCK_TTL_MS,
+} from "@/constants/limits";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
@@ -27,20 +30,61 @@ import { assertCanManageEvent, sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import { attendanceInputSchema } from "@/utils/validation/signup";
 
-const approvalLockKey = (eventId: unknown) => `roster-approval:${eventId}`;
-
 /**
  * Roster check-off and approval. Marks are saved one at a time so an
  * organizer on a weak signal never loses work; approval is the single action
  * that posts hours to the ledger and issues certificates.
  */
 export default class AttendanceService {
+  /**
+   * Runs `fn` holding the event's roster lock. Approval posts the marks it
+   * read, so marks and approval never overlap, and neither do two approvals.
+   * The key comes from a loaded `_id`, so every spelling of an ID shares it.
+   */
+  private static async withRosterLock<T>(
+    eventId: Types.ObjectId,
+    ttlMs: number,
+    tries: number,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const key = `roster:${eventId.toString()}`;
+    for (let attempt = 1; ; attempt++) {
+      const lock = await NotificationLogDAO.acquireLock(key, ttlMs);
+      if (lock) {
+        try {
+          return await fn();
+        } finally {
+          await NotificationLogDAO.releaseLock(key, lock);
+        }
+      }
+      if (attempt >= tries) throw new ConflictError(ERRORS.ROSTER.BUSY);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
   static async mark(
     actor: Actor,
     signupId: string,
     input: unknown
   ): Promise<Doc<Signup>> {
     const data = attendanceInputSchema.parse(input);
+    const signup = await SignupDAO.findById(signupId);
+    if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
+    // Marks wait briefly for each other, since an organizer can tap quickly.
+    return AttendanceService.withRosterLock(
+      signup.eventId,
+      ROSTER_MARK_LOCK_TTL_MS,
+      10,
+      () => AttendanceService.saveMark(actor, signupId, data)
+    );
+  }
+
+  private static async saveMark(
+    actor: Actor,
+    signupId: string,
+    data: ReturnType<typeof attendanceInputSchema.parse>
+  ): Promise<Doc<Signup>> {
+    // Re-read under the lock, since approval may have run since.
     const signup = await SignupDAO.findById(signupId);
     if (!signup) throw new NotFoundError(ERRORS.SIGNUP.NOT_FOUND);
     const [event, shift] = await Promise.all([
@@ -53,9 +97,6 @@ export default class AttendanceService {
       throw new IllegalOperationError(ERRORS.ROSTER.ALREADY_APPROVED);
     if (signup.status !== "confirmed")
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_ON_ROSTER);
-    // Approval posts the marks it read, so they can't change while it runs.
-    if (await NotificationLogDAO.isLocked(approvalLockKey(event._id)))
-      throw new ConflictError(ERRORS.ROSTER.APPROVAL_IN_PROGRESS);
 
     const scheduled = hoursBetween(shift.startsAt, shift.endsAt);
     const hours = data.status === "attended" ? (data.hours ?? scheduled) : 0;
@@ -79,22 +120,19 @@ export default class AttendanceService {
     })) as Doc<Signup>;
   }
 
-  /** One approval per event at a time, or two could post the same hours. */
   static async approveRoster(
     actor: Actor,
     eventId: string
   ): Promise<{ approved: number; totalHours: number }> {
-    const key = approvalLockKey(eventId);
-    const lock = await NotificationLogDAO.acquireLock(
-      key,
-      ROSTER_APPROVAL_LOCK_TTL_MS
+    const event = await EventDAO.findById(eventId);
+    if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+    assertCanManageEvent(actor, event);
+    return AttendanceService.withRosterLock(
+      event._id,
+      ROSTER_APPROVAL_LOCK_TTL_MS,
+      1,
+      () => AttendanceService.approve(actor, eventId)
     );
-    if (!lock) throw new ConflictError(ERRORS.ROSTER.APPROVAL_IN_PROGRESS);
-    try {
-      return await AttendanceService.approve(actor, eventId);
-    } finally {
-      await NotificationLogDAO.releaseLock(key, lock);
-    }
   }
 
   private static async approve(

@@ -329,7 +329,7 @@ export default class MessageService {
       data.body,
       event
     );
-    return { thread, message, notice };
+    return { thread: hideReporters(actor, thread), message, notice };
   }
 
   static async send(

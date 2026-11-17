@@ -17,7 +17,7 @@ import { isCleared } from "@/lib/clearance";
 import { addDays, ageOn } from "@/lib/dates";
 import { emptyCounts } from "@/lib/sendCounts";
 import { buildIcs } from "@/lib/ics";
-import { canSeeJoinLink, withoutJoinLink } from "@/lib/joinLink";
+import { canJoin, canSeeJoinLink, withoutJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import AuditService from "@/services/audit";
 import NotificationService from "@/services/notification";
@@ -965,20 +965,24 @@ export default class SignupService {
     signups: Doc<Signup>[]
   ): Promise<SignupWithContext[]> {
     if (!signups.length) return [];
-    const [shifts, events] = await Promise.all([
+    const [shifts, events, clearances] = await Promise.all([
       ShiftDAO.findByIds(signups.map((s) => s.shiftId)),
       EventDAO.findByIds(signups.map((s) => s.eventId)),
+      ClearanceDAO.findByUsers(signups.map((s) => s.volunteerId)),
     ]);
     return signups
       .flatMap((signup) => {
         const shift = shifts.find((s) => sameId(s._id, signup.shiftId));
         const event = events.find((e) => sameId(e._id, signup.eventId));
         if (!shift || !event) return [];
+        const clearance = clearances.find((c) =>
+          sameId(c.userId, signup.volunteerId)
+        );
         return [
           {
             signup,
             shift,
-            event: canSeeJoinLink(signup.status)
+            event: canJoin(signup.status, event, clearance)
               ? event
               : withoutJoinLink(event),
           },
@@ -1027,7 +1031,13 @@ export default class SignupService {
     ]);
     if (!shift || !event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
     const details = NotificationService.eventDetails(event, shift, null, {
-      joinLink: canSeeJoinLink(signup.status),
+      joinLink: canJoin(
+        signup.status,
+        event,
+        event.requiresClearance
+          ? await ClearanceDAO.findByUser(signup.volunteerId)
+          : null
+      ),
     });
     return buildIcs({
       uid: signup._id.toString(),

@@ -81,8 +81,7 @@ const ERRORS = Object.freeze({
       "Mark every confirmed volunteer as attended or no-show before approving.",
     NOT_STARTED: "The roster can be approved once the event has begun.",
     ALREADY_APPROVED: "This roster has already been approved.",
-    APPROVAL_IN_PROGRESS:
-      "This roster is being approved. Try again in a moment.",
+    BUSY: "This roster is being updated. Try again in a moment.",
   },
   UPDATE: {
     NOT_FOUND: "That update does not exist.",

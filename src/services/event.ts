@@ -22,8 +22,7 @@ import {
   toDateInput,
   toDateTimeLocal,
 } from "@/lib/dates";
-import { isCleared } from "@/lib/clearance";
-import { withoutJoinLink, canSeeJoinLink } from "@/lib/joinLink";
+import { withoutJoinLink, canJoin } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
 import AuditService from "@/services/audit";
@@ -163,13 +162,12 @@ export default class EventService {
       (ROSTER_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
-    // A clearance can lapse before the hourly job moves the sign-up off confirmed.
+    const clearance =
+      actor && event.requiresClearance
+        ? await ClearanceDAO.findByUser(actor.id)
+        : null;
     const joinLink =
-      manage ||
-      (!!actor &&
-        mySignups.some((s) => canSeeJoinLink(s.status)) &&
-        (!event.requiresClearance ||
-          isCleared(await ClearanceDAO.findByUser(actor.id))));
+      manage || mySignups.some((s) => canJoin(s.status, event, clearance));
     return {
       ...(joinLink ? withShifts : withoutJoinLink(withShifts)),
       mySignups,
