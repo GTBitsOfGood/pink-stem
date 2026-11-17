@@ -52,7 +52,7 @@ export default function WaiverDialog({
             Open the waiver form
           </a>
           <Checkbox
-            label="I signed the waiver"
+            label="I confirm that I have completed and signed the Pink STEM volunteer waiver for this event. I understand that if this is not true, I may be removed from the event."
             checked={signed}
             onChange={(e) => setSigned(e.target.checked)}
           />
