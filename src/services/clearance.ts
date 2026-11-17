@@ -130,12 +130,15 @@ export default class ClearanceService {
 
   /** Scheduled: flip lapsed clearances to expired and put affected spots on hold. sent = clearances expired. */
   static async expireLapsed(): Promise<SendCounts> {
-    const lapsed = await ClearanceDAO.expireLapsed(new Date());
+    const now = new Date();
+    const lapsed = await ClearanceDAO.findLapsed(now);
     for (const record of lapsed) {
       await SignupService.lapseForVolunteer(
         record.userId,
         "Your background clearance has expired."
       );
+      // Marked last, so a run that fails partway retries this record next time.
+      await ClearanceDAO.markExpired(record._id, now);
     }
     return { sent: lapsed.length, skipped: 0, failed: 0 };
   }

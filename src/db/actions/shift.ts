@@ -76,9 +76,19 @@ export default class ShiftDAO {
     }).lean<Doc<Shift>>();
   }
 
-  static async deleteById(id: string | Types.ObjectId): Promise<void> {
+  /**
+   * Deletes the shift only while nobody holds a spot or a waitlist place.
+   * Sign-ups bump these counters before they are saved, so one in flight
+   * blocks the delete.
+   */
+  static async deleteIfEmpty(id: string | Types.ObjectId): Promise<boolean> {
     await dbConnect();
-    await ShiftModel.deleteOne({ _id: id });
+    const { deletedCount } = await ShiftModel.deleteOne({
+      _id: id,
+      filledCount: 0,
+      waitlistCount: 0,
+    });
+    return deletedCount > 0;
   }
 
   /**
@@ -86,6 +96,19 @@ export default class ShiftDAO {
    * document operation, so two volunteers racing for the last spot cannot
    * both succeed: the loser gets `null` and is offered the waitlist.
    */
+  /** Updates the shift only while it holds no more than `capacity` spots. */
+  static async updateCapacity(
+    id: string | Types.ObjectId,
+    updates: UpdateQuery<Shift> & { capacity: number }
+  ): Promise<Doc<Shift> | null> {
+    await dbConnect();
+    return ShiftModel.findOneAndUpdate(
+      { _id: id, filledCount: { $lte: updates.capacity } },
+      updates,
+      { returnDocument: "after", runValidators: true }
+    ).lean<Doc<Shift>>();
+  }
+
   static async claimSpot(
     id: string | Types.ObjectId
   ): Promise<Doc<Shift> | null> {
@@ -105,14 +128,18 @@ export default class ShiftDAO {
     );
   }
 
+  /** Returns false when no shift was updated, e.g. it has been deleted. */
   static async adjustWaitlist(
     id: string | Types.ObjectId,
     delta: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     await dbConnect();
     const filter =
       delta < 0 ? { _id: id, waitlistCount: { $gt: 0 } } : { _id: id };
-    await ShiftModel.updateOne(filter, { $inc: { waitlistCount: delta } });
+    const { matchedCount } = await ShiftModel.updateOne(filter, {
+      $inc: { waitlistCount: delta },
+    });
+    return matchedCount > 0;
   }
 
   /**

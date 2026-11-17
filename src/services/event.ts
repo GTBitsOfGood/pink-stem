@@ -5,6 +5,7 @@ import MessageThreadDAO from "@/db/actions/messageThread";
 import NotificationLogDAO from "@/db/actions/notificationLog";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
+import ClearanceDAO from "@/db/actions/clearance";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import {
@@ -21,6 +22,7 @@ import {
   toDateInput,
   toDateTimeLocal,
 } from "@/lib/dates";
+import { isCleared } from "@/lib/clearance";
 import { withoutJoinLink, canSeeJoinLink } from "@/lib/joinLink";
 import { appUrl } from "@/lib/urls";
 import { escapeRegex } from "@/lib/utils";
@@ -161,7 +163,13 @@ export default class EventService {
       (ROSTER_SIGNUP_STATUSES as readonly string[]).includes(s.status)
     );
     const updates = await EventUpdateService.list(event, manage || onRoster);
-    const joinLink = manage || mySignups.some((s) => canSeeJoinLink(s.status));
+    // A clearance can lapse before the hourly job moves the sign-up off confirmed.
+    const joinLink =
+      manage ||
+      (!!actor &&
+        mySignups.some((s) => canSeeJoinLink(s.status)) &&
+        (!event.requiresClearance ||
+          isCleared(await ClearanceDAO.findByUser(actor.id))));
     return {
       ...(joinLink ? withShifts : withoutJoinLink(withShifts)),
       mySignups,
@@ -681,7 +689,10 @@ export default class EventService {
     const event = await EventService.editable(actor, shift.eventId.toString());
     const data = shiftInputSchema.parse(input);
     EventService.validateShift(event, data, shift.filledCount);
-    const updated = (await ShiftDAO.updateById(shift._id, data)) as Doc<Shift>;
+    // Conditional on the live count, since spots can be claimed after the read.
+    const updated = await ShiftDAO.updateCapacity(shift._id, data);
+    if (!updated)
+      throw new InvalidArgumentsError(ERRORS.SHIFT.CAPACITY_BELOW_FILLED);
     if (updated.capacity > shift.capacity && updated.waitlistCount > 0) {
       await SignupService.promoteWaitlist(
         updated._id,
@@ -719,7 +730,8 @@ export default class EventService {
         if (shifts.length <= 1)
           throw new IllegalOperationError(ERRORS.SHIFT.LAST_SHIFT);
       }
-      await ShiftDAO.deleteById(shift._id);
+      if (!(await ShiftDAO.deleteIfEmpty(shift._id)))
+        throw new IllegalOperationError(ERRORS.SHIFT.HAS_SIGNUPS);
     } finally {
       await NotificationLogDAO.releaseLock(lockKey, lock);
     }

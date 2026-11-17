@@ -131,6 +131,15 @@ export default class NotificationLogDAO {
     }
   }
 
+  /** Whether an unexpired lock is held on `key`. */
+  static async isLocked(key: string): Promise<boolean> {
+    await dbConnect();
+    return !!(await NotificationLogModel.exists({
+      key,
+      expiresAt: { $gt: new Date() },
+    }));
+  }
+
   /** Releases the lock only if it is still the one `acquireLock` returned. */
   static async releaseLock(key: string, expiresAt: Date): Promise<void> {
     await dbConnect();

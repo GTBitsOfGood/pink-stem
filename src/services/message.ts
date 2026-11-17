@@ -46,6 +46,21 @@ const HOUR = 3_600_000;
 const isDuplicateKey = (error: unknown) =>
   error instanceof mongo.MongoServerError && error.code === 11000;
 
+/** Who reported or flagged a thread, and why, is for admins only. */
+function hideReporters<T extends Partial<MessageThread & Message>>(
+  actor: Actor,
+  doc: T
+): T {
+  if (isAdmin(actor)) return doc;
+  const copy: Partial<MessageThread & Message> = { ...doc };
+  delete copy.reportedBy;
+  delete copy.reportReason;
+  delete copy.reviewedBy;
+  delete copy.flaggedBy;
+  delete copy.flagReason;
+  return copy as T;
+}
+
 /**
  * Event-scoped messaging between one volunteer and that event's organizer.
  * Every thread is readable by admins, both parties are told so, and there
@@ -127,7 +142,7 @@ export default class MessageService {
             )
           : 0;
         return {
-          thread,
+          thread: hideReporters(actor, thread),
           eventTitle:
             events.find((e) => sameId(e._id, thread.eventId))?.title ?? "Event",
           counterpartName: MessageService.isParticipant(actor, thread)
@@ -196,8 +211,8 @@ export default class MessageService {
       return p ? `${p.firstName} ${p.lastName}` : "Former member";
     };
     return {
-      thread,
-      messages,
+      thread: hideReporters(actor, thread),
+      messages: messages.map((m) => hideReporters(actor, m)),
       eventId: thread.eventId.toString(),
       eventTitle: event?.title ?? "Event",
       participants: {

@@ -1,7 +1,9 @@
 import { Types } from "mongoose";
+import { ROSTER_APPROVAL_LOCK_TTL_MS } from "@/constants/limits";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
+import NotificationLogDAO from "@/db/actions/notificationLog";
 import OrgSettingsDAO from "@/db/actions/orgSettings";
 import ShiftDAO from "@/db/actions/shift";
 import SignupDAO from "@/db/actions/signup";
@@ -14,6 +16,7 @@ import HoursService from "@/services/hours";
 import NotificationService from "@/services/notification";
 import type { Actor } from "@/types/auth";
 import {
+  ConflictError,
   IllegalOperationError,
   InvalidArgumentsError,
   NotFoundError,
@@ -23,6 +26,8 @@ import type { Signup } from "@/types/signup";
 import { assertCanManageEvent, sameId } from "@/utils/authorization";
 import ERRORS from "@/utils/errorMessages";
 import { attendanceInputSchema } from "@/utils/validation/signup";
+
+const approvalLockKey = (eventId: unknown) => `roster-approval:${eventId}`;
 
 /**
  * Roster check-off and approval. Marks are saved one at a time so an
@@ -48,6 +53,9 @@ export default class AttendanceService {
       throw new IllegalOperationError(ERRORS.ROSTER.ALREADY_APPROVED);
     if (signup.status !== "confirmed")
       throw new IllegalOperationError(ERRORS.SIGNUP.NOT_ON_ROSTER);
+    // Approval posts the marks it read, so they can't change while it runs.
+    if (await NotificationLogDAO.isLocked(approvalLockKey(event._id)))
+      throw new ConflictError(ERRORS.ROSTER.APPROVAL_IN_PROGRESS);
 
     const scheduled = hoursBetween(shift.startsAt, shift.endsAt);
     const hours = data.status === "attended" ? (data.hours ?? scheduled) : 0;
@@ -71,7 +79,25 @@ export default class AttendanceService {
     })) as Doc<Signup>;
   }
 
+  /** One approval per event at a time, or two could post the same hours. */
   static async approveRoster(
+    actor: Actor,
+    eventId: string
+  ): Promise<{ approved: number; totalHours: number }> {
+    const key = approvalLockKey(eventId);
+    const lock = await NotificationLogDAO.acquireLock(
+      key,
+      ROSTER_APPROVAL_LOCK_TTL_MS
+    );
+    if (!lock) throw new ConflictError(ERRORS.ROSTER.APPROVAL_IN_PROGRESS);
+    try {
+      return await AttendanceService.approve(actor, eventId);
+    } finally {
+      await NotificationLogDAO.releaseLock(key, lock);
+    }
+  }
+
+  private static async approve(
     actor: Actor,
     eventId: string
   ): Promise<{ approved: number; totalHours: number }> {

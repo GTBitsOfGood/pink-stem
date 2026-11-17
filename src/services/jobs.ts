@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import EventDAO from "@/db/actions/event";
 import ShiftDAO from "@/db/actions/shift";
+import ClearanceDAO from "@/db/actions/clearance";
 import SignupDAO from "@/db/actions/signup";
 import UserDAO from "@/db/actions/user";
 import MessageThreadDAO from "@/db/actions/messageThread";
@@ -14,6 +15,7 @@ import {
   ROSTER_NUDGE_HOURS,
 } from "@/constants/limits";
 import { addHours, calendarDaysBetween, toDateInput } from "@/lib/dates";
+import { isCleared } from "@/lib/clearance";
 import { addCounts, emptyCounts } from "@/lib/sendCounts";
 import { appUrl } from "@/lib/urls";
 import ClearanceService from "@/services/clearance";
@@ -130,10 +132,17 @@ export default class JobService {
       }),
       NotificationService.org(),
     ]);
-    const users = await UserDAO.findByIds([
+    const volunteerIds = [
       ...new Set(signups.map((s) => s.volunteerId.toString())),
+    ];
+    const [users, clearances] = await Promise.all([
+      UserDAO.findByIds(volunteerIds),
+      ClearanceDAO.findByUsers(volunteerIds),
     ]);
     const userById = new Map(users.map((u) => [u._id.toString(), u]));
+    const clearanceByUser = new Map(
+      clearances.map((c) => [c.userId.toString(), c])
+    );
     const signupsByShift = new Map<string, Doc<Signup>[]>();
     for (const signup of signups) {
       const id = signup.shiftId.toString();
@@ -146,16 +155,19 @@ export default class JobService {
       for (const shift of shiftsByWindow[i]) {
         const event = events.find((e) => sameId(e._id, shift.eventId));
         if (!event || event.status !== "published") continue;
-        // Reminders only go to confirmed sign-ups.
-        const details = NotificationService.eventDetails(event, shift, null, {
-          joinLink: true,
-        });
         for (const signup of signupsByShift.get(shift._id.toString()) ?? []) {
           const user = userById.get(signup.volunteerId.toString());
           if (!user) {
             counts.skipped += 1;
             continue;
           }
+          // Reminders only go to confirmed sign-ups, but a clearance can lapse
+          // before clearance expiry moves them off confirmed.
+          const details = NotificationService.eventDetails(event, shift, null, {
+            joinLink:
+              !event.requiresClearance ||
+              isCleared(clearanceByUser.get(user._id.toString()), now),
+          });
           const outcome = await NotificationService.send(
             user,
             NotificationService.templates.reminder(org, {

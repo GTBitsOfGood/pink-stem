@@ -55,19 +55,21 @@ export default class ClearanceDAO {
     }).lean<Doc<Clearance>[]>();
   }
 
-  /** Cleared records that have lapsed; returns them and marks them expired. */
-  static async expireLapsed(now: Date): Promise<Doc<Clearance>[]> {
+  /** Records still marked cleared whose expiry has passed. */
+  static async findLapsed(now: Date): Promise<Doc<Clearance>[]> {
     await dbConnect();
-    const lapsed = await ClearanceModel.find({
+    return ClearanceModel.find({
       status: "cleared",
       expiresOn: { $lt: now },
     }).lean<Doc<Clearance>[]>();
-    if (lapsed.length) {
-      await ClearanceModel.updateMany(
-        { _id: { $in: lapsed.map((c) => c._id) } },
-        { status: "expired" }
-      );
-    }
-    return lapsed;
+  }
+
+  /** Marks one lapsed record expired, unless it was renewed since it was read. */
+  static async markExpired(id: Types.ObjectId, now: Date): Promise<void> {
+    await dbConnect();
+    await ClearanceModel.updateOne(
+      { _id: id, status: "cleared", expiresOn: { $lt: now } },
+      { status: "expired" }
+    );
   }
 }
