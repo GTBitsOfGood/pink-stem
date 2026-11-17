@@ -1,12 +1,10 @@
-import {
-  PDFDocument,
-  PDFFont,
-  PDFImage,
-  PDFPage,
-  rgb,
-  StandardFonts,
-} from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from "pdf-lib";
 import QRCode from "qrcode";
+import {
+  NOTO_SANS_BOLD_BASE64,
+  NOTO_SANS_REGULAR_BASE64,
+} from "@/lib/pdf/fonts";
 import { LOGO_PNG_BASE64 } from "@/lib/pdf/logo";
 import type { Certificate } from "@/types/certificate";
 import type { OrgSettings } from "@/types/settings";
@@ -46,9 +44,10 @@ export async function renderCertificatePdf(
   );
   pdf.setAuthor(settings.orgName);
 
+  pdf.registerFontkit(fontkit);
   const fonts: Fonts = {
-    regular: await pdf.embedFont(StandardFonts.Helvetica),
-    bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+    regular: await pdf.embedFont(NOTO_SANS_REGULAR_BASE64, { subset: true }),
+    bold: await pdf.embedFont(NOTO_SANS_BOLD_BASE64, { subset: true }),
     logo: await pdf.embedPng(LOGO_PNG_BASE64),
   };
 
@@ -74,14 +73,27 @@ export async function renderCertificatePdf(
     }
   );
   y -= 30;
-  page.drawText(certificate.volunteerName, {
-    x: PAGE.margin,
-    y,
-    size: 26,
-    font: fonts.bold,
-    color: INK,
-  });
-  y -= 22;
+  // Long names shrink to fit the line, then wrap at the smallest size.
+  const nameSize = Math.max(
+    16,
+    Math.min(
+      26,
+      (26 * (PAGE.width - PAGE.margin * 2)) /
+        fonts.bold.widthOfTextAtSize(certificate.volunteerName, 26)
+    )
+  );
+  const nameLineHeight = nameSize + 4;
+  y =
+    drawParagraph(
+      page,
+      fonts.bold,
+      certificate.volunteerName,
+      y,
+      nameSize,
+      nameLineHeight
+    ) +
+    nameLineHeight -
+    22;
   const period =
     formatShortDate(certificate.periodStart) ===
     formatShortDate(certificate.periodEnd)

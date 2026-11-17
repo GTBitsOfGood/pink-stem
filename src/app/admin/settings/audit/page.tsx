@@ -12,6 +12,7 @@ import {
   td,
   th,
 } from "@/components/ui/Primitives";
+import LoadError from "@/components/ui/LoadError";
 import { AUDIT_ACTION_LABELS } from "@/constants/labels";
 import AdminHTTPClient from "@/http/adminHTTPClient";
 import { formatDateTime } from "@/lib/dates";
@@ -82,7 +83,9 @@ export default function AuditPage() {
           onChange={(e) => set("to", e.target.value)}
         />
       </div>
-      {audit.isPending ? (
+      {audit.isError ? (
+        <LoadError title="The audit log could not be loaded" query={audit} />
+      ) : audit.isPending ? (
         <Spinner />
       ) : (
         <>

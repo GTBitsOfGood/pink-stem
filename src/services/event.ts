@@ -134,6 +134,14 @@ export default class EventService {
         e.shifts.some((s) => s.filledCount < s.capacity)
       );
     }
+    if (filters.all) {
+      return {
+        items: withShifts,
+        total: withShifts.length,
+        page: 1,
+        pageSize: withShifts.length,
+      };
+    }
     const start = (filters.page - 1) * PAGE_SIZE;
     return {
       items: withShifts.slice(start, start + PAGE_SIZE),

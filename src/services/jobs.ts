@@ -71,6 +71,7 @@ export default class JobService {
       clearanceExpiry: ClearanceService.expireLapsed,
       holdExpiry: SignupService.expireHolds,
       noteDigest: EventUpdateService.sendNoteDigest,
+      importantRetry: EventUpdateService.retryImportant,
       messageDigest: MessageService.sendDigests,
       staleThreads: MessageService.closeStale,
       organizerDigest: JobService.organizerDigest,

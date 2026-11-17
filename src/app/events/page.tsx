@@ -23,10 +23,13 @@ export default function EventsPage() {
     useState<EventFilterValues>(EMPTY_EVENT_FILTERS);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [page, setPage] = useState(1);
+  // The calendar's month arrows are local, so it needs every match at once.
+  const calendar = view === "calendar";
   const events = useEventList({
     ...filters,
     hasSpots: filters.hasSpots ? "true" : "",
-    page: String(page),
+    page: calendar ? "1" : String(page),
+    all: calendar ? "true" : "",
   });
 
   const viewButton = (value: typeof view, label: string, icon: ReactNode) => (

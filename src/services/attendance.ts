@@ -3,6 +3,7 @@ import {
   ROSTER_APPROVAL_LOCK_TTL_MS,
   ROSTER_MARK_LOCK_TTL_MS,
 } from "@/constants/limits";
+import CertificateDAO from "@/db/actions/certificate";
 import EventDAO from "@/db/actions/event";
 import EventUpdateDAO from "@/db/actions/eventUpdate";
 import HoursLedgerDAO from "@/db/actions/hoursLedger";
@@ -240,13 +241,21 @@ export default class AttendanceService {
         });
       }
 
-      await CertificateService.issueEventCertificate(
-        volunteer,
-        event,
-        roles,
-        eventHours,
-        actor
+      // A retry reuses the certificate a failed run already committed, and
+      // its group may be only the shifts that run had not yet marked.
+      const issued = await CertificateDAO.findActiveCoveringEvent(
+        volunteer._id,
+        event._id
       );
+      if (!issued.some((c) => c.type === "event")) {
+        await CertificateService.issueEventCertificate(
+          volunteer,
+          event,
+          roles,
+          eventHours,
+          actor
+        );
+      }
 
       // Mark attended only after certificate is committed so a failed
       // issuance leaves signups as "confirmed" and the roster can be retried.

@@ -152,11 +152,11 @@ export default class NotificationService {
     userIds: (string | Types.ObjectId)[],
     build: (org: Org, user: Doc<SafeUser>) => EmailContent,
     options: SendOptions = {}
-  ): Promise<void> {
-    if (!userIds.length) return;
+  ): Promise<SendOutcome[]> {
+    if (!userIds.length) return [];
     const org = await NotificationService.org();
     const users = await Promise.all(userIds.map((id) => UserDAO.findById(id)));
-    await Promise.all(
+    return Promise.all(
       users
         .filter((user): user is Doc<SafeUser> => user !== null)
         .map((user) =>

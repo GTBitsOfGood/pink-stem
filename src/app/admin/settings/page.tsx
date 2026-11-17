@@ -6,6 +6,7 @@ import Button, { ButtonLink } from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Input, Textarea } from "@/components/ui/Field";
 import { PageHeader, Spinner } from "@/components/ui/Primitives";
+import LoadError from "@/components/ui/LoadError";
 import { errorMessage, useToast } from "@/components/ui/Toast";
 import type { OrgSettings } from "@/types/settings";
 
@@ -24,6 +25,8 @@ type Form = Omit<
 
 export default function SettingsPage() {
   const settings = useOrgSettings();
+  if (settings.isError)
+    return <LoadError title="Settings could not be loaded" query={settings} />;
   if (!settings.data) return <Spinner />;
   return <SettingsForm initial={settings.data} />;
 }
