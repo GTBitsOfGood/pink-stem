@@ -1,0 +1,61 @@
+export interface CsvColumn<T> {
+  header: string;
+  value: (row: T) => unknown;
+}
+
+const escape = (value: unknown) => {
+  if (value == null) return "";
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  // A spreadsheet runs text starting with these as a formula; numbers stay numbers.
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** Serializes rows to RFC 4180 CSV with a header line. */
+export function toCsv<T>(rows: T[], columns: CsvColumn<T>[]): string {
+  const lines = [columns.map((c) => escape(c.header)).join(",")];
+  for (const row of rows) {
+    lines.push(columns.map((c) => escape(c.value(row))).join(","));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Parses RFC 4180 CSV into rows of fields, header included. Handles quoted
+ * fields, doubled quotes, and line breaks inside quotes; blank lines are skipped.
+ * A quote only opens a field at its start, so one inside a value (5'10") is
+ * kept as text. Throws on a quote that is never closed, since everything
+ * after it would otherwise be swallowed into one field.
+ */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  const endRow = () => {
+    row.push(field);
+    if (row.length > 1 || row[0] !== "") rows.push(row);
+    row = [];
+    field = "";
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (quoted) {
+      if (char !== '"') field += char;
+      else if (text[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else quoted = false;
+    } else if (char === '"' && field === "") quoted = true;
+    else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") endRow();
+    else if (char !== "\r") field += char;
+  }
+  if (quoted) throw new Error("unclosed quote in CSV");
+  if (field !== "" || row.length) endRow();
+  return rows;
+}

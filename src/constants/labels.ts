@@ -1,0 +1,192 @@
+import type { AuditAction } from "@/types/audit";
+import type { CertificateType } from "@/types/certificate";
+import type { EventStatus, ProgramArea, UpdateKind } from "@/types/event";
+import type {
+  RegistryOutcome,
+  RegistrySource,
+  RegistryUnavailableReason,
+} from "@/types/screening";
+import type {
+  AbsenceReason,
+  PendingReason,
+  SignupStatus,
+} from "@/types/signup";
+import type {
+  ClearanceStatus,
+  NotificationCategory,
+  Region,
+  Role,
+  Skill,
+} from "@/types/user";
+
+/** Human-readable copy for every enum the UI renders. Status is never conveyed by color alone. */
+
+export const ROLE_LABELS: Record<Role, string> = {
+  volunteer: "Volunteer",
+  organizer: "Organizer",
+  admin: "Admin",
+};
+
+export const PROGRAM_AREA_LABELS: Record<ProgramArea, string> = {
+  robotics: "Robotics & Mechatronics",
+  cybersecurity: "Cybersecurity",
+  coding: "Coding & Computer Science",
+  aviation: "Aviation & Aerospace",
+  summer_camp: "Summer Camp",
+  tutoring: "Tutoring",
+  stem_expo: "STEM Expo & Events",
+  career_exploration: "Career Exploration",
+  other: "Other",
+};
+
+export const SKILL_LABELS: Record<Skill, string> = {
+  robotics: "Robotics",
+  cybersecurity: "Cybersecurity",
+  coding: "Coding",
+  aviation: "Aviation",
+  healthcare: "Healthcare",
+  general_mentoring: "General mentoring",
+  event_support: "Event support",
+};
+
+export const REGION_LABELS: Record<Region, string> = {
+  metro_atlanta: "Metro Atlanta",
+  middle_georgia: "Middle Georgia",
+  other: "Other",
+};
+
+export const CLEARANCE_LABELS: Record<ClearanceStatus, string> = {
+  none: "Not started",
+  submitted: "Submitted",
+  cleared: "Cleared",
+  expired: "Expired",
+};
+
+/**
+ * Badge help. Organizers and admins see these badges for other people too, so
+ * the copy describes the status rather than addressing "you". Clearance is a
+ * staff decision, separate from the automated registry pre-check.
+ */
+export const CLEARANCE_STATUS_HELP: Record<ClearanceStatus, string> = {
+  none: "Pink STEM staff have not recorded a background clearance. Sign-ups for events that require clearance stay pending until staff record one. An automated registry pre-check never counts as clearance.",
+  submitted:
+    "Screening is waiting for a Pink STEM staff decision. This is not clearance yet, and an automated registry pre-check never counts as clearance.",
+  cleared:
+    "Pink STEM staff reviewed the screening and recorded clearance, valid until its expiry date. This is a staff decision, not an automated registry pre-check.",
+  expired:
+    "The recorded clearance has expired. Sign-ups for events that require clearance stay pending until Pink STEM staff record a new one; a registry pre-check does not renew it.",
+};
+
+export const SIGNUP_STATUS_HELP: Partial<Record<SignupStatus, string>> = {
+  pending:
+    "This sign-up holds a spot but is not confirmed. It confirms automatically once its outstanding requirements, such as email verification, background clearance, or organizer approval, are met.",
+  waitlisted:
+    "The shift is full. When a spot opens, waitlisted sign-ups move in by sign-up order and the volunteer is emailed; close to the start, the organizer decides. Requirements are checked on moving in.",
+};
+
+export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
+  draft: "Draft",
+  published: "Published",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export const SIGNUP_STATUS_LABELS: Record<SignupStatus, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  waitlisted: "Waitlisted",
+  cancelled: "Cancelled",
+  attended: "Attended",
+  no_show: "No-show",
+};
+
+export const PENDING_REASON_LABELS: Record<PendingReason, string> = {
+  email_verification: "Email address must be confirmed",
+  clearance: "Background screening must be cleared by Pink STEM staff",
+  approval: "The organizer reviews and approves sign-ups for this event",
+};
+
+export const ABSENCE_REASON_LABELS: Record<AbsenceReason, string> = {
+  sick: "Sick",
+  school: "School conflict",
+  other: "Other",
+};
+
+export const UPDATE_KIND_LABELS: Record<UpdateKind, string> = {
+  note: "Note",
+  important: "Important change",
+};
+
+export const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
+  event: "Event certificate",
+  service_record: "Service record",
+};
+
+export const NOTIFICATION_CATEGORY_LABELS: Record<
+  NotificationCategory,
+  { label: string; description: string }
+> = {
+  reminders: {
+    label: "Shift reminders",
+    description: "72 hours and 24 hours before each shift you hold.",
+  },
+  updates: {
+    label: "Event notes",
+    description: "Daily digest of notes organizers post to your events.",
+  },
+  messages: {
+    label: "Messages",
+    description: "An email when an organizer messages you.",
+  },
+  digests: {
+    label: "Organizer digest",
+    description: "Daily summary of roster changes and open questions.",
+  },
+};
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  "user.role_changed": "Role changed",
+  "user.deactivated": "Account deactivated",
+  "user.reactivated": "Account reactivated",
+  "user.force_signout": "Forced sign-out",
+  "user.password_changed": "Password changed",
+  "user.flagged_for_review": "Flagged for review",
+  "clearance.recorded": "Clearance recorded",
+  "screening.rerun_requested": "Registry pre-check rerun requested",
+  "hours.approved": "Hours approved",
+  "hours.adjusted": "Hours adjusted",
+  "certificate.issued": "Certificate issued",
+  "certificate.revoked": "Certificate revoked",
+  "event.cancelled": "Event cancelled",
+  "event.reassigned": "Event reassigned",
+  "message.reported": "Message reported",
+  "message.report_reviewed": "Report reviewed",
+  "thread.admin_access": "Admin read a thread",
+  "organizer.invited": "Organizer invited",
+  "signup.cancelled_by_staff": "Sign-up cancelled by staff",
+  "signup.absence_reported": "Absence reported",
+  "shift.counters_reconciled": "Shift counters reconciled",
+  "auth.rate_limited": "Rate limit triggered",
+};
+
+/** Short source names for tight spaces like the Approvals queue. */
+export const REGISTRY_SOURCE_SHORT_LABELS: Record<RegistrySource, string> = {
+  gbi_ga: "GBI",
+  nsopw: "NSOPW",
+};
+
+export const REGISTRY_OUTCOME_LABELS: Record<RegistryOutcome, string> = {
+  no_match: "No match",
+  possible_match: "Possible match",
+  unavailable: "Couldn't check",
+};
+
+export const REGISTRY_UNAVAILABLE_LABELS: Record<
+  RegistryUnavailableReason,
+  string
+> = {
+  manual_only: "Search by hand",
+  missing_dob: "No date of birth; rechecks once one is added",
+  unmatchable_name: "Name can't be matched automatically",
+  source_error: "Source error, retrying hourly",
+};

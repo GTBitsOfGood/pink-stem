@@ -1,14 +1,24 @@
-# Pink Stem
+# Pink STEM Volunteer Hub
 
-A notes app on **Next.js** (App Router) + MongoDB, structured to match the
-Bits of Good project conventions used in
+[![CI](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml/badge.svg)](https://github.com/GTBitsOfGood/pink-stem/actions/workflows/ci.yml)
+
+One place for [Pink STEM](https://pinkstem.org) organizers to staff events,
+for volunteers to claim shifts, and for verified service hours to become a
+certificate a school or employer can check. Built on **Next.js** (App Router)
+and **MongoDB**, structured to match the Bits of Good conventions used in
 [GTBitsOfGood/ican](https://github.com/GTBitsOfGood/ican).
+
+Everything in v1 is implemented: accounts and three roles, volunteer profile
+and clearance gate, events with shifts, browse and sign-up with a waitlist,
+roster check-off and hour approval, event updates, event-scoped messaging with
+admin oversight, certificates with public verification, transactional email,
+the admin console with CSV reports, and the audit trail.
 
 ## Tech Stack
 
 - TypeScript
 - Next.js (App Router)
-- MongoDB / Mongoose
+- MongoDB with Mongoose
 - TailwindCSS
 - React Query
 - Zod
@@ -18,7 +28,8 @@ Bits of Good project conventions used in
 ### MongoDB
 
 Install [MongoDB Community Server](https://www.mongodb.com/docs/manual/administration/install-community/)
-to host a local instance, or use the bundled Docker setup. [MongoDB Compass](https://www.mongodb.com/try/download/compass#compass)
+to host a local instance, or run the bundled Docker setup with
+`docker compose up`. [MongoDB Compass](https://www.mongodb.com/try/download/compass#compass)
 is helpful for inspecting the database.
 
 ### Dependencies
@@ -33,22 +44,36 @@ npm install
 ### Environment
 
 ```sh
-cp .env.local.example .env.local   # then edit MONGODB_URI
+cp .env.local.example .env.local   # then fill in the required values below
 ```
 
-### Development
+`MONGODB_URI` and `JWT_SECRET` are required to run the app. `npm run seed`
+also needs `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, and `npm run jobs`
+needs `CRON_SECRET`, so fill in all five before you start. Without
+`JUNO_API_KEY`, every email is printed to the server console instead of
+being sent, including the invitation and email verification links.
 
-Run both at the same time:
+### Seed data
+
+```sh
+npm run seed          # org settings + the first admin (SEED_ADMIN_EMAIL / PASSWORD)
+npm run seed -- demo  # also an organizer, three volunteers, and three events
+```
+
+Demo accounts share the password printed at the end of the seed:
+`admin@pinkstem.org`, `organizer@example.com`, `maya@example.com` (cleared),
+`priya@example.com` (cleared), `sofia@example.com` (minor).
+
+### Development
 
 ```sh
 npm run dev
 ```
 
-```sh
-docker compose up
-```
-
-Open http://localhost:3000
+Open http://localhost:3000. Scheduled work (reminders, digests, clearance
+expiry, roster nudges) runs from `POST /api/v1/jobs/run`. Trigger it locally
+with `npm run jobs` in a second terminal while the dev server is running; it
+reads `CRON_SECRET` from `.env.local`.
 
 ### Code Formatting
 
@@ -57,73 +82,82 @@ in VSCode. A pre-commit hook formats and lints staged files automatically.
 
 ## Scripts
 
-| Command                | Does                        |
-| ---------------------- | --------------------------- |
-| `npm run dev`          | Start the dev server        |
-| `npm run build`        | Production build            |
-| `npm run lint`         | ESLint                      |
-| `npm run typecheck`    | `tsc --noEmit`              |
-| `npm run format`       | Prettier write              |
-| `npm run format:check` | Prettier check (runs in CI) |
+| Command                   | Does                                        |
+| ------------------------- | ------------------------------------------- |
+| `npm run dev`             | Start the dev server                        |
+| `npm run build`           | Production build                            |
+| `npm run lint`            | ESLint                                      |
+| `npm run typecheck`       | `tsc --noEmit`                              |
+| `npm run format`          | Prettier write                              |
+| `npm run format:check`    | Prettier check (runs in CI)                 |
+| `npm run seed`            | Create settings and the first admin account |
+| `npm run seed:staging`    | Seed the staging database with demo data    |
+| `npm run jobs`            | Run the scheduled jobs against a dev server |
+| `npm run screening:check` | Offline checks for the registry pre-check   |
 
 ## API
 
-Base path is `/api/v1`.
+Base path is `/api/v1`. Every route is a thin handler over one service call;
+authorization is enforced server-side on every request by `withAuth`.
 
-| Method   | Endpoint     | Does                       |
-| -------- | ------------ | -------------------------- |
-| `GET`    | `/notes`     | List notes, newest first   |
-| `POST`   | `/notes`     | Create `{ title, body }`   |
-| `GET`    | `/notes/:id` | Read one                   |
-| `PATCH`  | `/notes/:id` | Update `{ title?, body? }` |
-| `DELETE` | `/notes/:id` | Delete, returns 204        |
+| Area         | Endpoints                                                                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth         | `auth/register`, `auth/login`, `auth/logout`, `auth/me`, `auth/forgot-password`, `auth/reset-password`, `auth/change-password`, `auth/invite/:token`               |
+| Me           | `me` (profile), `me/verify-email`, `me/signups`, `me/hours`, `me/certificates`                                                                                     |
+| Public       | `events`, `events/:id`, `settings`, `verify-email/:token`, `verify/:code`                                                                                          |
+| Organizer    | `events` (create), `events/:id` (update), `events/:id/{publish,cancel,duplicate,shifts,roster,updates,broadcast}`, `shifts/:id`, `updates/:id`, `organizer/events` |
+| Sign-ups     | `signups`, `signups/:id/{cancel,absence,approve,promote,attendance,calendar}`                                                                                      |
+| Messaging    | `threads`, `threads/:id`, `threads/:id/messages`, `threads/:id/report`, `threads/:id/review`                                                                       |
+| Certificates | `certificates/:id/pdf`, `certificates/:id/revoke`                                                                                                                  |
+| Admin        | `admin/{approvals,people,people/:id,people/:id/{clearance,screening,signout},invitations,organizers,events,hours,audit,reports/:kind,settings}`                    |
+| Jobs         | `jobs/run` (bearer `CRON_SECRET`)                                                                                                                                  |
 
 ## Structure
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layering and the
-checklist for adding a new resource.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layering, the data
+model, and the checklist for adding a new resource.
 
 ```
 src/
-  app/
-    api/v1/notes/route.ts
-    api/v1/notes/[id]/route.ts
-    layout.tsx
-    page.tsx
-  components/
-    QueryProvider.tsx
-    hooks/useNotes.ts
-    notes/
-    ui/
-  constants/
-  db/
-    actions/note.ts
-    models/note.ts
-    dbConnect.ts
-  http/
-    fetchHTTPClient.ts
-    noteHTTPClient.ts
-  lib/
-  middleware/
-  services/note.ts
-  styles/globals.css
-  types/
-    exceptions.ts
-    models.ts
-    note.ts
-  utils/
-    errorHandler.ts
-    errorMessages.ts
-    note.ts
-    validation.ts
-    withErrorHandler.ts
+  app/               Pages (App Router) and api/v1 route handlers
+  components/        React components by feature; ui/ primitives; hooks/
+  constants/         Labels, product limits, org defaults, query keys
+  db/                dbConnect, Mongoose models/, DAO actions/
+  http/              Typed frontend API clients
+  lib/               Session, dates, tokens, email templates, PDF, CSV, ICS
+  middleware/        Response header helpers
+  services/          Business logic classes with static methods
+  styles/            Global CSS and font configuration
+  types/             Domain types, API shapes, error taxonomy
+  utils/             Validation schemas, auth wrappers, error handling
+  proxy.ts           Page-level access gate
+scripts/            Seed script and the local job trigger
+netlify/functions/   Hourly trigger for the job runner
 ```
 
 ## Environments
 
-Branches, deploy previews, and branch protection are documented in
-[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+**Staging:** https://pink-stem-staging.netlify.app
 
-- `production` → production site
-- `main` → staging site (default branch, base for feature PRs)
-- every branch and PR → Netlify deploy preview
+Branches, deploy previews, environment variables, and branch protection are
+documented in [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+
+- `main` → staging site, on every merge (default branch, base for feature PRs)
+- every PR → Netlify deploy preview, backed by the staging database
+- `production` → production site, not set up until the domain is decided
+
+Demo logins for staging are in Slack. Staging never sends email; messages are
+written to the Netlify function log instead.
+
+### Reseeding staging
+
+Put the staging `MONGODB_URI` and seed credentials in `.env.staging.local`
+(the variables are listed in
+[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md#seeding-staging)), then:
+
+```sh
+npm run seed:staging   # asks you to type the database name before writing
+```
+
+Re-running only fills in what is missing. For fresh demo events, drop the
+`pink-stem-staging` database in Atlas first.

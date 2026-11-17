@@ -12,3 +12,7 @@ dist
 *.tsbuildinfo
 .netlify
 next-env.d.ts
+.gstack
+
+# Claude Code
+.claude/

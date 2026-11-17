@@ -1,0 +1,707 @@
+import { mongo, QueryFilter, Types } from "mongoose";
+import EventDAO from "@/db/actions/event";
+import MessageDAO from "@/db/actions/message";
+import MessageThreadDAO from "@/db/actions/messageThread";
+import SignupDAO from "@/db/actions/signup";
+import UserDAO from "@/db/actions/user";
+import {
+  MAX_MESSAGES_PER_HOUR,
+  MAX_THREADS_PER_HOUR,
+  THREAD_READ_ONLY_AFTER_CANCEL_DAYS,
+  THREAD_READ_ONLY_AFTER_EVENT_DAYS,
+} from "@/constants/limits";
+import { addDays, isMinor } from "@/lib/dates";
+import { emptyCounts } from "@/lib/sendCounts";
+import { appUrl } from "@/lib/urls";
+import AuditService from "@/services/audit";
+import NotificationService from "@/services/notification";
+import type { Paginated, ThreadDetail, ThreadSummary } from "@/types/api";
+import type { Actor } from "@/types/auth";
+import type { Event, EventUpdate } from "@/types/event";
+import {
+  ForbiddenError,
+  IllegalOperationError,
+  InvalidArgumentsError,
+  NotFoundError,
+  TooManyRequestsError,
+} from "@/types/exceptions";
+import type { Message, MessageThread } from "@/types/message";
+import type { Doc } from "@/types/models";
+import type { SendCounts } from "@/types/notification";
+import { LIVE_SIGNUP_STATUSES } from "@/types/signup";
+import type { SafeUser } from "@/types/user";
+import { assertCanManageEvent, isAdmin, sameId } from "@/utils/authorization";
+import ERRORS from "@/utils/errorMessages";
+import { PAGE_SIZE } from "@/constants/limits";
+import {
+  broadcastSchema,
+  createThreadSchema,
+  reportMessageSchema,
+  sendMessageSchema,
+  threadFiltersSchema,
+} from "@/utils/validation/message";
+
+const HOUR = 3_600_000;
+
+const isDuplicateKey = (error: unknown) =>
+  error instanceof mongo.MongoServerError && error.code === 11000;
+
+/** Who reported or flagged a thread, and why, is for admins only. */
+function hideReporters<T extends Partial<MessageThread & Message>>(
+  actor: Actor,
+  doc: T
+): T {
+  if (isAdmin(actor)) return doc;
+  const copy: Partial<MessageThread & Message> = { ...doc };
+  delete copy.reportedBy;
+  delete copy.reportReason;
+  delete copy.reviewedBy;
+  delete copy.flaggedBy;
+  delete copy.flagReason;
+  return copy as T;
+}
+
+/**
+ * Event-scoped messaging between one volunteer and that event's organizer.
+ * Every thread is readable by admins, both parties are told so, and there
+ * is no surface anywhere that puts two volunteers in contact.
+ */
+export default class MessageService {
+  private static isParticipant(
+    actor: Actor,
+    thread: Pick<MessageThread, "volunteerId" | "organizerId">
+  ) {
+    return (
+      sameId(actor.id, thread.volunteerId) ||
+      sameId(actor.id, thread.organizerId)
+    );
+  }
+
+  private static threadFilter(
+    actor: Actor,
+    filters: { eventId?: string }
+  ): QueryFilter<MessageThread> {
+    const id = new Types.ObjectId(actor.id);
+    const filter: QueryFilter<MessageThread> = isAdmin(actor)
+      ? {}
+      : actor.role === "organizer"
+        ? { $or: [{ organizerId: id }, { volunteerId: id }] }
+        : { volunteerId: id };
+    if (filters.eventId) filter.eventId = new Types.ObjectId(filters.eventId);
+    return filter;
+  }
+
+  static async listThreads(
+    actor: Actor,
+    input: Record<string, string | undefined>
+  ): Promise<Paginated<ThreadSummary>> {
+    const filters = threadFiltersSchema.parse(input);
+    const filter = MessageService.threadFilter(actor, filters);
+    const { items, total } = await MessageThreadDAO.list(filter, filters.page);
+    return {
+      items: await MessageService.summarize(actor, items),
+      total,
+      page: filters.page,
+      pageSize: PAGE_SIZE,
+    };
+  }
+
+  /** Decorates threads with what a list row shows; `reportedIds` is looked up when the caller has not already. */
+  static async summarize(
+    actor: Actor,
+    items: Doc<MessageThread>[],
+    reportedIds?: Types.ObjectId[]
+  ): Promise<ThreadSummary[]> {
+    if (!items.length) return [];
+    const [events, people, latest, reported] = await Promise.all([
+      EventDAO.findByIds(items.map((t) => t.eventId)),
+      UserDAO.findSummaries([
+        ...new Set(
+          items.flatMap((t) => [
+            t.volunteerId.toString(),
+            t.organizerId.toString(),
+          ])
+        ),
+      ]),
+      MessageDAO.latestByThreads(items.map((t) => t._id)),
+      reportedIds ?? MessageDAO.reportedThreadIds(),
+    ]);
+    return Promise.all(
+      items.map(async (thread): Promise<ThreadSummary> => {
+        const counterpartId = sameId(actor.id, thread.volunteerId)
+          ? thread.organizerId
+          : thread.volunteerId;
+        const counterpart = people.find((p) => sameId(p._id, counterpartId));
+        const volunteer = people.find((p) => sameId(p._id, thread.volunteerId));
+        const last = latest.get(thread._id.toString());
+        const unread = MessageService.isParticipant(actor, thread)
+          ? await MessageDAO.countUnread(
+              thread._id,
+              actor.id,
+              thread.lastReadAt?.[actor.id]
+            )
+          : 0;
+        return {
+          thread: hideReporters(actor, thread),
+          eventTitle:
+            events.find((e) => sameId(e._id, thread.eventId))?.title ?? "Event",
+          counterpartName: MessageService.isParticipant(actor, thread)
+            ? counterpart
+              ? `${counterpart.firstName} ${counterpart.lastName}`
+              : "Former member"
+            : [volunteer, people.find((p) => sameId(p._id, thread.organizerId))]
+                .map((p) =>
+                  p ? `${p.firstName} ${p.lastName}` : "Former member"
+                )
+                .join(" & "),
+          lastMessage: last
+            ? { body: last.body, sentAt: last.sentAt, senderId: last.senderId }
+            : null,
+          unread,
+          reported: reported.some((id) => sameId(id, thread._id)),
+        };
+      })
+    );
+  }
+
+  static async unreadCount(actor: Actor): Promise<number> {
+    const threads = await MessageThreadDAO.findAll(
+      MessageService.threadFilter(actor, {})
+    );
+    const counts = await Promise.all(
+      threads
+        .filter((t) => MessageService.isParticipant(actor, t))
+        .map((t) =>
+          MessageDAO.countUnread(t._id, actor.id, t.lastReadAt?.[actor.id])
+        )
+    );
+    return counts.reduce((sum, n) => sum + n, 0);
+  }
+
+  static async getThread(
+    actor: Actor,
+    threadId: string
+  ): Promise<ThreadDetail> {
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    const participant = MessageService.isParticipant(actor, thread);
+    if (!participant && !isAdmin(actor))
+      throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
+
+    if (participant) {
+      await MessageThreadDAO.updateById(thread._id, {
+        [`lastReadAt.${actor.id}`]: new Date(),
+      });
+    } else {
+      await AuditService.record(
+        actor,
+        "thread.admin_access",
+        "thread",
+        thread._id
+      );
+    }
+
+    const [messages, event, people] = await Promise.all([
+      MessageDAO.findByThread(thread._id),
+      EventDAO.findById(thread.eventId),
+      UserDAO.findSummaries([thread.volunteerId, thread.organizerId]),
+    ]);
+    const name = (id: Types.ObjectId) => {
+      const p = people.find((x) => sameId(x._id, id));
+      return p ? `${p.firstName} ${p.lastName}` : "Former member";
+    };
+    return {
+      thread: hideReporters(actor, thread),
+      messages: messages.map((m) => hideReporters(actor, m)),
+      eventId: thread.eventId.toString(),
+      eventTitle: event?.title ?? "Event",
+      participants: {
+        volunteer: {
+          id: thread.volunteerId.toString(),
+          name: name(thread.volunteerId),
+        },
+        organizer: {
+          id: thread.organizerId.toString(),
+          name: name(thread.organizerId),
+        },
+      },
+      canReply: participant && thread.status === "open",
+      isAdminView: !participant,
+      canReview:
+        isAdmin(actor) && messages.some((m) => m.reportedAt && !m.reviewedAt),
+    };
+  }
+
+  private static async assertThreadRate(actor: Actor) {
+    const since = new Date(Date.now() - HOUR);
+    const id = new Types.ObjectId(actor.id);
+    const recent = await MessageThreadDAO.count({
+      createdAt: { $gte: since },
+      $or: [{ volunteerId: id }, { organizerId: id }],
+    });
+    if (recent >= MAX_THREADS_PER_HOUR)
+      throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+  }
+
+  /** Finds or creates the one thread for a volunteer on an event. */
+  private static async threadFor(
+    event: Doc<Event>,
+    volunteer: Doc<SafeUser>
+  ): Promise<Doc<MessageThread>> {
+    const existing = await MessageThreadDAO.findByEventAndVolunteer(
+      event._id,
+      volunteer._id
+    );
+    if (existing) {
+      // An organizer change since the thread opened follows the event.
+      return sameId(existing.organizerId, event.organizerId)
+        ? existing
+        : ((await MessageThreadDAO.updateById(existing._id, {
+            organizerId: event.organizerId,
+          })) as Doc<MessageThread>);
+    }
+    const minor = isMinor(volunteer.dateOfBirth);
+    try {
+      return await MessageThreadDAO.create({
+        eventId: event._id,
+        volunteerId: volunteer._id,
+        organizerId: event.organizerId,
+        status: "open",
+        involvesMinor: minor,
+        lastMessageAt: new Date(),
+        // Threads with minors are flagged for periodic admin review at creation.
+        flaggedAt: minor ? new Date() : null,
+        flagReason: minor ? "Involves a volunteer under 18" : undefined,
+      });
+    } catch (error) {
+      // Another request opened the same thread between the lookup and the
+      // insert; the unique index kept one, so use it.
+      if (!isDuplicateKey(error)) throw error;
+      const raced = await MessageThreadDAO.findByEventAndVolunteer(
+        event._id,
+        volunteer._id
+      );
+      if (!raced) throw error;
+      return raced;
+    }
+  }
+
+  static async createThread(
+    actor: Actor,
+    input: unknown
+  ): Promise<{
+    thread: Doc<MessageThread>;
+    message: Doc<Message>;
+    notice?: string;
+  }> {
+    const data = createThreadSchema.parse(input);
+    const event = await EventDAO.findById(data.eventId);
+    if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+
+    const asVolunteer = !data.volunteerId || sameId(data.volunteerId, actor.id);
+    const volunteerId = asVolunteer ? actor.id : data.volunteerId!;
+
+    if (asVolunteer) {
+      const live = await SignupDAO.count({
+        eventId: event._id,
+        volunteerId: new Types.ObjectId(actor.id),
+        status: { $in: LIVE_SIGNUP_STATUSES },
+      });
+      if (!live) throw new ForbiddenError(ERRORS.THREAD.NOT_ON_EVENT);
+    } else {
+      assertCanManageEvent(actor, event);
+      const onRoster = await SignupDAO.count({
+        eventId: event._id,
+        volunteerId: new Types.ObjectId(volunteerId),
+        status: { $ne: "cancelled" },
+      });
+      if (!onRoster)
+        throw new InvalidArgumentsError(ERRORS.THREAD.VOLUNTEER_NOT_ON_ROSTER);
+    }
+
+    const volunteer = await UserDAO.findById(volunteerId);
+    if (!volunteer) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    await MessageService.assertThreadRate(actor);
+    const thread = await MessageService.threadFor(event, volunteer);
+    const { message, notice } = await MessageService.deliver(
+      actor,
+      thread,
+      data.body,
+      event
+    );
+    return { thread: hideReporters(actor, thread), message, notice };
+  }
+
+  static async send(
+    actor: Actor,
+    threadId: string,
+    input: unknown
+  ): Promise<{ message: Doc<Message>; notice?: string }> {
+    const { body } = sendMessageSchema.parse(input);
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    if (!MessageService.isParticipant(actor, thread))
+      throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
+    return MessageService.deliver(actor, thread, body);
+  }
+
+  /**
+   * The one place a message is posted, so a closed thread is refused however
+   * it was reached: a reply, a new conversation that resolves to the same
+   * thread, or a broadcast.
+   */
+  private static async deliver(
+    actor: Actor,
+    thread: Doc<MessageThread>,
+    body: string,
+    event?: Doc<Event> | null,
+    eventUpdate?: Doc<EventUpdate>
+  ) {
+    if (thread.status !== "open")
+      throw new IllegalOperationError(ERRORS.THREAD.READ_ONLY);
+    // An event update goes to the whole roster at once, so it is not one
+    // person sending messages and is not held to the hourly limit.
+    if (!eventUpdate) {
+      const recent = await MessageDAO.countBySenderSince(
+        actor.id,
+        new Date(Date.now() - HOUR)
+      );
+      if (recent >= MAX_MESSAGES_PER_HOUR)
+        throw new TooManyRequestsError(ERRORS.THREAD.RATE_LIMITED);
+    }
+
+    const now = new Date();
+    const recipientId = sameId(actor.id, thread.volunteerId)
+      ? thread.organizerId
+      : thread.volunteerId;
+    const recipient = await UserDAO.findById(recipientId);
+    const message = await MessageDAO.create({
+      threadId: thread._id,
+      senderId: new Types.ObjectId(actor.id),
+      body,
+      sentAt: now,
+      eventUpdateId: eventUpdate?._id ?? null,
+    });
+    await MessageThreadDAO.updateById(thread._id, {
+      lastMessageAt: now,
+      // Posting an update is not the organizer reading each thread, so it
+      // must not hide a volunteer's unread question from them.
+      ...(eventUpdate ? {} : { [`lastReadAt.${actor.id}`]: now }),
+    });
+
+    if (!recipient || recipient.status !== "active") {
+      await MessageDAO.updateById(message._id, { notifiedAt: now });
+      return { message, notice: ERRORS.THREAD.RECIPIENT_INACTIVE };
+    }
+
+    // Update messages are left to the hourly digest, which only emails about
+    // them if they are still unread; the update has its own emails.
+    if (eventUpdate) return { message };
+
+    // One email per message, collapsing into an hourly digest for a busy thread.
+    const lastNotified = await MessageDAO.lastNotifiedAt(thread._id, actor.id);
+    if (!lastNotified || now.getTime() - lastNotified.getTime() > HOUR) {
+      const eventTitle =
+        (event ?? (await EventDAO.findById(thread.eventId)))?.title ??
+        "your event";
+      const org = await NotificationService.org();
+      const outcome = await NotificationService.send(
+        recipient,
+        NotificationService.templates.newMessage(org, {
+          name: recipient.firstName,
+          senderName: actor.name,
+          eventTitle,
+          preview: body.length > 240 ? `${body.slice(0, 240)}…` : body,
+          url: appUrl(`/messages/${thread._id}`),
+        }),
+        { category: "messages" }
+      );
+      // A failed email leaves the message for the hourly digest to retry.
+      if (outcome !== "failed")
+        await MessageDAO.updateById(message._id, { notifiedAt: now });
+    }
+    return { message };
+  }
+
+  /** One organizer action; lands as individual threads so replies come back one to one. */
+  static async broadcast(
+    actor: Actor,
+    eventId: string,
+    input: unknown
+  ): Promise<{ sent: number }> {
+    const data = broadcastSchema.parse(input);
+    const event = await EventDAO.findById(eventId);
+    if (!event) throw new NotFoundError(ERRORS.EVENT.NOT_FOUND);
+    assertCanManageEvent(actor, event);
+    const signups = await SignupDAO.find({
+      eventId: event._id,
+      status: { $in: LIVE_SIGNUP_STATUSES },
+      ...(data.shiftId ? { shiftId: new Types.ObjectId(data.shiftId) } : {}),
+    });
+    let sent = 0;
+    for (const volunteerId of new Set(
+      signups.map((s) => s.volunteerId.toString())
+    )) {
+      const volunteer = await UserDAO.findById(volunteerId);
+      if (!volunteer) continue;
+      const thread = await MessageService.threadFor(event, volunteer);
+      if (thread.status !== "open") continue;
+      await MessageService.deliver(actor, thread, data.body, event);
+      sent += 1;
+    }
+    return { sent };
+  }
+
+  /**
+   * Delivers an event update into each confirmed volunteer's thread with the
+   * organizer, opening the thread if there isn't one yet. It is sent as the
+   * organizer, since that is who the volunteer's reply goes to.
+   */
+  static async postEventUpdate(
+    event: Doc<Event>,
+    update: Doc<EventUpdate>
+  ): Promise<void> {
+    const organizer = await UserDAO.findById(event.organizerId);
+    if (!organizer) return;
+    const sender: Actor = {
+      id: organizer._id.toString(),
+      role: organizer.role,
+      email: organizer.email,
+      name: `${organizer.firstName} ${organizer.lastName}`,
+    };
+    const signups = await SignupDAO.findByEvent(event._id, ["confirmed"]);
+    for (const volunteerId of new Set(
+      signups.map((s) => s.volunteerId.toString())
+    )) {
+      // The update itself is already saved, so one volunteer's failure is
+      // logged and the rest of the roster still gets it.
+      try {
+        const volunteer = await UserDAO.findById(volunteerId);
+        if (!volunteer) continue;
+        const thread = await MessageService.threadFor(event, volunteer);
+        if (thread.status !== "open") continue;
+        await MessageService.deliver(
+          sender,
+          thread,
+          update.body,
+          event,
+          update
+        );
+      } catch (error) {
+        console.error(
+          `[messages] event update ${update._id} not delivered to ${volunteerId}`,
+          error
+        );
+      }
+    }
+  }
+
+  static async report(
+    actor: Actor,
+    threadId: string,
+    input: unknown
+  ): Promise<void> {
+    const { messageId, reason } = reportMessageSchema.parse(input);
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    if (!MessageService.isParticipant(actor, thread))
+      throw new ForbiddenError(ERRORS.THREAD.NOT_PARTICIPANT);
+    const message = await MessageDAO.findById(messageId);
+    if (!message || !sameId(message.threadId, thread._id))
+      throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+
+    const now = new Date();
+    const actorId = new Types.ObjectId(actor.id);
+    await MessageDAO.updateById(message._id, {
+      reportedAt: now,
+      reportedBy: actorId,
+      reportReason: reason,
+    });
+    await MessageThreadDAO.updateById(thread._id, {
+      flaggedAt: now,
+      flaggedBy: actorId,
+      flagReason: reason,
+    });
+    await AuditService.record(
+      actor,
+      "message.reported",
+      "message",
+      message._id,
+      { after: { reason } }
+    );
+    await NotificationService.toAdmins((org, admin) =>
+      NotificationService.templates.messageReported(org, {
+        name: admin.firstName,
+        reporterName: actor.name,
+        reason,
+        url: appUrl(`/messages/${thread._id}`),
+      })
+    );
+  }
+
+  /** An admin has read what was reported, so the thread leaves the Approvals queue. */
+  static async reviewReports(actor: Actor, threadId: string): Promise<void> {
+    const thread = await MessageThreadDAO.findById(threadId);
+    if (!thread) throw new NotFoundError(ERRORS.THREAD.NOT_FOUND);
+    const reviewed = await MessageDAO.markReportsReviewed(
+      thread._id,
+      actor.id,
+      new Date()
+    );
+    if (!reviewed)
+      throw new IllegalOperationError(ERRORS.THREAD.NO_OPEN_REPORT);
+    await AuditService.record(
+      actor,
+      "message.report_reviewed",
+      "thread",
+      thread._id,
+      { after: { messages: reviewed } }
+    );
+  }
+
+  /**
+   * Scheduled: threads go read-only 30 days after an event ends, or 7 days
+   * after a volunteer leaves it. sent = threads closed, skipped = left open.
+   */
+  static async closeStale(): Promise<SendCounts> {
+    const now = new Date();
+    const open = await MessageThreadDAO.findAll({ status: "open" });
+    if (!open.length) return emptyCounts();
+    const events = await EventDAO.findByIds([
+      ...new Set(open.map((t) => t.eventId.toString())),
+    ]);
+    const toClose: Types.ObjectId[] = [];
+
+    for (const thread of open) {
+      const event = events.find((e) => sameId(e._id, thread.eventId));
+      const endedAt = event?.completedAt ?? event?.cancelledAt;
+      if (
+        endedAt &&
+        addDays(endedAt, THREAD_READ_ONLY_AFTER_EVENT_DAYS) < now
+      ) {
+        toClose.push(thread._id);
+        continue;
+      }
+      if (!event || event.status !== "published") continue;
+      const signups = await SignupDAO.find({
+        eventId: event._id,
+        volunteerId: thread.volunteerId,
+      });
+      const live = signups.some((s) =>
+        (LIVE_SIGNUP_STATUSES as readonly string[]).includes(s.status)
+      );
+      const lastCancel = Math.max(
+        0,
+        ...signups.map((s) => s.cancelledAt?.getTime() ?? 0)
+      );
+      if (
+        !live &&
+        lastCancel &&
+        addDays(lastCancel, THREAD_READ_ONLY_AFTER_CANCEL_DAYS) < now
+      ) {
+        toClose.push(thread._id);
+      }
+    }
+    if (toClose.length) {
+      await MessageThreadDAO.updateMany(
+        { _id: { $in: toClose } },
+        { status: "read_only", readOnlyAt: now }
+      );
+    }
+    return {
+      sent: toClose.length,
+      skipped: open.length - toClose.length,
+      failed: 0,
+    };
+  }
+
+  /** Scheduled hourly: one digest per recipient for messages that were collapsed. */
+  static async sendDigests(): Promise<SendCounts> {
+    const pending = (await MessageDAO.findUnnotified()).filter(
+      (m) => m.sentAt.getTime() < Date.now() - 5 * 60_000
+    );
+    const counts = emptyCounts();
+    if (!pending.length) return counts;
+    const threads = await MessageThreadDAO.findAll({
+      _id: { $in: [...new Set(pending.map((m) => m.threadId.toString()))] },
+    });
+    const events = await EventDAO.findByIds([
+      ...new Set(threads.map((t) => t.eventId.toString())),
+    ]);
+    const byRecipient = new Map<
+      string,
+      Map<
+        string,
+        { senderId: Types.ObjectId; count: number; thread: Doc<MessageThread> }
+      >
+    >();
+    const recipientOf = new Map<string, string>();
+
+    for (const message of pending) {
+      const thread = threads.find((t) => sameId(t._id, message.threadId));
+      if (!thread) continue;
+      const recipientId = (
+        sameId(message.senderId, thread.volunteerId)
+          ? thread.organizerId
+          : thread.volunteerId
+      ).toString();
+      recipientOf.set(message._id.toString(), recipientId);
+      // Already read in the app, so there is nothing to tell them.
+      const readAt = thread.lastReadAt?.[recipientId];
+      if (readAt && readAt >= message.sentAt) continue;
+      const perThread = byRecipient.get(recipientId) ?? new Map();
+      const entry = perThread.get(thread._id.toString()) ?? {
+        senderId: message.senderId,
+        count: 0,
+        thread,
+      };
+      entry.count += 1;
+      perThread.set(thread._id.toString(), entry);
+      byRecipient.set(recipientId, perThread);
+    }
+
+    const org = await NotificationService.org();
+    const failed = new Set<string>();
+    for (const [recipientId, perThread] of byRecipient) {
+      const recipient = await UserDAO.findById(recipientId);
+      if (!recipient) {
+        counts.skipped += 1;
+        continue;
+      }
+      const senders = await UserDAO.findSummaries(
+        [...perThread.values()].map((e) => e.senderId)
+      );
+      const items = [...perThread.values()].map((e) => {
+        const sender = senders.find((s) => sameId(s._id, e.senderId));
+        return {
+          senderName: sender
+            ? `${sender.firstName} ${sender.lastName}`
+            : "Pink STEM",
+          eventTitle:
+            events.find((ev) => sameId(ev._id, e.thread.eventId))?.title ??
+            "Event",
+          count: e.count,
+          url: appUrl(`/messages/${e.thread._id}`),
+        };
+      });
+      const outcome = await NotificationService.send(
+        recipient,
+        NotificationService.templates.messageDigest(org, {
+          name: recipient.firstName,
+          items,
+        }),
+        { category: "messages" }
+      );
+      counts[outcome] += 1;
+      if (outcome === "failed") failed.add(recipientId);
+    }
+    // A failed digest's messages stay pending, so the next run retries it.
+    await MessageDAO.markNotified(
+      pending
+        .filter((m) => !failed.has(recipientOf.get(m._id.toString())!))
+        .map((m) => m._id),
+      new Date()
+    );
+    return counts;
+  }
+}

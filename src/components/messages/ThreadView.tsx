@@ -1,0 +1,262 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { ChevronLeft, Flag, Lock, ShieldAlert } from "lucide-react";
+import { useMessageActions } from "@/components/hooks/useMessages";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
+import Dialog from "@/components/ui/Dialog";
+import { Textarea } from "@/components/ui/Field";
+import { Alert } from "@/components/ui/Primitives";
+import { errorMessage, useToast } from "@/components/ui/Toast";
+import type { ClientThreadDetail } from "@/http/messageHTTPClient";
+import { formatDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
+
+export default function ThreadView({
+  detail,
+  currentUserId,
+  back,
+}: {
+  detail: ClientThreadDetail;
+  currentUserId: string;
+  /** Where the back arrow goes; `always` shows it on wide screens too, when no list sits beside the pane. */
+  back: { href: string; label: string; always: boolean };
+}) {
+  const { send, report, reviewReports } = useMessageActions(detail.thread._id);
+  const toast = useToast();
+  const [body, setBody] = useState("");
+  const [reporting, setReporting] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const scrollRef = useRef<HTMLOListElement>(null);
+
+  useEffect(() => {
+    const list = scrollRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [detail.messages.length]);
+
+  const { volunteer, organizer } = detail.participants;
+  const title = detail.isAdminView
+    ? `${volunteer.name} and ${organizer.name}`
+    : volunteer.id === currentUserId
+      ? organizer.name
+      : volunteer.name;
+
+  const nameOf = (senderId: string) =>
+    senderId === detail.participants.volunteer.id
+      ? detail.participants.volunteer.name
+      : detail.participants.organizer.name;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!body.trim()) return;
+    try {
+      const result = await send.mutateAsync(body.trim());
+      setBody("");
+      if (result.notice) toast(result.notice, "info");
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b border-ink-100 px-4 py-3">
+        <Link
+          href={back.href}
+          aria-label={`Back to ${back.label}`}
+          title={back.label}
+          className={cn(
+            "-ml-2 rounded-lg p-1.5 text-ink-500 hover:bg-ink-50 hover:text-brand-700",
+            !back.always && "lg:hidden"
+          )}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-ink-900">{title}</p>
+          <Link
+            href={`/events/${detail.eventId}`}
+            className="block truncate text-[13px] font-semibold text-brand-700 hover:underline"
+          >
+            {detail.eventTitle}
+          </Link>
+        </div>
+        {detail.thread.involvesMinor ? (
+          <Badge tone="info">
+            <ShieldAlert className="mr-1 h-3 w-3" />
+            Minor
+          </Badge>
+        ) : null}
+        {detail.thread.status === "read_only" ? (
+          <Badge>
+            <Lock className="mr-1 h-3 w-3" />
+            Closed
+          </Badge>
+        ) : null}
+      </div>
+      <ol
+        ref={scrollRef}
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+      >
+        {detail.messages.map((m) => {
+          const mine = m.senderId === currentUserId;
+          return (
+            <li
+              key={m._id}
+              className={cn(
+                "group flex max-w-[85%] flex-col gap-1",
+                mine ? "self-end items-end" : "self-start items-start"
+              )}
+            >
+              <div
+                className={cn(
+                  "rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap",
+                  mine ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-900"
+                )}
+              >
+                {m.body}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-ink-400">
+                {m.eventUpdateId ? (
+                  <Link
+                    href={`/events/${detail.eventId}`}
+                    className="hover:text-brand-700"
+                  >
+                    <Badge tone="info">Event update</Badge>
+                  </Link>
+                ) : null}
+                <span>
+                  {nameOf(m.senderId)} · {formatDateTime(m.sentAt)}
+                </span>
+                {m.reportedAt ? (
+                  <Badge tone={m.reviewedAt ? "neutral" : "danger"}>
+                    {m.reviewedAt ? "Report reviewed" : "Reported"}
+                  </Badge>
+                ) : !mine && !detail.isAdminView ? (
+                  <button
+                    type="button"
+                    onClick={() => setReporting(m._id)}
+                    className="inline-flex items-center gap-1 opacity-0 hover:text-red-700 focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <Flag className="h-3 w-3" /> Report
+                  </button>
+                ) : null}
+              </div>
+              {(detail.isAdminView || detail.canReview) && m.reportedAt ? (
+                <p className="text-[12px] text-red-800">
+                  Reported because: {m.reportReason}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="grid gap-3 border-t border-ink-100 px-4 py-3">
+        {detail.canReview ? (
+          <Alert tone="warning" title="Waiting on review">
+            Read the reported message in context and act on the account from
+            People if it needs it. Marking this reviewed clears it from
+            Approvals.
+            <div className="mt-3">
+              <Button
+                size="sm"
+                loading={reviewReports.isPending}
+                onClick={async () => {
+                  try {
+                    await reviewReports.mutateAsync();
+                    toast("Marked reviewed.");
+                  } catch (error) {
+                    toast(errorMessage(error), "error");
+                  }
+                }}
+              >
+                Mark reviewed
+              </Button>
+            </div>
+          </Alert>
+        ) : null}
+        {detail.isAdminView ? (
+          <p className="text-xs text-ink-500">
+            You are reading this as an administrator. Your access has been
+            recorded in the audit log.
+          </p>
+        ) : detail.canReply ? (
+          <form onSubmit={submit} className="grid gap-2">
+            <Textarea
+              label="Reply"
+              className="[&>label]:sr-only"
+              rows={2}
+              placeholder="Write a reply…"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-ink-400">
+                Pink STEM admins can read messages.
+              </p>
+              <Button
+                type="submit"
+                loading={send.isPending}
+                disabled={!body.trim()}
+              >
+                Send
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <p className="flex items-center gap-1.5 text-sm text-ink-500">
+            <Lock className="h-3.5 w-3.5" />
+            This conversation is closed.
+          </p>
+        )}
+      </div>
+
+      <Dialog
+        open={!!reporting}
+        onClose={() => setReporting(null)}
+        title="Report this message"
+        description="Pink STEM administrators will review it. Reports are confidential."
+      >
+        <form
+          className="grid gap-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await report.mutateAsync({
+                messageId: reporting as string,
+                reason,
+              });
+              setReporting(null);
+              setReason("");
+              toast("Reported. An administrator will review it.");
+            } catch (error) {
+              toast(errorMessage(error), "error");
+            }
+          }}
+        >
+          <Textarea
+            label="What is wrong?"
+            required
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setReporting(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" loading={report.isPending}>
+              Report
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </div>
+  );
+}

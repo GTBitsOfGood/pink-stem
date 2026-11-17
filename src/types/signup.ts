@@ -1,0 +1,94 @@
+import type { Types } from "mongoose";
+
+export const SIGNUP_STATUSES = [
+  "pending",
+  "confirmed",
+  "waitlisted",
+  "cancelled",
+  "attended",
+  "no_show",
+] as const;
+export type SignupStatus = (typeof SIGNUP_STATUSES)[number];
+
+/** Statuses that hold a spot on the shift. */
+export const ACTIVE_SIGNUP_STATUSES = ["pending", "confirmed"] as const;
+
+/**
+ * Statuses of someone actually on the roster: confirmed, or marked after the
+ * event. Only they see roster-only updates.
+ */
+export const ROSTER_SIGNUP_STATUSES = [
+  "confirmed",
+  "attended",
+  "no_show",
+] as const;
+
+/** Statuses that still put the volunteer on the roster in some form. */
+export const LIVE_SIGNUP_STATUSES = [
+  "pending",
+  "confirmed",
+  "waitlisted",
+] as const;
+
+export const PENDING_REASONS = [
+  "email_verification",
+  "clearance",
+  "approval",
+] as const;
+export type PendingReason = (typeof PENDING_REASONS)[number];
+
+export const ATTENDANCE_STATUSES = ["attended", "no_show"] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+
+export const ABSENCE_REASONS = ["sick", "school", "other"] as const;
+export type AbsenceReason = (typeof ABSENCE_REASONS)[number];
+
+export interface Attendance {
+  status: AttendanceStatus;
+  hours: number;
+  adjustmentReason?: string;
+  markedBy: Types.ObjectId;
+  markedAt: Date;
+}
+
+/** What a volunteer said when they reported they can't make their shift. */
+export interface Absence {
+  reason: AbsenceReason;
+  note?: string;
+  /** Reported inside the cancellation cutoff, when a plain cancel is refused. */
+  late: boolean;
+}
+
+export interface Signup {
+  shiftId: Types.ObjectId;
+  eventId: Types.ObjectId;
+  volunteerId: Types.ObjectId;
+  status: SignupStatus;
+  pendingReasons: PendingReason[];
+  signedUpAt: Date;
+  /** When the volunteer said they signed Pink STEM's waiver for this event. */
+  waiverSignedAt?: Date | null;
+  confirmedAt?: Date | null;
+  approvedAt?: Date | null;
+  approvedBy?: Types.ObjectId | null;
+  cancelledAt?: Date | null;
+  cancelledBy?: Types.ObjectId | null;
+  cancellationReason?: string;
+  /** When a confirmed spot lapsed back to pending, how long it is held. */
+  holdUntil?: Date | null;
+  attendance?: Attendance | null;
+  /** Set by "Can't make it"; cleared if the volunteer signs up again. */
+  absence?: Absence | null;
+}
+
+export interface HoursLedgerEntry {
+  volunteerId: Types.ObjectId;
+  eventId: Types.ObjectId;
+  signupId?: Types.ObjectId | null;
+  hours: number;
+  approvedBy: Types.ObjectId;
+  approvedAt: Date;
+  reason?: string;
+  /** Corrections are new rows that point at the row they reverse. */
+  reversalOf?: Types.ObjectId | null;
+}

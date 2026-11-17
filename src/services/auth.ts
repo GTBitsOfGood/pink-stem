@@ -1,0 +1,309 @@
+import ActionTokenDAO from "@/db/actions/actionToken";
+import UserDAO from "@/db/actions/user";
+import {
+  EMAIL_VERIFICATION_DAYS,
+  RATE_LIMITS,
+  RESET_PASSWORD_TOKEN_MINUTES,
+} from "@/constants/limits";
+import { assertRateLimit } from "@/lib/rateLimit";
+import { signSession } from "@/lib/session";
+import { appUrl } from "@/lib/urls";
+import AuditService from "@/services/audit";
+import HashingService from "@/services/hashing";
+import NotificationService from "@/services/notification";
+import SignupService from "@/services/signup";
+import type { SendOutcome } from "@/types/notification";
+import type { Actor } from "@/types/auth";
+import {
+  ConflictError,
+  InvalidArgumentsError,
+  NotFoundError,
+  TooManyRequestsError,
+  UnauthorizedError,
+} from "@/types/exceptions";
+import type { Doc } from "@/types/models";
+import type { Role, SafeUser, User } from "@/types/user";
+import ERRORS from "@/utils/errorMessages";
+import {
+  acceptInviteSchema,
+  changePasswordSchema,
+  emailOnlySchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from "@/utils/validation/auth";
+
+export interface SessionResult {
+  token: string;
+  user: Doc<SafeUser>;
+}
+
+const HOUR = 60 * 60_000;
+const DAY = 24 * HOUR;
+
+/** Accounts, sessions, and every one-time link flow. */
+export default class AuthService {
+  /**
+   * Audits the first 429 in each window; there may be no account behind it.
+   * A failed audit write is logged so the caller still gets the 429.
+   */
+  private static async assertLimitAudited(
+    key: string,
+    limits: { limit: number; windowMs: number },
+    ip: string
+  ): Promise<void> {
+    try {
+      await assertRateLimit(key, limits);
+    } catch (error) {
+      if (error instanceof TooManyRequestsError && error.firstInWindow) {
+        await AuditService.recordSecurityEvent("auth.rate_limited", ip, {
+          key,
+        }).catch((auditError) =>
+          console.error("[rate-limit] audit write failed", auditError)
+        );
+      }
+      throw error;
+    }
+  }
+
+  private static async session(user: Doc<User>): Promise<SessionResult> {
+    const token = await signSession(
+      user._id.toString(),
+      user.role,
+      user.sessionVersion ?? 0
+    );
+    return { token, user: UserDAO.toSafe(user) };
+  }
+
+  /** The password has already changed, so a failed audit write is only logged. */
+  private static async auditPasswordChange(
+    actor: Pick<Actor, "id" | "ip">,
+    via: "change" | "reset"
+  ): Promise<void> {
+    await AuditService.record(
+      actor,
+      "user.password_changed",
+      "user",
+      actor.id,
+      { after: { via } }
+    ).catch((auditError) =>
+      console.error("[password] audit write failed", auditError)
+    );
+  }
+
+  static async register(input: unknown, ip: string): Promise<SessionResult> {
+    await assertRateLimit(`register:${ip}`, RATE_LIMITS.register);
+    const data = registerSchema.parse(input);
+
+    const existing = await UserDAO.findByEmail(data.email);
+    if (existing) throw new ConflictError(ERRORS.AUTH.EMAIL_TAKEN);
+
+    const created = await UserDAO.create({
+      email: data.email,
+      provider: "password",
+      role: "volunteer",
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone,
+      dateOfBirth: data.dateOfBirth,
+      passwordHash: await HashingService.hash(data.password),
+    });
+
+    await AuthService.sendEmailVerification(created);
+
+    return AuthService.session({ ...created, sessionVersion: 0 });
+  }
+
+  static async login(input: unknown, ip: string): Promise<SessionResult> {
+    await AuthService.assertLimitAudited(
+      `login-address:${ip}`,
+      RATE_LIMITS.loginPerAddress,
+      ip
+    );
+    const { email, password } = loginSchema.parse(input);
+    await AuthService.assertLimitAudited(
+      `login:${ip}:${email}`,
+      RATE_LIMITS.login,
+      ip
+    );
+    await AuthService.assertLimitAudited(
+      `login-account:${email}`,
+      RATE_LIMITS.loginPerAccount,
+      ip
+    );
+
+    const user = await UserDAO.findAuthByEmail(email);
+    const matches = await HashingService.compare(
+      password,
+      user?.passwordHash ?? HashingService.DUMMY_HASH
+    );
+    if (!user || !matches || user.status !== "active") {
+      throw new UnauthorizedError(ERRORS.AUTH.INVALID_CREDENTIALS);
+    }
+    return AuthService.session(user);
+  }
+
+  static async sendEmailVerification(
+    user: Pick<Doc<SafeUser>, "_id" | "email" | "firstName" | "status">
+  ): Promise<SendOutcome> {
+    const { secret } = await ActionTokenDAO.issue({
+      purpose: "verify_email",
+      email: user.email,
+      userId: user._id,
+      ttlMs: EMAIL_VERIFICATION_DAYS * DAY,
+    });
+    const org = await NotificationService.org();
+    return NotificationService.send(
+      user,
+      NotificationService.templates.verifyEmail(org, {
+        name: user.firstName,
+        url: appUrl(`/verify-email/${secret}`),
+      })
+    );
+  }
+
+  static async forgotPassword(input: unknown, ip: string): Promise<void> {
+    await AuthService.assertLimitAudited(
+      `reset:${ip}`,
+      RATE_LIMITS.passwordReset,
+      ip
+    );
+    const { email } = emailOnlySchema.parse(input);
+    const user = await UserDAO.findByEmail(email);
+    // Always resolve: the response never reveals whether the account exists.
+    if (!user || user.status !== "active") return;
+
+    const { secret } = await ActionTokenDAO.issue({
+      purpose: "reset_password",
+      email: user.email,
+      userId: user._id,
+      ttlMs: RESET_PASSWORD_TOKEN_MINUTES * 60_000,
+    });
+    const org = await NotificationService.org();
+    await NotificationService.send(
+      user,
+      NotificationService.templates.passwordReset(org, {
+        name: user.firstName,
+        url: appUrl(`/reset-password?token=${secret}`),
+      })
+    );
+  }
+
+  static async resetPassword(
+    input: unknown,
+    ip: string
+  ): Promise<SessionResult> {
+    const { token, password } = resetPasswordSchema.parse(input);
+    const consumed = await ActionTokenDAO.consume(token, "reset_password");
+    if (!consumed?.userId) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    const account = await UserDAO.findById(consumed.userId);
+    if (account && account.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    const user = await UserDAO.setPassword(
+      consumed.userId,
+      await HashingService.hash(password)
+    );
+    if (!user) throw new NotFoundError(ERRORS.USER.NOT_FOUND);
+    await AuthService.auditPasswordChange(
+      { id: user._id.toString(), ip },
+      "reset"
+    );
+    return AuthService.session(user);
+  }
+
+  static async changePassword(
+    actor: Actor,
+    input: unknown
+  ): Promise<SessionResult> {
+    await AuthService.assertLimitAudited(
+      `password-change:${actor.id}`,
+      RATE_LIMITS.passwordChange,
+      actor.ip ?? "unknown"
+    );
+    const { currentPassword, newPassword } = changePasswordSchema.parse(input);
+    const passwordHash = await UserDAO.findPasswordHash(actor.id);
+    if (
+      !passwordHash ||
+      !(await HashingService.compare(currentPassword, passwordHash))
+    ) {
+      throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    }
+    const user = await UserDAO.setPassword(
+      actor.id,
+      await HashingService.hash(newPassword),
+      passwordHash
+    );
+    if (!user) throw new InvalidArgumentsError(ERRORS.AUTH.WRONG_PASSWORD);
+    await AuthService.auditPasswordChange(actor, "change");
+    return AuthService.session(user);
+  }
+
+  static async getInvite(
+    token: string,
+    ip: string
+  ): Promise<{ email: string; role: Role; existingAccount: boolean }> {
+    await assertRateLimit(`invite:${ip}`, RATE_LIMITS.inviteLookup);
+    const invite = await ActionTokenDAO.findValid(token, "organizer_invite");
+    if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    const existing = await UserDAO.findByEmail(invite.email);
+    if (existing && existing.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+    return {
+      email: invite.email,
+      role: invite.role,
+      existingAccount: !!existing,
+    };
+  }
+
+  /** Organizer and admin accounts only ever come from an admin's invitation. */
+  static async acceptInvite(input: unknown): Promise<SessionResult> {
+    const data = acceptInviteSchema.parse(input);
+    const invite = await ActionTokenDAO.consume(data.token, "organizer_invite");
+    if (!invite?.role) throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+
+    const existing = await UserDAO.findAuthByEmail(invite.email);
+    if (existing && existing.status !== "active")
+      throw new NotFoundError(ERRORS.AUTH.TOKEN_INVALID);
+
+    const passwordHash = await HashingService.hash(data.password);
+    let user: Doc<User>;
+
+    if (existing) {
+      const before = { role: existing.role };
+      await UserDAO.updateById(existing._id, {
+        role: invite.role,
+        // The invite link was delivered to this address.
+        emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+      });
+      user = (await UserDAO.setPassword(
+        existing._id,
+        passwordHash
+      )) as Doc<User>;
+      // Sign-ups held only on email verification can confirm now.
+      await SignupService.reevaluateForVolunteer(existing._id);
+      if (invite.invitedBy) {
+        await AuditService.record(
+          { id: invite.invitedBy.toString() },
+          "user.role_changed",
+          "user",
+          existing._id,
+          { before, after: { role: invite.role, via: "invitation" } }
+        );
+      }
+    } else {
+      const created = await UserDAO.create({
+        email: invite.email,
+        provider: "password",
+        role: invite.role,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        passwordHash,
+        // The invite link was delivered to this address.
+        emailVerifiedAt: new Date(),
+      });
+      user = { ...created, sessionVersion: 0 };
+    }
+
+    return AuthService.session(user);
+  }
+}

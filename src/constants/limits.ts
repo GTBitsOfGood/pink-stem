@@ -1,0 +1,94 @@
+/** Product rules that are fixed, not admin-configurable. */
+
+export const SESSION_DAYS = 30;
+/** Re-issue the session cookie once a token is older than this. */
+export const SESSION_RENEW_AFTER_HOURS = 24;
+
+export const PASSWORD_MIN_LENGTH = 12;
+export const RESET_PASSWORD_TOKEN_MINUTES = 30;
+export const ORGANIZER_INVITE_DAYS = 7;
+export const EMAIL_VERIFICATION_DAYS = 7;
+
+export const ADULT_AGE = 18;
+
+export const REMINDER_HOURS = [72, 24] as const;
+/** Notes on an event are emailed as one digest at most this often. */
+export const NOTE_DIGEST_INTERVAL_HOURS = 24;
+/** How long a failed note digest email keeps being retried. */
+export const NOTE_DIGEST_RETRY_DAYS = 7;
+/** How long a failed important-change email keeps being retried. */
+export const IMPORTANT_CHANGE_RETRY_DAYS = 7;
+export const LOW_FILL_ALERT_HOURS = 72;
+export const ROSTER_NUDGE_HOURS = [24, 72] as const;
+export const ROSTER_ADMIN_ESCALATION_DAYS = 7;
+export const CLEARANCE_EXPIRY_WARNING_DAYS = 30;
+export const LAPSED_SPOT_HOLD_DAYS = 7;
+/** Counter reconciliation leaves shifts touched this recently to in-flight writes. */
+export const COUNTER_SETTLE_MINUTES = 5;
+export const IMPORTANT_UPDATE_BANNER_HOURS = 12;
+export const THREAD_READ_ONLY_AFTER_EVENT_DAYS = 30;
+export const THREAD_READ_ONLY_AFTER_CANCEL_DAYS = 7;
+
+export const MAX_THREADS_PER_HOUR = 10;
+export const MAX_MESSAGES_PER_HOUR = 60;
+export const MAX_MESSAGE_LENGTH = 2_000;
+export const MAX_UPDATE_LENGTH = 2_000;
+export const MAX_BIO_LENGTH = 600;
+export const MAX_ABSENCE_NOTE_LENGTH = 300;
+export const MAX_DESCRIPTION_LENGTH = 5_000;
+export const MAX_TITLE_LENGTH = 120;
+export const MAX_SHIFT_HOURS = 16;
+export const MAX_SHIFTS_PER_EVENT = 20;
+
+export const VERIFICATION_CODE_LENGTH = 16;
+
+export const PAGE_SIZE = 25;
+
+/** How long a crashed job run can hold the runner's lock before it lapses. */
+export const JOB_LOCK_TTL_MS = 10 * 60_000;
+
+/** How long a crashed shift delete can hold its event's lock before it lapses. */
+export const SHIFT_DELETE_LOCK_TTL_MS = 30_000;
+
+/** How long a crashed roster approval can hold its event's lock before it lapses. */
+export const ROSTER_APPROVAL_LOCK_TTL_MS = 10 * 60_000;
+
+/** How long a crashed attendance mark can hold its event's roster lock. */
+export const ROSTER_MARK_LOCK_TTL_MS = 30_000;
+
+/**
+ * How long a keyed email stays claimed by a sender that never reported back.
+ * Past this, the sender is assumed dead and the next run sends it again.
+ */
+export const NOTIFICATION_CLAIM_TTL_MS = 15 * 60_000;
+
+/**
+ * Rate limits, expressed as hits per fixed window. Login is limited per
+ * account and address, so a neighbour's typos on a shared address do not lock
+ * an account out. Looser ceilings per address stop enumeration and per
+ * account stop distributed guessing, at the cost that attempts from several
+ * addresses can lock an account for one window; its owner can still get in
+ * through a password reset.
+ */
+export const RATE_LIMITS = {
+  login: { limit: 10, windowMs: 15 * 60_000 },
+  loginPerAccount: { limit: 20, windowMs: 15 * 60_000 },
+  loginPerAddress: { limit: 100, windowMs: 15 * 60_000 },
+  register: { limit: 5, windowMs: 60 * 60_000 },
+  passwordReset: { limit: 5, windowMs: 60 * 60_000 },
+  passwordChange: { limit: 10, windowMs: 15 * 60_000 },
+  verify: { limit: 60, windowMs: 60_000 },
+  inviteLookup: { limit: 20, windowMs: 15 * 60_000 },
+  verifyEmailResend: { limit: 5, windowMs: 60 * 60_000 },
+  verifyEmailLookup: { limit: 20, windowMs: 15 * 60_000 },
+} as const;
+
+/**
+ * Screening pre-check. Registries publish a birth year (or an age), not a
+ * date, so a name hit counts when its year is within this many years of the
+ * volunteer's. One year absorbs age rounding and data-entry slips.
+ */
+export const SCREENING_BIRTH_YEAR_TOLERANCE = 1;
+
+/** A registry download that answers slower than this is reported as unavailable. */
+export const SCREENING_FETCH_TIMEOUT_MS = 8_000;

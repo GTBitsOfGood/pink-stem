@@ -16,8 +16,8 @@ if (!cached) {
  * Next.js hot-reloads modules in development, so the connection is cached on
  * `global` to avoid opening a new pool on every reload.
  */
-async function dbConnect() {
-  const MONGODB_URI = process.env.MONGODB_URI!;
+export default async function dbConnect(): Promise<Mongoose> {
+  const MONGODB_URI = process.env.MONGODB_URI;
 
   if (!MONGODB_URI) {
     throw new Error(
@@ -30,12 +30,8 @@ async function dbConnect() {
   }
 
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    // Default buffering lets index builds started while connecting wait for it.
+    cached.promise = mongoose.connect(MONGODB_URI);
   }
 
   try {
@@ -47,5 +43,3 @@ async function dbConnect() {
 
   return cached.conn;
 }
-
-export default dbConnect;
