@@ -73,6 +73,27 @@ export default class NotificationLogDAO {
     return rows.map((r) => r.key);
   }
 
+  /**
+   * Keys starting with `prefix` that still need sending: failed, or claimed
+   * by a sender that stopped before recording the result.
+   */
+  static async findUnsentKeys(prefix: string): Promise<string[]> {
+    await dbConnect();
+    const rows = await NotificationLogModel.find({
+      key: { $regex: `^${escapeRegex(prefix)}` },
+      $or: [
+        { status: "failed" },
+        {
+          status: "sending",
+          claimedAt: { $lte: new Date(Date.now() - NOTIFICATION_CLAIM_TTL_MS) },
+        },
+      ],
+    })
+      .select("key")
+      .lean<{ key: string }[]>();
+    return rows.map((r) => r.key);
+  }
+
   /** Records the send, if this holder's claim is still the current one. */
   static async markSent(key: string, claimedAt: Date): Promise<void> {
     await dbConnect();

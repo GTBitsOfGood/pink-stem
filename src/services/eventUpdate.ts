@@ -146,22 +146,30 @@ export default class EventUpdateService {
       // Keyed per recipient, so a retry skips everyone it already reached.
       { dedupeKey: `important:${update._id}` }
     );
-    // Left unset on a failure; retryImportant sends it again.
-    if (!outcomes.includes("failed"))
+    // Set once anyone has it, which also locks it against deletion. Failed
+    // recipients are picked up by retryImportant.
+    if (outcomes.includes("sent") || !outcomes.includes("failed"))
       await EventUpdateDAO.updateById(update._id, { notifiedAt: new Date() });
     return countOutcomes(outcomes);
   }
 
-  /** Re-sends important changes whose email failed for anyone. */
+  /**
+   * Re-sends important changes that some recipient has not received, for
+   * up to IMPORTANT_CHANGE_RETRY_DAYS after the change was posted.
+   */
   static async retryImportant(): Promise<SendCounts> {
-    const failed = await NotificationLogDAO.findFailedKeys(
-      "important:",
-      addHours(new Date(), -IMPORTANT_CHANGE_RETRY_DAYS * 24)
-    );
+    const unsent = await NotificationLogDAO.findUnsentKeys("important:");
+    const since = addHours(new Date(), -IMPORTANT_CHANGE_RETRY_DAYS * 24);
     const counts = emptyCounts();
-    for (const id of new Set(failed.map((key) => key.split(":")[1]))) {
+    for (const id of new Set(unsent.map((key) => key.split(":")[1]))) {
       const update = await EventUpdateDAO.findById(id);
-      if (!update || update.deletedAt || update.kind !== "important") continue;
+      if (
+        !update ||
+        update.deletedAt ||
+        update.kind !== "important" ||
+        update.postedAt < since
+      )
+        continue;
       const event = await EventDAO.findById(update.eventId);
       if (event?.status !== "published") continue;
       addCounts(counts, await EventUpdateService.emailImportant(event, update));
